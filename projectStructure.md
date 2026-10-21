@@ -1,7 +1,8 @@
 ## Suggested structure
 
 ```
-focusguard/
+cac/
+├── readme
 ├── pyproject.toml
 ├── src/focusguard/
 │   ├── core/                  # 100% portable
