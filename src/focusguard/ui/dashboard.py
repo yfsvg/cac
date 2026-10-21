@@ -1,1 +1,0 @@
-"""Stats, streaks and goals."""

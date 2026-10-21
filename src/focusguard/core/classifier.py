@@ -1,10 +1,8 @@
-"""Maps an app or site to productive / unproductive / unknown."""
+"""URL helpers for identifying which site a browser is on."""
 
 from __future__ import annotations
 
 from urllib.parse import urlsplit
-
-from focusguard.core.models import ActiveWindow, Verdict
 
 
 def site_root(url: str | None) -> str | None:
@@ -28,10 +26,3 @@ def site_root(url: str | None) -> str | None:
         host = host[4:]
     return host
 
-
-class Classifier:
-    def classify_app(self, window: ActiveWindow) -> Verdict:
-        raise NotImplementedError
-
-    def classify_site(self, root: str) -> Verdict:
-        raise NotImplementedError

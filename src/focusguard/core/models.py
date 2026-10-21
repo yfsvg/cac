@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, time
+from dataclasses import dataclass
 from enum import Enum
 
 
@@ -34,43 +33,8 @@ class RunningApp:
     exe_path: str | None = None
 
 
-class Verdict(str, Enum):
-    PRODUCTIVE = "productive"
-    UNPRODUCTIVE = "unproductive"
-    UNKNOWN = "unknown"
-
-
 class PermissionState(str, Enum):
     GRANTED = "granted"
     DENIED = "denied"
     UNKNOWN = "unknown"
     NOT_REQUIRED = "not_required"
-
-
-@dataclass
-class ScheduleBlock:
-    """A recurring window of time the user committed to being productive."""
-
-    name: str
-    weekdays: set[int]
-    """0 = Monday ... 6 = Sunday."""
-    start: time
-    end: time
-    allow_list: set[str] = field(default_factory=set)
-    """Extra app ids / site roots allowed during this block only."""
-
-
-@dataclass
-class ActivitySample:
-    """One check of the scheduler loop, persisted for stats."""
-
-    timestamp: datetime
-    window: ActiveWindow
-    site_root: str | None
-    verdict: Verdict
-
-
-class EnforcementAction(str, Enum):
-    NONE = "none"
-    WARN = "warn"
-    CLOSE = "close"
