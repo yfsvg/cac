@@ -44,9 +44,24 @@ log = logging.getLogger(__name__)
 
 # Hard-coded for now; will come from the user's app config later.
 BROWSERS = {
-    "net.imput.helium": "Helium",
-    "com.google.chrome": "Google Chrome",
+    "com.google.Chrome": "Google Chrome",
+    "com.microsoft.edgemac": "Microsoft Edge",
+    "org.mozilla.firefox": "Mozilla Firefox",
+    "com.apple.Safari": "Apple Safari",
+    "com.operasoftware.Opera": "Opera",
+    "com.brave.Browser": "Brave",
     "company.thebrowser.browser": "Arc",
+    "com.vivaldi.Vivaldi": "Vivaldi",
+    "org.waterfox.waterfox": "Waterfox",
+    "org.torproject.torbrowser": "Tor Browser",
+    "io.gitlab.librewolf-community.librewolf": "LibreWolf",
+    "com.mullvad.vpn.browser": "Mullvad Browser",
+    "com.maxthon.mac.Maxthon": "Maxthon",
+    "com.yandex.MacBrowser": "Yandex Browser",
+    "com.duckduckgo.macos": "DuckDuckGo",
+    "org.chromium.Chromium": "Chromium",
+    "org.mozilla.seamonkey": "SeaMonkey",
+    "net.imput.helium": "Helium"
 }
 
 # All three are Chromium-based and share Chrome's AppleScript dictionary.

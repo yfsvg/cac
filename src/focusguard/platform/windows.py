@@ -22,9 +22,29 @@ shell32 = ctypes.WinDLL("shell32", use_last_error=True)
 
 # Hard-coded for now; will come from the user's app config later.
 BROWSERS = {
-    "helium.exe": "Helium",
     "chrome.exe": "Google Chrome",
+    "msedge.exe": "Microsoft Edge",
+    "firefox.exe": "Mozilla Firefox",
+    "safari.exe": "Apple Safari",
+    "opera.exe": "Opera",
+    "brave.exe": "Brave",
     "arc.exe": "Arc",
+    "vivaldi.exe": "Vivaldi",
+    "waterfox.exe": "Waterfox",
+    "puffer.exe": "Puffer",
+    "tor.exe": "Tor Browser",
+    "librewolf.exe": "LibreWolf",
+    "epic.exe": "Epic Privacy Browser",
+    "avastbrowser.exe": "Avast Secure Browser",
+    "mullvad-browser.exe": "Mullvad Browser",
+    "pale-moon.exe": "Pale Moon",
+    "seamonkey.exe": "SeaMonkey",
+    "maxthon.exe": "Maxthon",
+    "ucbrowser.exe": "UC Browser",
+    "yandex.exe": "Yandex Browser",
+    "duckduckgo.exe": "DuckDuckGo",
+    "chromium.exe": "Chromium",
+    "helium.exe": "Helium"
 }
 
 # Accessible names of the address bar in English builds. Other locales fall back to the
