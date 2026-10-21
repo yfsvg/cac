@@ -33,3 +33,5 @@ When running from a terminal, macOS grants permissions to the terminal app, not 
 - **Automation**: the first time each browser is in front, macOS asks whether the terminal may control
   it. Allow it, or the overlay can't read the URL.
 - **Screen Recording**: only needed later for screenshots, and as a fallback for window titles.
+
+May parth bless suprathik
