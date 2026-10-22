@@ -9,23 +9,15 @@ Everything to be added to dashboard:
 
 BEFORE MAKING EDITS READ GDOC SECTION "Dashboard priorities"
 """
-import os
-
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
     QStyle,
     QStyleOption,
     QVBoxLayout,
     QWidget,
 )
-from PySide6.QtGui import QCloseEvent, QPainter, QPaintEvent
-
-from focusguard.platform import get_backend
-from focusguard.ui.parental_functions import close_with_pin, open_parental_controls
+from PySide6.QtGui import QPainter, QPaintEvent
 
 
 class Dashboard(QWidget):
@@ -64,74 +56,6 @@ class Dashboard(QWidget):
         )
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
-
-        # top bar: minimise + exit. neither quits the app, the daemon keeps running in the background
-        title_bar = QHBoxLayout()
-        # current app, refreshed every 2s
-        self.current_app_label = QLabel("Current app: —")
-        title_bar.addWidget(self.current_app_label)
-        title_bar.addStretch()
-        minimise_btn = QPushButton("–")
-        minimise_btn.setToolTip("Minimise")
-        minimise_btn.clicked.connect(self.showMinimized)
-        exit_btn = QPushButton("✕")
-        exit_btn.setToolTip("Close (FocusGuard keeps running in the tray)")
-        exit_btn.clicked.connect(self.hide)
-        for btn in (minimise_btn, exit_btn):
-            btn.setFixedSize(26, 26)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setStyleSheet(
-                """
-                QPushButton {
-                    background: transparent;
-                    border: none;
-                    font-size: 13px;
-                }
-            """
-            )
-            title_bar.addWidget(btn)
-        main_layout.addLayout(title_bar)
-
-        close_app_btn = QPushButton("Close")
-        close_app_btn.clicked.connect(close_with_pin)
-        parental_btn = QPushButton("Parental Controls")
-        parental_btn.clicked.connect(open_parental_controls)
-        close_row = QHBoxLayout()
-        close_row.addStretch()
-        for btn in (parental_btn, close_app_btn):
-            btn.setStyleSheet(
-                """
-                QPushButton {
-                    background-color: #e1e1e1;
-                    border: 1px solid #adadad;
-                    color: black;
-                    padding: 3px 14px;
-                }
-                QPushButton:pressed { background-color: #cccccc; }
-            """
-            )
-            close_row.addWidget(btn)
-        close_row.addStretch()
-        main_layout.addLayout(close_row)
-        main_layout.addStretch()
-
-        self._backend = get_backend()
-        self._app_timer = QTimer(self)
-        self._app_timer.timeout.connect(self.update_current_app)
-        self._app_timer.start(2000)
-        self.update_current_app()
-
-    def update_current_app(self) -> None:
-        window = self._backend.get_active_window()
-        # skip ourselves so clicking the side bar doesn't replace the real app
-        if window is None or window.pid == os.getpid():
-            return
-        self.current_app_label.setText(f"Current app: {window.app_name}")
-
-    def closeEvent(self, event: QCloseEvent) -> None:
-        # alt+f4 / cmd+w just hides the window, never quits
-        event.ignore()
-        self.hide()
 
 
 
