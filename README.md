@@ -13,11 +13,13 @@ Work in progress. What works today:
 - `platform/`: full macOS and Windows backends (active window, browser URL, screenshots,
   closing apps, autostart, permissions, idle time).
 - Side panel: shows the current app, with minimise (–), hide (✕) and a **Close** button.
-- Tray icon: click it to open/hide the side panel (Windows only for now).
+- Tray / menu bar icon: click it to open/hide the side panel (Windows and Mac).
 - PIN to close: the **Close** button is the only way to quit, and it asks for the PIN. Ctrl+C,
   closing the terminal and Task Manager / Force Quit don't stop it (a helper process restarts it).
-- Parental controls window (`ui/parental_controls.py`): blocked apps, blocked sites, study times
-  and time limits. Rules are saved but **not enforced yet**, and no button opens the window yet.
+- Parental controls: the **Parental Controls** button in the panel asks for the PIN, then opens a window
+  for blocked apps, blocked sites, study times, apps/sites allowed while studying, daily time limits
+  and changing the PIN. Every 5 seconds FocusGuard checks the app in front; if it breaks a rule it
+  warns you, then closes it after 30 seconds.
 
 Still stubbed out: `core/`, `ai/`, `daemon/`, the other UI screens.
 
@@ -54,9 +56,6 @@ The app moves itself into the background, so the terminal frees up right away.
 
 - Windows: `taskkill /F /IM pythonw.exe`
 - macOS: `pkill -9 -f focusguard`
-
-Known issue: on macOS the side panel can't be opened from the menu bar icon yet, so the Close button
-isn't reachable there. Use the emergency stop.
 
 ### macOS permissions
 

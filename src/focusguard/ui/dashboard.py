@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QCloseEvent, QPainter, QPaintEvent
 
 from focusguard.platform import get_backend
-from focusguard.ui.parental_functions import close_with_pin
+from focusguard.ui.parental_functions import close_with_pin, open_parental_controls
 
 
 class Dashboard(QWidget):
@@ -93,21 +93,24 @@ class Dashboard(QWidget):
         main_layout.addLayout(title_bar)
 
         close_app_btn = QPushButton("Close")
-        close_app_btn.setStyleSheet(
-            """
-            QPushButton {
-                background-color: #e1e1e1;
-                border: 1px solid #adadad;
-                color: black;
-                padding: 3px 14px;
-            }
-            QPushButton:pressed { background-color: #cccccc; }
-        """
-        )
         close_app_btn.clicked.connect(close_with_pin)
+        parental_btn = QPushButton("Parental Controls")
+        parental_btn.clicked.connect(open_parental_controls)
         close_row = QHBoxLayout()
         close_row.addStretch()
-        close_row.addWidget(close_app_btn)
+        for btn in (parental_btn, close_app_btn):
+            btn.setStyleSheet(
+                """
+                QPushButton {
+                    background-color: #e1e1e1;
+                    border: 1px solid #adadad;
+                    color: black;
+                    padding: 3px 14px;
+                }
+                QPushButton:pressed { background-color: #cccccc; }
+            """
+            )
+            close_row.addWidget(btn)
         close_row.addStretch()
         main_layout.addLayout(close_row)
         main_layout.addStretch()

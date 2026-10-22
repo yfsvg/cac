@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QApplication
 
 from focusguard.core.models import PermissionState
 from focusguard.platform import get_backend
-from focusguard.ui.parental_functions import setup_parental_functions
+from focusguard.ui.parental_functions import setup_parental_functions, start_rules
 from focusguard.ui.tray import Tray
 
 log = logging.getLogger(__name__)
@@ -34,6 +34,7 @@ def main() -> None:
         log.warning("Missing permissions: %s (some info may be unavailable)", ", ".join(missing))
 
     tray = Tray()  # noqa: F841 (kept alive for the event loop)
+    start_rules(tray)
     sys.exit(app.exec())
 
 

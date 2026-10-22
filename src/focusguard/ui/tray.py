@@ -2,7 +2,6 @@
 """what actually appears on the widget"""
 
 import os
-import sys
 
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
@@ -20,8 +19,7 @@ class Tray(QSystemTrayIcon):
         QApplication.setWindowIcon(icon)
         self.setToolTip("FocusGuard")
         self.dashboard = Dashboard()
-        if sys.platform == "win32":
-            self.activated.connect(self.icon_clicked)
+        self.activated.connect(self.icon_clicked)
         self.show()
 
 

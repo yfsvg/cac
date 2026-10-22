@@ -6,6 +6,19 @@ KEY = "focusguard"
 FILE = os.path.join(os.path.dirname(__file__), "memory.dat")
 
 
+def new_settings():
+    return {
+        "pin": "",
+        "blocked_apps": [],
+        "blocked_sites": [],
+        "study_times": [],
+        "study_allowed": [],
+        "time_limits": [],
+        "usage_day": "",
+        "usage": {},
+    }
+
+
 def scramble(text):
     result = ""
     for i in range(len(text)):
@@ -15,25 +28,31 @@ def scramble(text):
 
 def load():
     if not os.path.exists(FILE):
-        settings = {
-            "pin": "",
-            "blocked_apps": [],
-            "blocked_sites": [],
-            "study_times": [],
-            "time_limits": [],
-        }
-        save(settings)
-        return settings
-    f = open(FILE, "r")
-    data = f.read()
-    f.close()
-    text = scramble(base64.b64decode(data).decode())
-    return json.loads(text)
+        save(new_settings())
+    try:
+        f = open(FILE, "r")
+        data = f.read()
+        f.close()
+        settings = json.loads(scramble(base64.b64decode(data).decode()))
+    except (ValueError, OSError):
+        settings = new_settings()
+    defaults = new_settings()
+    for key in defaults:
+        if key not in settings:
+            settings[key] = defaults[key]
+    return settings
 
 
 def save(settings):
     text = scramble(json.dumps(settings))
     data = base64.b64encode(text.encode()).decode()
-    f = open(FILE, "w")
+    f = open(FILE + ".tmp", "w")
     f.write(data)
     f.close()
+    os.replace(FILE + ".tmp", FILE)
+
+
+def save_key(key, value):
+    settings = load()
+    settings[key] = value
+    save(settings)
