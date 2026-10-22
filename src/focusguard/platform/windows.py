@@ -195,25 +195,6 @@ class WindowsBackend(PlatformBackend):
         except psutil.Error:
             return False
 
-    # ---- overlay windows -------------------------------------------------------------------
-
-    def configure_overlay_window(self, native_handle: int, click_through: bool = True) -> None:
-        hwnd = wintypes.HWND(native_handle)
-        old = _GetWindowLong(hwnd, GWL_EXSTYLE)
-        style = old | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
-        if click_through:
-            style |= WS_EX_TRANSPARENT | WS_EX_LAYERED
-        else:
-            style &= ~WS_EX_TRANSPARENT
-        _SetWindowLong(hwnd, GWL_EXSTYLE, style)
-        # A window that just became layered is invisible until it has layered attributes.
-        # Leave already-layered windows alone so per-pixel alpha keeps working.
-        if style & WS_EX_LAYERED and not old & WS_EX_LAYERED:
-            user32.SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA)
-        user32.SetWindowPos(
-            hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED
-        )
-
     def hide_from_taskbar(self) -> None:
         # Nothing app-wide on Windows: WS_EX_TOOLWINDOW (set per window above) keeps windows
         # off the taskbar, and the tray icon is the only other presence.

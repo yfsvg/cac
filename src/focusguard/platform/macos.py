@@ -155,24 +155,6 @@ class MacOSBackend(PlatformBackend):
         except psutil.Error:
             return False
 
-    # ---- overlay windows -------------------------------------------------------------------
-
-    def configure_overlay_window(self, native_handle: int, click_through: bool = True) -> None:
-        # Qt's winId() on macOS is the NSView*; the NSWindow is its parent.
-        view = objc.objc_object(c_void_p=native_handle)
-        window = view.window()
-        if window is None:
-            raise RuntimeError("Overlay has no NSWindow yet; call this after show().")
-        window.setCollectionBehavior_(
-            NSWindowCollectionBehaviorCanJoinAllSpaces
-            | NSWindowCollectionBehaviorFullScreenAuxiliary
-            | NSWindowCollectionBehaviorStationary
-            | NSWindowCollectionBehaviorIgnoresCycle
-        )
-        window.setLevel_(NSStatusWindowLevel)
-        window.setHidesOnDeactivate_(False)
-        window.setIgnoresMouseEvents_(click_through)
-
     def hide_from_taskbar(self) -> None:
         NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
 

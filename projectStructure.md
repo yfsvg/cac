@@ -35,7 +35,6 @@ cac/
 │       ├── dashboard.py       # stats, streaks, goals
 │       ├── schedule_editor.py
 │       ├── app_config.py      # mark apps productive/not
-│       └── warning_overlay.py # the "get off Steam" popup
 └── tests/
 ```
 

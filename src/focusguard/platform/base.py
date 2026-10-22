@@ -54,13 +54,6 @@ class PlatformBackend(ABC):
     def close_app(self, pid: int, force: bool = False) -> bool:
         """Ask the app owning `pid` to quit, or kill it outright with `force`. Returns True if it was signalled."""
 
-    # ---- overlay windows -------------------------------------------------------------------
-
-    @abstractmethod
-    def configure_overlay_window(self, native_handle: int, click_through: bool = True) -> None:
-        """Make a toolkit window float above everything (including fullscreen apps), on every
-        desktop/space, without stealing focus. `native_handle` is Qt's `winId()`."""
-
     @abstractmethod
     def hide_from_taskbar(self) -> None:
         """Run as a background app: no Dock icon on macOS. Call after the Qt app is created."""
