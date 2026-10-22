@@ -9,15 +9,21 @@ Everything to be added to dashboard:
 
 BEFORE MAKING EDITS READ GDOC SECTION "Dashboard priorities"
 """
-from PySide6.QtCore import Qt
+import os
+
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
+    QLabel,
     QStyle,
     QStyleOption,
     QVBoxLayout,
     QWidget,
 )
 from PySide6.QtGui import QPainter, QPaintEvent
+
+from focusguard.core.classifier import classifyTypeOfApp
+from focusguard.platform import get_backend
 
 
 class Dashboard(QWidget):
@@ -56,6 +62,29 @@ class Dashboard(QWidget):
         )
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
+
+
+
+
+
+
+
+        # new display for time tracking, for every heartbeat/change update
+        self.backend = get_backend()
+        self.times: dict[tuple[str, str], int] = {}
+        self.time_list = QLabel(styleSheet="color: white;", alignment=Qt.AlignmentFlag.AlignTop)
+        main_layout.addWidget(self.time_list)
+        self.timer = QTimer(self, interval=1000, timeout=self.tick)
+        self.timer.start()
+
+    def tick(self) -> None:
+        window = self.backend.get_active_window()
+        if window is None or window.pid == os.getpid():
+            return
+        key = (window.app_name, classifyTypeOfApp(self.backend, window))
+        self.times[key] = self.times.get(key, 0) + 1
+        rows = sorted(self.times.items(), key=lambda kv: -kv[1])
+        self.time_list.setText("\n".join(f"{name} ({kind}): {s // 60}m {s % 60}s" for (name, kind), s in rows))
 
 
 

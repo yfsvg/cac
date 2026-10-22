@@ -15,6 +15,7 @@ from AppKit import (
     NSApplication,
     NSApplicationActivationPolicyAccessory,
     NSApplicationActivationPolicyRegular,
+    NSBundle,
     NSRunningApplication,
     NSStatusWindowLevel,
     NSWindowCollectionBehaviorCanJoinAllSpaces,
@@ -77,7 +78,7 @@ _ANY_INPUT_EVENT = getattr(Quartz, "kCGAnyInputEventType", 0xFFFFFFFF)
 
 
 class MacOSBackend(PlatformBackend):
-    BROWSER_IDS = frozenset(BROWSERS)
+    BROWSER_IDS = frozenset(k.lower() for k in BROWSERS)
 
     # ---- what is the user doing ------------------------------------------------------------
 
@@ -97,6 +98,12 @@ class MacOSBackend(PlatformBackend):
             exe_path=str(exe_url.path()) if exe_url else None,
             window_handle=window_id,
         )
+
+
+    def get_app_category(self, window: ActiveWindow) -> str | None:
+        app = NSRunningApplication.runningApplicationWithProcessIdentifier_(window.pid)
+        bundle = app and app.bundleURL() and NSBundle.bundleWithURL_(app.bundleURL())
+        return bundle and bundle.objectForInfoDictionaryKey_("LSApplicationCategoryType")
 
     def get_browser_url(self, window: ActiveWindow) -> str | None:
         if not self.is_browser(window):

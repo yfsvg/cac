@@ -22,12 +22,19 @@ class PlatformBackend(ABC):
 
     @abstractmethod
     def get_active_window(self) -> ActiveWindow | None:
-        """The frontmost app and its focused window, or None if nothing is focused."""
+        """gets focused inwdow"""
 
     @abstractmethod
     def get_browser_url(self, window: ActiveWindow) -> str | None:
-        """URL of the active tab of `window`, or None if it isn't a browser or the URL can't be read."""
+        """Gets active url tab"""
 
+
+
+
+    # these two are especially important for classification, provides the LSApplicationCategoryType.
+    # note that this is MAC ONLY so we rely on a a massive list "unproductive apps" for wintoes
+    def get_app_category(self, window: ActiveWindow) -> str | None:
+        return None
     def is_browser(self, window: ActiveWindow) -> bool:
         return window.app_id.lower() in self.BROWSER_IDS
 

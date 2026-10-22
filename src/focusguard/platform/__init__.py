@@ -11,6 +11,8 @@ __all__ = ["PlatformBackend", "get_backend"]
 
 
 @cache
+# backend contains all of the OS-specific function calls that we made that we build off of (gdoc page 3)
+# USE BACKEND CODE ALWAYS AND IF THERE IS NONE THEN JUST ADD IT TO BACKEND INSTEAD OF ADDING IT NATIVELY
 def get_backend() -> PlatformBackend:
     if sys.platform == "darwin":
         from focusguard.platform.macos import MacOSBackend
