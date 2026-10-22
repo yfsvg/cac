@@ -18,6 +18,9 @@ from focusguard.core.classifier import site_root
 from focusguard.core.models import ActiveWindow, PermissionState
 from focusguard.platform import PlatformBackend, get_backend
 
+# top part
+from focusguard.ui.tray import Tray
+
 log = logging.getLogger(__name__)
 
 POLL_INTERVAL_MS = 1000
@@ -116,6 +119,7 @@ def run() -> None:
 
     overlay = WarningOverlay(backend)
     overlay.start()
+    tray = Tray()  # noqa: F841 (kept alive for the event loop)
     sys.exit(app.exec())
 
 
