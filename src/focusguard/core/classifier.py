@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 from focusguard.core.unproductive_apps import UNPRODUCTIVE_APPS
 
 
-def site_root(url: str | None) -> str | None:
+def siteRoot(url: str | None) -> str | None:
     """
     Identifies site root, for ex yotuube would give youtube.com. Allows us to easily track and keep memory of bad websites
     Accepts scheme-less input too, since Windows address bars often omit "https://".
@@ -19,15 +19,18 @@ def site_root(url: str | None) -> str | None:
     url = url.strip()
     if "://" not in url:
         url = "https://" + url
-    parts = urlsplit(url)
-    if parts.scheme not in ("http", "https"):
+    urlParts = urlsplit(url)
+    if urlParts.scheme not in ("http", "https"):
         return None
-    host = (parts.hostname or "").lower().rstrip(".")
-    if not host:
+    hostName = ""
+    if urlParts.hostname:
+        hostName = urlParts.hostname
+    hostName = hostName.lower().rstrip(".")
+    if not hostName:
         return None
-    if host.startswith("www."):
-        host = host[4:]
-    return host
+    if hostName.startswith("www."):
+        hostName = hostName[4:]
+    return hostName
 
 
 
@@ -36,19 +39,19 @@ def site_root(url: str | None) -> str | None:
 
 
 
-def possible_names(window) -> list[str]:
-    app_id = window.app_id.lower()
-    names = [window.app_name.lower(), app_id]
-    if app_id.endswith(".exe"):
-        names.append(app_id[:-4])
+def possibleNames(window) -> list[str]:
+    appId = window.app_id.lower()
+    allNames = [window.app_name.lower(), appId]
+    if appId.endswith(".exe"):
+        allNames.append(appId[:-4])
     else:
-        names.append(app_id.split(".")[-1])
+        allNames.append(appId.split(".")[-1])
     if window.exe_path:
-        exe = os.path.basename(window.exe_path).lower()
-        if exe.endswith(".exe"):
-            exe = exe[:-4]
-        names.append(exe)
-    return names
+        exeName = os.path.basename(window.exe_path).lower()
+        if exeName.endswith(".exe"):
+            exeName = exeName[:-4]
+        allNames.append(exeName)
+    return allNames
 
 
 # note prob only works on mac, gdoc contains info on what is unproductive and what is a productive app
@@ -56,14 +59,20 @@ def classifyTypeOfApp(backend, window) -> str:
     if backend.is_browser(window):
         return "browser"
 
-    for name in possible_names(window):
+    for name in possibleNames(window):
         if name in UNPRODUCTIVE_APPS:
             return "unproductive"
 
-    if window.app_id.lower() in ("java", "javaw.exe", "java.exe") and window.title.lower().startswith("minecraft"):
-        return "unproductive"
+    if window.app_id.lower() in ("java", "javaw.exe", "java.exe"):
+        if window.title.lower().startswith("minecraft"):
+            return "unproductive"
 
 
-    category = backend.get_app_category(window) or ""
+    appCategory = backend.get_app_category(window)
+    if appCategory is None:
+        appCategory = ""
     # "games" also matches the game subcategories big headache avoided
-    return "unproductive" if any(c in category for c in ("games", "entertainment", "social-networking")) else "neutral"
+    for unproductiveCategory in ("games", "entertainment", "social-networking"):
+        if unproductiveCategory in appCategory:
+            return "unproductive"
+    return "neutral"

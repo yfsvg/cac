@@ -1,6 +1,6 @@
 import pytest
 
-from focusguard.core.classifier import site_root
+from focusguard.core.classifier import siteRoot
 
 
 @pytest.mark.parametrize(
@@ -13,4 +13,4 @@ from focusguard.core.classifier import site_root
     ],
 )
 def test_site_root(url, expected):
-    assert site_root(url) == expected
+    assert siteRoot(url) == expected

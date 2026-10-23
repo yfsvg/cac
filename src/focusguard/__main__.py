@@ -22,9 +22,12 @@ def main() -> None:
     backend = get_backend()
     backend.hide_from_taskbar()
 
-    missing = [k for k, v in backend.check_permissions().items() if v is PermissionState.DENIED]
-    if missing:
-        log.warning("Missing permissions: %s (some info may be unavailable)", ", ".join(missing))
+    missingPermissions = []
+    for permissionName, permissionState in backend.check_permissions().items():
+        if permissionState is PermissionState.DENIED:
+            missingPermissions.append(permissionName)
+    if len(missingPermissions) > 0:
+        log.warning("Missing permissions: %s (some info may be unavailable)", ", ".join(missingPermissions))
 
     tray = Tray()  # noqa: F841 (kept alive for the event loop)
     sys.exit(app.exec())

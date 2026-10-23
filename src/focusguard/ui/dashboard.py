@@ -97,9 +97,9 @@ STYLE = """
 
 
 def label(text: str, name: str, align: Qt.AlignmentFlag = Qt.AlignmentFlag.AlignLeft) -> QLabel:
-    lbl = QLabel(text, objectName=name, alignment=align)
-    lbl.setWordWrap(True)
-    return lbl
+    newLabel = QLabel(text, objectName=name, alignment=align)
+    newLabel.setWordWrap(True)
+    return newLabel
 
 
 def divider() -> QFrame:
@@ -110,8 +110,8 @@ def divider() -> QFrame:
 
 
 class StatCard(QFrame):
-    def __init__(self, number: str, caption: str, status: str, color: str, card_type: str) -> None:
-        super().__init__(objectName=card_type)
+    def __init__(self, number: str, caption: str, status: str, color: str, cardType: str) -> None:
+        super().__init__(objectName=cardType)
         self.setFixedHeight(140)
         # ignore caption width so all 3 cards split the row evenly
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
@@ -122,9 +122,9 @@ class StatCard(QFrame):
         layout.addWidget(label(number, "BigNumber", center))
         layout.addWidget(label(caption, "Caption", center))
         layout.addStretch()
-        status_lbl = label(status, "Status", center)
-        status_lbl.setStyleSheet(f"color: {color};")
-        layout.addWidget(status_lbl)
+        statusLabel = label(status, "Status", center)
+        statusLabel.setStyleSheet(f"color: {color};")
+        layout.addWidget(statusLabel)
 
 
 class Dropdown(QWidget):
@@ -143,14 +143,16 @@ class Dropdown(QWidget):
         self.body.hide()
         layout.addWidget(self.header)
         layout.addWidget(self.body)
-        self.update_header()
+        self.updateHeader()
 
     def toggle(self) -> None:
         self.body.setVisible(not self.body.isVisible())
-        self.update_header()
+        self.updateHeader()
 
-    def update_header(self) -> None:
-        chevron = "⌄" if self.body.isVisible() else "›"
+    def updateHeader(self) -> None:
+        chevron = "›"
+        if self.body.isVisible():
+            chevron = "⌄"
         self.header.setText(f" {chevron}   {self.title}")
 
 
@@ -187,8 +189,8 @@ class Dashboard(QWidget):
         except Exception as e:
             print(f"background blur unavailable: {e}")
 
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(10, 10, 10, 10)
+        mainLayout = QVBoxLayout(self)
+        mainLayout.setContentsMargins(10, 10, 10, 10)
 
 
 
@@ -201,7 +203,7 @@ class Dashboard(QWidget):
 
         content = QWidget(objectName = "Content")
         scroll.setWidget(content)
-        main_layout.addWidget(scroll)
+        mainLayout.addWidget(scroll)
 
         layout = QVBoxLayout(content)
         layout.setContentsMargins(20, 10, 20, 20)
@@ -230,7 +232,7 @@ class Dashboard(QWidget):
 
         # daily stats larp
         layout.addWidget(label("Today’s Stats", "Section"))
-        layout.addLayout(self.card_row("TodayCard", [
+        layout.addLayout(self.cardRow("TodayCard", [
             ("97", "% time focused", "Looking good!", GOOD),
             ("2.3", "Hours spent productive", "Perfect!", PERFECT),
             ("0.3", "Hours spent unproductive", "Perfect!", PERFECT),
@@ -240,7 +242,7 @@ class Dashboard(QWidget):
         layout.addWidget(divider())
         # weekly 
         layout.addWidget(label("Weekly Stats", "Section"))
-        layout.addLayout(self.card_row("WeekCard", [
+        layout.addLayout(self.cardRow("WeekCard", [
             ("90", "% time focused", "Looking good!", GOOD),
             ("7", "Warnings", "Doing OK", OK),
             ("0", "Bail-outs used", "Perfect!", PERFECT),
@@ -267,77 +269,79 @@ class Dashboard(QWidget):
         # new display for time tracking, for every heartbeat/change update
         layout.addWidget(label("Time Tracked", "Section"))
         self.backend = get_backend()
-        self.times: dict[tuple[str, str], int] = {}
+        self.trackedTimes: dict[tuple[str, str], int] = {}
         self.enforcer = Enforcer(self.backend)
-        self.pause = None
-        self.paused_window = None
-        self.last_app = None
-        self.emergency = None
-        self.passed_at = {}
-        self.used = {}
-        self.time_list = QLabel(styleSheet="color: white;", alignment=Qt.AlignmentFlag.AlignTop)
-        layout.addWidget(self.time_list)
+        self.pauseScreen = None
+        self.pausedWindow = None
+        self.lastApp = None
+        self.emergencyApp = None
+        self.passedAt = {}
+        self.usedSeconds = {}
+        self.timeList = QLabel(styleSheet="color: white;", alignment=Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(self.timeList)
         layout.addStretch()
         self.timer = QTimer(self, interval=1000, timeout=self.tick)
         self.timer.start()
 
 
     
-    def card_row(self, card_type, cards: list[tuple[str, str, str, str]]) -> QHBoxLayout:
+    def cardRow(self, cardType, cards: list[tuple[str, str, str, str]]) -> QHBoxLayout:
         row = QHBoxLayout()
 
         row.setSpacing(8)
         for number, caption, status, color in cards:
-            row.addWidget(StatCard(number, caption, status, color, card_type))
+            row.addWidget(StatCard(number, caption, status, color, cardType))
         return row
 
     def tick(self) -> None:
         window = self.backend.get_active_window()
         if window is None or window.pid == os.getpid():
             return
-        if self.pause is not None:
+        if self.pauseScreen is not None:
             return
-        kind = classifyTypeOfApp(self.backend, window)
+        appKind = classifyTypeOfApp(self.backend, window)
 
-        new_app = window.app_name != self.last_app
-        self.last_app = window.app_name
-        if new_app:
-            self.emergency = None
-        if kind == "unproductive" and new_app and time.time() - self.passed_at.get(window.app_name, 0) > 600:
-            self.show_pause(window)
+        switchedApp = window.app_name != self.lastApp
+        self.lastApp = window.app_name
+        if switchedApp:
+            self.emergencyApp = None
+        if appKind == "unproductive" and switchedApp:
+            secondsSincePassed = time.time() - self.passedAt.get(window.app_name, 0)
+            if secondsSincePassed > 600:
+                self.showPause(window)
+                return
+        if window.app_name == self.emergencyApp:
             return
-        if window.app_name == self.emergency:
-            return
 
-        key = (window.app_name, kind)
-        self.times[key] = self.times.get(key, 0) + 1
-        self.used[window.app_name] = self.used.get(window.app_name, 0) + 1
-        if self.enforcer.check(window, kind, self.used[window.app_name]):
-            self.used[window.app_name] = 0
-            self.passed_at.pop(window.app_name, None)
-            self.last_app = None
-        rows = sorted(self.times.items(), key=lambda kv: -kv[1])
-        self.time_list.setText("\n".join(f"{name} ({kind}): {s // 60}m {s % 60}s" for (name, kind), s in rows))
+        key = (window.app_name, appKind)
+        self.trackedTimes[key] = self.trackedTimes.get(key, 0) + 1
+        self.usedSeconds[window.app_name] = self.usedSeconds.get(window.app_name, 0) + 1
+        if self.enforcer.checkApp(window, appKind, self.usedSeconds[window.app_name]):
+            self.usedSeconds[window.app_name] = 0
+            self.passedAt.pop(window.app_name, None)
+            self.lastApp = None
+        rows = sorted(self.trackedTimes.items(), key=lambda kv: -kv[1])
+        self.timeList.setText("\n".join(f"{name} ({appKind}): {s // 60}m {s % 60}s" for (name, appKind), s in rows))
 
-    def show_pause(self, window):
-        self.paused_window = window
-        self.pause = PauseScreen(window.app_name, self.backend.get_window_rect(window), self.pause_done)
-        self.pause.popup()
+    def showPause(self, window):
+        self.pausedWindow = window
+        self.pauseScreen = PauseScreen(window.app_name, self.backend.get_window_rect(window), self.pauseDone)
+        self.pauseScreen.popUp()
 
-    def pause_done(self, choice):
-        window = self.paused_window
-        self.pause = None
+    def pauseDone(self, choice):
+        window = self.pausedWindow
+        self.pauseScreen = None
         if choice == "back":
             self.backend.close_app(window.pid)
-            self.last_app = None
+            self.lastApp = None
             data = memory.load()
             data["backed_out"] = data.get("backed_out", 0) + 1
             memory.save(data)
         else:
-            self.passed_at[window.app_name] = time.time()
-            self.used[window.app_name] = 0
+            self.passedAt[window.app_name] = time.time()
+            self.usedSeconds[window.app_name] = 0
         if choice == "emergency":
-            self.emergency = window.app_name
+            self.emergencyApp = window.app_name
 
 
 

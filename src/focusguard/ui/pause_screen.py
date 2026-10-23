@@ -56,11 +56,11 @@ QLineEdit {
 
 
 class PauseScreen(QWidget):
-    def __init__(self, app_name, app_rect, when_done):
+    def __init__(self, appName, appRect, whenDone):
         super().__init__()
-        self.when_done = when_done
-        self.seconds_left = COUNTDOWN
-        self.shake_step = 0
+        self.whenDone = whenDone
+        self.secondsLeft = COUNTDOWN
+        self.shakeStep = 0
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
@@ -72,69 +72,76 @@ class PauseScreen(QWidget):
         self.setStyleSheet(STYLE)
         self.setGeometry(QApplication.primaryScreen().geometry())
 
-        self.title = QLabel("Why are you opening " + app_name + "?")
+        self.title = QLabel("Why are you opening " + appName + "?")
         self.title.setWordWrap(True)
-        self.hint = QLabel("Pick a reason to use " + app_name, objectName="Hint")
+        self.hint = QLabel("Pick a reason to use " + appName, objectName="Hint")
 
-        self.reason_buttons = QWidget()
-        reason_layout = QVBoxLayout(self.reason_buttons)
-        reason_layout.setContentsMargins(0, 0, 0, 0)
+        self.reasonButtons = QWidget()
+        reasonLayout = QVBoxLayout(self.reasonButtons)
+        reasonLayout.setContentsMargins(0, 0, 0, 0)
         for reason in REASONS:
             button = QPushButton(reason)
-            button.clicked.connect(lambda checked=False, r=reason: self.pick(r))
-            reason_layout.addWidget(button)
+            button.clicked.connect(lambda checked=False, r=reason: self.pickReason(r))
+            reasonLayout.addWidget(button)
 
-        self.other_box = QLineEdit()
-        self.other_box.setPlaceholderText("Type your reason and press Enter")
-        self.other_box.returnPressed.connect(self.other_typed)
-        self.other_box.hide()
+        self.otherBox = QLineEdit()
+        self.otherBox.setPlaceholderText("Type your reason and press Enter")
+        self.otherBox.returnPressed.connect(self.otherTyped)
+        self.otherBox.hide()
 
-        self.open_button = QPushButton("Open anyway")
-        self.open_button.clicked.connect(self.open_anyway)
-        self.open_button.setEnabled(False)
-        self.open_button.hide()
+        self.openButton = QPushButton("Open anyway")
+        self.openButton.clicked.connect(self.openAnyway)
+        self.openButton.setEnabled(False)
+        self.openButton.hide()
 
-        back_button = QPushButton("Back to work")
-        back_button.clicked.connect(self.back_to_work)
+        backButton = QPushButton("Back to work")
+        backButton.clicked.connect(self.backToWork)
 
-        bottom_row = QHBoxLayout()
-        bottom_row.addWidget(back_button)
-        bottom_row.addWidget(self.open_button)
+        bottomRow = QHBoxLayout()
+        bottomRow.addWidget(backButton)
+        bottomRow.addWidget(self.openButton)
 
         self.box = QFrame(self, objectName="Box")
         self.box.setFixedWidth(300)
-        box_layout = QVBoxLayout(self.box)
-        box_layout.setContentsMargins(16, 16, 16, 16)
-        box_layout.addWidget(self.title)
-        box_layout.addWidget(self.hint)
-        box_layout.addWidget(self.reason_buttons)
-        box_layout.addWidget(self.other_box)
-        box_layout.addLayout(bottom_row)
+        boxLayout = QVBoxLayout(self.box)
+        boxLayout.setContentsMargins(16, 16, 16, 16)
+        boxLayout.addWidget(self.title)
+        boxLayout.addWidget(self.hint)
+        boxLayout.addWidget(self.reasonButtons)
+        boxLayout.addWidget(self.otherBox)
+        boxLayout.addLayout(bottomRow)
         self.box.adjustSize()
 
-        self.app_rect = app_rect
-        self.place_box()
+        self.appRect = appRect
+        self.placeBox()
 
         self.timer = QTimer(self)
-        self.timer.timeout.connect(self.count_down)
-        self.shake_timer = QTimer(self)
-        self.shake_timer.timeout.connect(self.shake_move)
+        self.timer.timeout.connect(self.countDown)
+        self.shakeTimer = QTimer(self)
+        self.shakeTimer.timeout.connect(self.shakeMove)
 
-    def place_box(self):
+    def placeBox(self):
         screen = self.geometry()
-        app_rect = self.app_rect
-        if app_rect is None:
-            center_x = screen.width() // 2
-            center_y = screen.height() // 2
+        appRect = self.appRect
+        if appRect is None:
+            centerX = screen.width() // 2
+            centerY = screen.height() // 2
         else:
-            x, y, width, height = app_rect
-            center_x = x - screen.x() + width // 2
-            center_y = y - screen.y() + height // 2
-        left = center_x - self.box.width() // 2
-        top = center_y - self.box.height() // 2
-        left = max(10, min(left, screen.width() - self.box.width() - 10))
-        top = max(10, min(top, screen.height() - self.box.height() - 10))
-        self.box_x = left
+            x, y, width, height = appRect
+            centerX = x - screen.x() + width // 2
+            centerY = y - screen.y() + height // 2
+        left = centerX - self.box.width() // 2
+        top = centerY - self.box.height() // 2
+        # keep the box 10px inside the screen
+        if left > screen.width() - self.box.width() - 10:
+            left = screen.width() - self.box.width() - 10
+        if left < 10:
+            left = 10
+        if top > screen.height() - self.box.height() - 10:
+            top = screen.height() - self.box.height() - 10
+        if top < 10:
+            top = 10
+        self.boxX = left
         self.box.move(left, top)
 
     def paintEvent(self, event):
@@ -143,16 +150,16 @@ class PauseScreen(QWidget):
 
     def mousePressEvent(self, event):
         if not self.box.geometry().contains(event.position().toPoint()):
-            self.shake_step = 0
-            self.shake_timer.start(30)
+            self.shakeStep = 0
+            self.shakeTimer.start(30)
 
-    def shake_move(self):
-        self.box.move(self.box_x + SHAKE[self.shake_step], self.box.y())
-        self.shake_step = self.shake_step + 1
-        if self.shake_step >= len(SHAKE):
-            self.shake_timer.stop()
+    def shakeMove(self):
+        self.box.move(self.boxX + SHAKE[self.shakeStep], self.box.y())
+        self.shakeStep = self.shakeStep + 1
+        if self.shakeStep >= len(SHAKE):
+            self.shakeTimer.stop()
 
-    def popup(self):
+    def popUp(self):
         self.show()
         try:
             get_backend().float_above_everything(int(self.winId()))
@@ -161,49 +168,49 @@ class PauseScreen(QWidget):
         self.raise_()
         self.activateWindow()
 
-    def pick(self, reason):
+    def pickReason(self, reason):
         if reason == "Emergency":
-            self.finish("emergency")
+            self.finishWithChoice("emergency")
         elif reason == "Other":
-            self.other_box.show()
-            self.other_box.setFocus()
+            self.otherBox.show()
+            self.otherBox.setFocus()
             self.box.adjustSize()
-            self.place_box()
+            self.placeBox()
         else:
-            self.start_countdown()
+            self.startCountdown()
 
-    def other_typed(self):
-        if self.other_box.text().strip() != "":
-            self.start_countdown()
+    def otherTyped(self):
+        if self.otherBox.text().strip() != "":
+            self.startCountdown()
 
-    def start_countdown(self):
-        self.reason_buttons.hide()
-        self.other_box.hide()
+    def startCountdown(self):
+        self.reasonButtons.hide()
+        self.otherBox.hide()
         self.hint.hide()
-        self.title.setText("Wait " + str(self.seconds_left) + " seconds")
-        self.open_button.show()
+        self.title.setText("Wait " + str(self.secondsLeft) + " seconds")
+        self.openButton.show()
         self.box.adjustSize()
-        self.place_box()
+        self.placeBox()
         self.timer.start(1000)
 
-    def count_down(self):
-        self.seconds_left = self.seconds_left - 1
-        self.title.setText("Wait " + str(self.seconds_left) + " seconds")
-        if self.seconds_left <= 0:
+    def countDown(self):
+        self.secondsLeft = self.secondsLeft - 1
+        self.title.setText("Wait " + str(self.secondsLeft) + " seconds")
+        if self.secondsLeft <= 0:
             self.timer.stop()
             self.title.setText("You can open it now")
-            self.open_button.setEnabled(True)
+            self.openButton.setEnabled(True)
 
-    def open_anyway(self):
-        self.finish("open")
+    def openAnyway(self):
+        self.finishWithChoice("open")
 
-    def back_to_work(self):
-        self.finish("back")
+    def backToWork(self):
+        self.finishWithChoice("back")
 
-    def finish(self, choice):
+    def finishWithChoice(self, choice):
         self.timer.stop()
         self.hide()
-        self.when_done(choice)
+        self.whenDone(choice)
 
     def closeEvent(self, event):
         event.ignore()

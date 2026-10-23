@@ -12,11 +12,11 @@ class Tray(QSystemTrayIcon):
         super().__init__(QApplication.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon))
         self.dashboard = Dashboard()
         self.dashboard.enforcer.notify = self.showMessage
-        self.activated.connect(self.open_dashboard)
+        self.activated.connect(self.openDashboard)
         self.show()
 
 
-    def open_dashboard(self) -> None:
+    def openDashboard(self) -> None:
         # show and raise only hides it but daemon keeps on going baby
         self.dashboard.show()
         self.dashboard.raise_()

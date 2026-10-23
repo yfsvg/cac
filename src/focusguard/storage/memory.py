@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 
-# Json storage system, for now just tracks if you've opened the application before for persistent 
+# Json storage system, for now just tracks if you've opened the application before for persistent
 # memory demo. Also not hashed just for quick mvp
 
 # TO CHECK OR EDIT:
@@ -14,45 +14,47 @@ from pathlib import Path
 # it wont show up in project tree sorry
 
 
-def _data_dir() -> Path:
+def dataDirectory() -> Path:
     if sys.platform == "win32":
-        base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+        baseDirectory = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
     elif sys.platform == "darwin":
-        base = Path.home() / "Library" / "Application Support"
+        baseDirectory = Path.home() / "Library" / "Application Support"
     else:
-        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    return base / "FocusGuard"
+        baseDirectory = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    return baseDirectory / "FocusGuard"
 
 
 
 
-FILE = _data_dir() / "memory.json"
+FILE = dataDirectory() / "memory.json"
 
 
 
 def load() -> dict:
-    defaults = {"first_time": True}
+    defaultMemory = {"first_time": True}
     try:
-        data = json.loads(FILE.read_text())
+        loadedMemory = json.loads(FILE.read_text())
     except (OSError, ValueError):
-        return defaults
-    if not isinstance(data, dict):
-        return defaults
-    return {**defaults, **data}
+        return defaultMemory
+    if not isinstance(loadedMemory, dict):
+        return defaultMemory
+    returnVal = dict(defaultMemory)
+    returnVal.update(loadedMemory)
+    return returnVal
 
 
 def save(memory: dict) -> None:
     FILE.parent.mkdir(parents=True, exist_ok=True)
-    tmp = FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(memory, indent=2))
-    os.replace(tmp, FILE)
+    tempFile = FILE.with_suffix(".tmp")
+    tempFile.write_text(json.dumps(memory, indent=2))
+    os.replace(tempFile, FILE)
 
 
 def startupOpened() -> bool:
     return bool(load()["startupOpened"])
 
 
-def mark_opened() -> None:
+def markOpened() -> None:
     memory = load()
     memory["startupOpened"] = False
     save(memory)
