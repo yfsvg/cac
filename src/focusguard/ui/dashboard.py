@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QFontDatabase, QPainter, QPaintEvent
 
 from focusguard.core.classifier import classifyTypeOfApp
+from focusguard.core.enforcement import Enforcer
 from focusguard.platform import get_backend
 
 
@@ -264,6 +265,7 @@ class Dashboard(QWidget):
         layout.addWidget(label("Time Tracked", "Section"))
         self.backend = get_backend()
         self.times: dict[tuple[str, str], int] = {}
+        self.enforcer = Enforcer(self.backend)
         self.time_list = QLabel(styleSheet="color: white;", alignment=Qt.AlignmentFlag.AlignTop)
         layout.addWidget(self.time_list)
         layout.addStretch()
@@ -284,8 +286,10 @@ class Dashboard(QWidget):
         window = self.backend.get_active_window()
         if window is None or window.pid == os.getpid():
             return
-        key = (window.app_name, classifyTypeOfApp(self.backend, window))
+        kind = classifyTypeOfApp(self.backend, window)
+        key = (window.app_name, kind)
         self.times[key] = self.times.get(key, 0) + 1
+        self.enforcer.check(window, kind, self.times[key])
         rows = sorted(self.times.items(), key=lambda kv: -kv[1])
         self.time_list.setText("\n".join(f"{name} ({kind}): {s // 60}m {s % 60}s" for (name, kind), s in rows))
 

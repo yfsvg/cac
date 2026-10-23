@@ -60,6 +60,9 @@ def classifyTypeOfApp(backend, window) -> str:
         if name in UNPRODUCTIVE_APPS:
             return "unproductive"
 
+    if window.app_id.lower() in ("java", "javaw.exe", "java.exe") and window.title.lower().startswith("minecraft"):
+        return "unproductive"
+
 
     category = backend.get_app_category(window) or ""
     # "games" also matches the game subcategories big headache avoided

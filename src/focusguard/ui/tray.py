@@ -11,6 +11,7 @@ class Tray(QSystemTrayIcon):
 
         super().__init__(QApplication.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon))
         self.dashboard = Dashboard()
+        self.dashboard.enforcer.notify = self.showMessage
         self.activated.connect(self.open_dashboard)
         self.show()
 

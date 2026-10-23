@@ -11,6 +11,7 @@ from pathlib import Path
 import objc
 import psutil
 import Quartz
+from Foundation import NSActivityUserInitiatedAllowingIdleSystemSleep, NSProcessInfo
 from AppKit import (
     NSAppearance,
     NSAppearanceNameVibrantDark,
@@ -174,6 +175,9 @@ class MacOSBackend(PlatformBackend):
 
     def hide_from_taskbar(self) -> None:
         NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+        self._no_app_nap = NSProcessInfo.processInfo().beginActivityWithOptions_reason_(
+            NSActivityUserInitiatedAllowingIdleSystemSleep, "FocusGuard tracks the active app"
+        )
 
     def blur_behind(self, win_id: int, corner_radius: float = 0) -> None:
         # qts winId on mac is the NSView it draws into, draw blur beneath
