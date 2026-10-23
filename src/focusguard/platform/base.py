@@ -65,6 +65,12 @@ class PlatformBackend(ABC):
     def hide_from_taskbar(self) -> None:
         """Run as a background app: no Dock icon on macOS. Call after the Qt app is created."""
 
+    def float_above_everything(self, win_id: int) -> None:
+        pass
+
+    def get_window_rect(self, window: ActiveWindow) -> tuple[int, int, int, int] | None:
+        return None
+
     def blur_behind(self, win_id: int, corner_radius: float = 0) -> None:
         """blur function. Currently mac only, if we're windows then we just ignore."""
 

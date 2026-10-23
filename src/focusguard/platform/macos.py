@@ -179,6 +179,25 @@ class MacOSBackend(PlatformBackend):
             NSActivityUserInitiatedAllowingIdleSystemSleep, "FocusGuard tracks the active app"
         )
 
+    def float_above_everything(self, win_id: int) -> None:
+        window = objc.objc_object(c_void_p=win_id).window()
+        window.setLevel_(NSStatusWindowLevel)
+        window.setCollectionBehavior_(
+            NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary
+        )
+        NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+
+    def get_window_rect(self, window: ActiveWindow) -> tuple[int, int, int, int] | None:
+        if not window.window_handle:
+            return None
+        info = Quartz.CGWindowListCopyWindowInfo(
+            Quartz.kCGWindowListOptionIncludingWindow, window.window_handle
+        ) or []
+        if len(info) == 0:
+            return None
+        bounds = info[0][Quartz.kCGWindowBounds]
+        return int(bounds["X"]), int(bounds["Y"]), int(bounds["Width"]), int(bounds["Height"])
+
     def blur_behind(self, win_id: int, corner_radius: float = 0) -> None:
         # qts winId on mac is the NSView it draws into, draw blur beneath
         qt_view = objc.objc_object(c_void_p=win_id)

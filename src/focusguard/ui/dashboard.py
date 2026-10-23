@@ -10,6 +10,7 @@ Everything to be added to dashboard:
 BEFORE MAKING EDITS READ GDOC SECTION "Dashboard priorities"
 """
 import os
+import time
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
@@ -29,6 +30,8 @@ from PySide6.QtGui import QFontDatabase, QPainter, QPaintEvent
 
 from focusguard.core.classifier import classifyTypeOfApp
 from focusguard.core.enforcement import Enforcer
+from focusguard.storage import memory
+from focusguard.ui.pause_screen import PauseScreen
 from focusguard.platform import get_backend
 
 
@@ -266,6 +269,12 @@ class Dashboard(QWidget):
         self.backend = get_backend()
         self.times: dict[tuple[str, str], int] = {}
         self.enforcer = Enforcer(self.backend)
+        self.pause = None
+        self.paused_window = None
+        self.last_app = None
+        self.emergency = None
+        self.passed_at = {}
+        self.used = {}
         self.time_list = QLabel(styleSheet="color: white;", alignment=Qt.AlignmentFlag.AlignTop)
         layout.addWidget(self.time_list)
         layout.addStretch()
@@ -286,12 +295,49 @@ class Dashboard(QWidget):
         window = self.backend.get_active_window()
         if window is None or window.pid == os.getpid():
             return
+        if self.pause is not None:
+            return
         kind = classifyTypeOfApp(self.backend, window)
+
+        new_app = window.app_name != self.last_app
+        self.last_app = window.app_name
+        if new_app:
+            self.emergency = None
+        if kind == "unproductive" and new_app and time.time() - self.passed_at.get(window.app_name, 0) > 600:
+            self.show_pause(window)
+            return
+        if window.app_name == self.emergency:
+            return
+
         key = (window.app_name, kind)
         self.times[key] = self.times.get(key, 0) + 1
-        self.enforcer.check(window, kind, self.times[key])
+        self.used[window.app_name] = self.used.get(window.app_name, 0) + 1
+        if self.enforcer.check(window, kind, self.used[window.app_name]):
+            self.used[window.app_name] = 0
+            self.passed_at.pop(window.app_name, None)
+            self.last_app = None
         rows = sorted(self.times.items(), key=lambda kv: -kv[1])
         self.time_list.setText("\n".join(f"{name} ({kind}): {s // 60}m {s % 60}s" for (name, kind), s in rows))
+
+    def show_pause(self, window):
+        self.paused_window = window
+        self.pause = PauseScreen(window.app_name, self.backend.get_window_rect(window), self.pause_done)
+        self.pause.popup()
+
+    def pause_done(self, choice):
+        window = self.paused_window
+        self.pause = None
+        if choice == "back":
+            self.backend.close_app(window.pid)
+            self.last_app = None
+            data = memory.load()
+            data["backed_out"] = data.get("backed_out", 0) + 1
+            memory.save(data)
+        else:
+            self.passed_at[window.app_name] = time.time()
+            self.used[window.app_name] = 0
+        if choice == "emergency":
+            self.emergency = window.app_name
 
 
 

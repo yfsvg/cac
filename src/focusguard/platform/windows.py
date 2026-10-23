@@ -195,6 +195,20 @@ class WindowsBackend(PlatformBackend):
         except psutil.Error:
             return False
 
+    def get_window_rect(self, window: ActiveWindow) -> tuple[int, int, int, int] | None:
+        if not window.window_handle:
+            return None
+        rect = wintypes.RECT()
+        if not user32.GetWindowRect(wintypes.HWND(window.window_handle), ctypes.byref(rect)):
+            return None
+        scale = user32.GetDpiForWindow(wintypes.HWND(window.window_handle)) / 96 or 1
+        return (
+            int(rect.left / scale),
+            int(rect.top / scale),
+            int((rect.right - rect.left) / scale),
+            int((rect.bottom - rect.top) / scale),
+        )
+
     def hide_from_taskbar(self) -> None:
         # Nothing app-wide on Windows: WS_EX_TOOLWINDOW (set per window above) keeps windows
         # off the taskbar, and the tray icon is the only other presence.
