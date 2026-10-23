@@ -12,12 +12,21 @@ import objc
 import psutil
 import Quartz
 from AppKit import (
+    NSAppearance,
+    NSAppearanceNameVibrantDark,
     NSApplication,
     NSApplicationActivationPolicyAccessory,
     NSApplicationActivationPolicyRegular,
     NSBundle,
     NSRunningApplication,
     NSStatusWindowLevel,
+    NSViewHeightSizable,
+    NSViewWidthSizable,
+    NSVisualEffectBlendingModeBehindWindow,
+    NSVisualEffectMaterialHUDWindow,
+    NSVisualEffectStateActive,
+    NSVisualEffectView,
+    NSWindowBelow,
     NSWindowCollectionBehaviorCanJoinAllSpaces,
     NSWindowCollectionBehaviorFullScreenAuxiliary,
     NSWindowCollectionBehaviorIgnoresCycle,
@@ -109,6 +118,7 @@ class MacOSBackend(PlatformBackend):
         if not self.is_browser(window):
             return None
         # Bundle ids are case-insensitive to AppleScript, so the lowercased app_id is fine.
+
         script = _URL_SCRIPT.format(bundle_id=window.app_id)
         try:
             result = subprocess.run(
@@ -165,7 +175,23 @@ class MacOSBackend(PlatformBackend):
     def hide_from_taskbar(self) -> None:
         NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
 
-    # ---- installation ----------------------------------------------------------------------
+    def blur_behind(self, win_id: int, corner_radius: float = 0) -> None:
+        # qts winId on mac is the NSView it draws into, draw blur beneath
+        qt_view = objc.objc_object(c_void_p=win_id)
+        frame_view = qt_view.superview()
+        blur = NSVisualEffectView.alloc().initWithFrame_(frame_view.bounds())
+
+        blur.setBlendingMode_(NSVisualEffectBlendingModeBehindWindow)
+        blur.setMaterial_(NSVisualEffectMaterialHUDWindow)
+        blur.setState_(NSVisualEffectStateActive)
+        blur.setAppearance_(NSAppearance.appearanceNamed_(NSAppearanceNameVibrantDark))
+        blur.setAutoresizingMask_(NSViewWidthSizable | NSViewHeightSizable)
+        blur.setWantsLayer_(True)
+        blur.layer().setCornerRadius_(corner_radius)
+        blur.layer().setMasksToBounds_(True)
+        # unfortunately native app le doesnt have a blur strength parameter. Its just ugly blur for now haha
+
+        frame_view.addSubview_positioned_relativeTo_(blur, NSWindowBelow, qt_view)
 
     @property
     def _launch_agent_path(self) -> Path:
