@@ -13,7 +13,7 @@ from pathlib import Path
 import psutil
 
 from focusguard.core.models import ActiveWindow, PermissionState, RunningApp
-from focusguard.platform.base import PlatformBackend
+from focusguard.platform.base import PlatformBackend, grab_region
 
 log = logging.getLogger(__name__)
 
@@ -237,6 +237,14 @@ class WindowsBackend(PlatformBackend):
             int((rect.right - rect.left) / scale),
             int((rect.bottom - rect.top) / scale),
         )
+
+    def capture_window(self, window: ActiveWindow) -> bytes | None:
+        if not window.window_handle:
+            return None
+        rect = wintypes.RECT()
+        if not user32.GetWindowRect(wintypes.HWND(window.window_handle), ctypes.byref(rect)):
+            return None
+        return grab_region((rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top))
 
     def hide_from_taskbar(self) -> None:
         # Nothing app-wide on Windows: WS_EX_TOOLWINDOW (set per window above) keeps windows

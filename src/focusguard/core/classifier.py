@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 
 from focusguard.core.ignored_apps import IGNORED_APPS
 from focusguard.core.unproductive_apps import UNPRODUCTIVE_APPS
-from focusguard.core.unproductive_sites import UNPRODUCTIVE_SITES
+from focusguard.ai.site_memory import siteCategory
 
 
 def siteRoot(url: str | None) -> str | None:
@@ -36,19 +36,7 @@ def siteRoot(url: str | None) -> str | None:
 
 
 def isUnproductiveSite(site: str | None) -> bool:
-    if not site:
-        return False
-    siteParts = site.split(".")
-    for index in range(len(siteParts) - 1):
-        if ".".join(siteParts[index:]) in UNPRODUCTIVE_SITES:
-            return True
-    return False
-
-
-
-
-
-
+    return siteCategory(site) == "unproductive"
 
 
 def isIgnoredApp(window) -> bool:

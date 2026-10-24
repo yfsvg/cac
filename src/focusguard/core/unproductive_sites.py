@@ -32,3 +32,24 @@ UNPRODUCTIVE_SITES = frozenset({
     "sports.yahoo.com", "theathletic.com", "barstoolsports.com", "si.com", "247sports.com",
     "on3.com", "ufc.com", "wwe.com", "f1.com", "formula1.com", "nascar.com",
 })
+
+PRODUCTIVE_SITES = frozenset({
+    "docs.google.com", "drive.google.com", "classroom.google.com", "sheets.google.com", "slides.google.com",
+    "forms.google.com", "calendar.google.com", "scholar.google.com", "sites.google.com", "mail.google.com",
+    "instructure.com", "canvas.net", "schoology.com", "blackboard.com", "brightspace.com", "d2l.com",
+    "moodle.org", "powerschool.com", "infinitecampus.org", "seesaw.me", "edpuzzle.com", "nearpod.com",
+    "peardeck.com", "kahoot.it", "kahoot.com", "quizizz.com", "wayground.com", "blooket.com", "gimkit.com",
+    "khanacademy.org", "wikipedia.org", "wikimedia.org", "britannica.com", "desmos.com", "geogebra.org",
+    "wolframalpha.com", "symbolab.com", "mathway.com", "quizlet.com", "brainly.com", "chegg.com",
+    "collegeboard.org", "apstudents.collegeboard.org", "satsuite.collegeboard.org", "act.org", "commonapp.org",
+    "coursera.org", "edx.org", "udemy.com", "codecademy.com", "freecodecamp.org", "w3schools.com",
+    "developer.mozilla.org", "stackoverflow.com", "github.com", "gitlab.com", "replit.com", "leetcode.com",
+    "python.org", "docs.python.org", "readthedocs.io", "kaggle.com", "colab.research.google.com",
+    "office.com", "microsoft365.com", "onedrive.live.com", "outlook.com", "notion.so", "evernote.com",
+    "grammarly.com", "turnitin.com", "noredink.com", "commonlit.org", "newsela.com", "readworks.org",
+    "duolingo.com", "quizlet.live", "jstor.org", "pubmed.ncbi.nlm.nih.gov", "ncbi.nlm.nih.gov", "nasa.gov",
+    "purdue.edu", "owl.purdue.edu", "sparknotes.com", "litcharts.com", "gradesaver.com", "easybib.com",
+    "citationmachine.net", "zotero.org", "overleaf.com", "canva.com", "figma.com", "zoom.us", "meet.google.com",
+    "teams.microsoft.com", "ixl.com", "deltamath.com", "mathxl.com", "pearson.com", "mheducation.com",
+    "savvasrealize.com", "albert.io", "apclassroom.collegeboard.org", "fiveable.me", "phet.colorado.edu",
+})

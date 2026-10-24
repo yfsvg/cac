@@ -10,6 +10,7 @@ Everything to be added to dashboard:
 BEFORE MAKING EDITS READ GDOC SECTION "Dashboard priorities"
 """
 import os
+import threading
 import time
 
 from PySide6.QtCore import QEasingCurve, QPointF, QPropertyAnimation, QRectF, Qt, QTimer, QVariantAnimation
@@ -30,9 +31,11 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPainter, QPainterPath, QPaintEvent, QPen, QTransform
 
+from focusguard.ai import vision
+from focusguard.ai.site_memory import siteCategory
 from focusguard.core.classifier import classifyTypeOfApp, isIgnoredApp, isUnproductiveSite, siteRoot
 from focusguard.core.enforcement import Enforcer
-from focusguard.storage import memory, time_tracking
+from focusguard.storage import memory, streak, time_tracking
 from focusguard.ui.settings_window import SettingsPage
 from focusguard.ui.pause_screen import PauseScreen
 from focusguard.ui.theme import applyTheme, choiceFor, getColors, getTheme, resolveTheme, setTheme, systemTheme
@@ -345,7 +348,7 @@ class Dashboard(QWidget):
         heroLayout.setContentsMargins(24, 20, 24, 22)
         heroLayout.setSpacing(6)
         heroLayout.addWidget(label("Hello, User", "Hello"))
-        heroLayout.addWidget(label("Replace now with the tree system parth or japmann work?", "Streak"))
+        heroLayout.addWidget(label(streak.streakText(streak.markOpenedToday()), "Streak"))
         layout.addWidget(heroCard)
         layout.addSpacing(8)
 
@@ -390,6 +393,8 @@ class Dashboard(QWidget):
         self.emergencyApp = None
         self.passedAt = {}
         self.usedSeconds = {}
+        self.unknownSeconds = {}
+        self.askedSites = []
         timeCard = QFrame(objectName="TimeCard")
         timeCardLayout = QVBoxLayout(timeCard)
         timeCardLayout.setContentsMargins(20, 16, 20, 16)
@@ -421,6 +426,8 @@ class Dashboard(QWidget):
 
     def tick(self) -> None:
         window = self.backend.get_active_window()
+        while len(vision.notices) > 0:
+            self.enforcer.sendNotification(vision.notices.pop(0))
         if window is None or window.pid == os.getpid() or isIgnoredApp(window):
             return
         if self.pauseScreen is not None:
@@ -448,6 +455,12 @@ class Dashboard(QWidget):
             return
 
         key = (appName, appKind)
+        if site is not None and appKind == "unproductive":
+            key = ("Browser unproductive", "unproductive")
+        elif appKind == "browser":
+            key = ("Browser productive", "browser")
+            if site is not None:
+                self.checkUnknownSite(window, site)
         self.trackedTimes[key] = self.trackedTimes.get(key, 0) + 1
         self.usedSeconds[appName] = self.usedSeconds.get(appName, 0) + 1
         if self.enforcer.checkApp(window, appKind, self.usedSeconds[appName], site):
@@ -456,6 +469,15 @@ class Dashboard(QWidget):
             self.lastApp = None
             self.lastBrowserWindow = None
         self.showTimes()
+
+    def checkUnknownSite(self, window, site):
+        if siteCategory(site) is not None or site in self.askedSites:
+            return
+        self.unknownSeconds[site] = self.unknownSeconds.get(site, 0) + 1
+        if self.unknownSeconds[site] < 60:
+            return
+        self.askedSites.append(site)
+        threading.Thread(target=vision.classifySite, args=(self.backend, window, site), daemon=True).start()
 
     def browserSite(self, window):
         browserWindow = (window.window_handle, window.title)

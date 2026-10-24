@@ -12,6 +12,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+import time
+
+from focusguard.ai import vision
 from focusguard.storage import memory
 from focusguard.ui.theme import applyTheme, getColors
 
@@ -63,6 +66,33 @@ def makeBackArrow():
     painter.drawLine(QPointF(9, 16), QPointF(15, 22))
     painter.end()
     return QIcon(arrow)
+
+
+FREEZE_SECONDS = 3 * 60 * 60
+
+
+def markChanged(settingName):
+    savedMemory = memory.load()
+    changedAt = savedMemory.get("changedAt", {})
+    changedAt[settingName] = time.time()
+    savedMemory["changedAt"] = changedAt
+    memory.save(savedMemory)
+
+
+def frozenSecondsLeft(settingName):
+    changedAt = memory.load().get("changedAt", {})
+    if settingName not in changedAt:
+        return 0
+    secondsLeft = changedAt[settingName] + FREEZE_SECONDS - time.time()
+    if secondsLeft < 0:
+        return 0
+    return int(secondsLeft)
+
+
+def frozenText(secondsLeft):
+    hoursLeft = secondsLeft // 3600
+    minutesLeft = (secondsLeft % 3600) // 60
+    return "locked for " + str(hoursLeft) + "h " + str(minutesLeft) + "m"
 
 
 SETTING_NAMES = ["Absolute Time Limits", "Schedule Time Limits", "AI Categorizations", "Super Focus Mode", "Bail-Outs"]
@@ -210,6 +240,21 @@ class SettingsPage(QWidget):
             layout.addWidget(dropdown)
         layout.addSpacing(8)
 
+        layout.addWidget(label("AI Website Checking", "Section"))
+        self.keyText = label("", "Streak")
+        layout.addWidget(self.keyText)
+        keyRow = QHBoxLayout()
+        self.keyBox = QLineEdit()
+        self.keyBox.setEchoMode(QLineEdit.EchoMode.Password)
+        self.keyBox.setPlaceholderText("Gemini API key")
+        self.saveKeyButton = QPushButton("Save key", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
+        self.saveKeyButton.clicked.connect(self.saveKey)
+        keyRow.addWidget(self.keyBox)
+        keyRow.addWidget(self.saveKeyButton)
+        layout.addLayout(keyRow)
+        layout.addSpacing(8)
+        self.updateKeySection()
+
         layout.addWidget(label("Parental Controls", "Section"))
         self.parentText = label("", "Streak")
         layout.addWidget(self.parentText)
@@ -244,8 +289,15 @@ class SettingsPage(QWidget):
         self.changePinButton.setVisible(isSetUp)
         self.turnOffButton.setVisible(isSetUp)
         for settingName in self.lockBoxes:
-            self.lockBoxes[settingName].setVisible(isSetUp)
-            self.lockBoxes[settingName].setChecked(settingName in lockedSettings)
+            lockBox = self.lockBoxes[settingName]
+            lockBox.setVisible(isSetUp)
+            lockBox.setChecked(settingName in lockedSettings)
+            secondsLeft = frozenSecondsLeft("Lock " + settingName)
+            lockBox.setEnabled(secondsLeft == 0)
+            if secondsLeft == 0:
+                lockBox.setText("Lock " + settingName)
+            else:
+                lockBox.setText("Lock " + settingName + " (" + frozenText(secondsLeft) + ")")
         if isSetUp:
             self.parentText.setText("Parental controls are on. Locked settings need the PIN to open.")
         else:
@@ -261,11 +313,35 @@ class SettingsPage(QWidget):
         if not askForPin(self, self.mainStyle):
             self.updateParentSection()
             return
+        oldLocks = getLockedSettings()
         lockedSettings = []
         for settingName in self.lockBoxes:
             if self.lockBoxes[settingName].isChecked():
                 lockedSettings.append(settingName)
+            if (settingName in oldLocks) != self.lockBoxes[settingName].isChecked():
+                markChanged("Lock " + settingName)
         saveLockedSettings(lockedSettings)
+        self.updateParentSection()
+
+    def updateKeySection(self):
+        secondsLeft = frozenSecondsLeft("Gemini API key")
+        self.keyBox.setEnabled(secondsLeft == 0)
+        self.saveKeyButton.setEnabled(secondsLeft == 0)
+        if vision.getApiKey() == "":
+            keyStatus = "No key saved. Unknown websites won't be checked by AI."
+        else:
+            keyStatus = "Key saved. Unknown websites are checked by AI after 1 minute."
+        if secondsLeft > 0:
+            keyStatus = keyStatus + " (" + frozenText(secondsLeft) + ")"
+        self.keyText.setText(keyStatus)
+
+    def saveKey(self):
+        if self.keyBox.text().strip() == "":
+            return
+        vision.saveApiKey(self.keyBox.text())
+        self.keyBox.clear()
+        markChanged("Gemini API key")
+        self.updateKeySection()
 
     def setUpParentalControls(self):
         PinDialog(self, self.mainStyle, True).exec()

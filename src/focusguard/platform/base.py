@@ -55,6 +55,12 @@ class PlatformBackend(ABC):
             shot = sct.grab(sct.monitors[0])
             return mss.tools.to_png(shot.rgb, shot.size)
 
+    def capture_window(self, window: ActiveWindow) -> bytes | None:
+        rect = self.get_window_rect(window)
+        if rect is None:
+            return None
+        return grab_region(rect)
+
     # ---- enforcement -----------------------------------------------------------------------
 
     @abstractmethod
@@ -108,3 +114,20 @@ class PlatformBackend(ABC):
         if sys.platform == "win32" and pythonw.exists():
             python = pythonw
         return [str(python), "-m", DAEMON_MODULE]
+
+
+def grab_region(rect: tuple[int, int, int, int]) -> bytes | None:
+    import mss
+    import mss.tools
+
+    left, top, width, height = rect
+    with mss.mss() as sct:
+        screen = sct.monitors[0]
+        right = min(left + width, screen["left"] + screen["width"])
+        bottom = min(top + height, screen["top"] + screen["height"])
+        left = max(left, screen["left"])
+        top = max(top, screen["top"])
+        if right - left < 10 or bottom - top < 10:
+            return None
+        shot = sct.grab({"left": left, "top": top, "width": right - left, "height": bottom - top})
+        return mss.tools.to_png(shot.rgb, shot.size)
