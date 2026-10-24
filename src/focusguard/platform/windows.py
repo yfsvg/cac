@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import ctypes
-import functools
 import logging
-import re
 import subprocess
 import time
 import winreg
@@ -360,21 +358,23 @@ def _proc_exe(proc: psutil.Process) -> str | None:
 
 
 def _friendly_name(proc: psutil.Process, exe: str | None) -> str:
-    """The name Start shows for packaged apps ("Snipping Tool"), else the exe's FileDescription
-    ("Google Chrome"), falling back to the browser table or the exe's file name ("chrome")."""
     name = _proc_name(proc)
-    # Exes inside Store/MSIX packages often carry an internal name ("Microsoft.Media.Player")
-    # or no description at all; the real name lives in the package manifest.
-    if (aumid := _app_user_model_id(proc.pid)) and (display := _packaged_app_name(aumid)):
-        return display
-    # Ask the exe before trusting its file name: Chromium forks like Helium ship as chrome.exe.
-    if exe and (desc := _file_description(exe)):
-        return _tidy_description(desc)
+    aumid = _app_user_model_id(proc.pid)
+    if aumid:
+        display = _packaged_app_name(aumid)
+        if display:
+            return display
+    if exe:
+        desc = _file_description(exe)
+        if desc:
+            return _tidy_description(desc)
     if name in BROWSERS:
         return BROWSERS[name]
     if exe:
         return Path(exe).stem
-    return Path(name).stem if name else "Unknown"
+    if name:
+        return Path(name).stem
+    return "Unknown"
 
 
 def _file_description(exe: str) -> str | None:
@@ -386,28 +386,30 @@ def _file_description(exe: str) -> str | None:
             return None
         lang, codepage = langs[0]
         desc = win32api.GetFileVersionInfo(exe, rf"\StringFileInfo\{lang:04x}{codepage:04x}\FileDescription")
-        return str(desc or "").strip() or None
-    except Exception:  # pywin32 missing, or the exe has no version resource
+        desc = str(desc or "").strip()
+        if desc == "":
+            return None
+        return desc
+    except Exception:
         return None
 
 
-_DOTTED_NAME = re.compile(r"[A-Z][A-Za-z0-9]*(?:\.[A-Z][A-Za-z0-9]*)+")
-
-
 def _tidy_description(desc: str) -> str:
-    """.NET apps often use their assembly name as the description: "PowerToys.Run" -> "PowerToys Run".
-    Only capitalised segments are split, so names like "draw.io" are left alone."""
-    return desc.replace(".", " ") if _DOTTED_NAME.fullmatch(desc) else desc
+    parts = desc.split(".")
+    if len(parts) < 2:
+        return desc
+    for part in parts:
+        if part == "" or not part[0].isupper() or not part.isalnum():
+            return desc
+    return desc.replace(".", " ")
 
 
 def _app_user_model_id(pid: int) -> str | None:
-    """AUMID of a packaged app's process ("Microsoft.ScreenSketch_8wekyb3d8bbwe!App"), None if unpackaged."""
     handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
     if not handle:
         return None
     try:
         length = wintypes.UINT(0)
-        # Unpackaged processes fail with APPMODEL_ERROR_NO_APPLICATION instead of asking for a buffer.
         if kernel32.GetApplicationUserModelId(handle, ctypes.byref(length), None) != ERROR_INSUFFICIENT_BUFFER:
             return None
         buf = ctypes.create_unicode_buffer(length.value)
@@ -418,9 +420,12 @@ def _app_user_model_id(pid: int) -> str | None:
         kernel32.CloseHandle(handle)
 
 
-@functools.lru_cache(maxsize=256)
+_packaged_names: dict[str, str | None] = {}
+
+
 def _packaged_app_name(aumid: str) -> str | None:
-    """Display name of a packaged app, resolved through the shell's Apps folder like Start does."""
+    if aumid in _packaged_names:
+        return _packaged_names[aumid]
     try:
         import pythoncom
         from win32com.shell import shell, shellcon
@@ -429,16 +434,19 @@ def _packaged_app_name(aumid: str) -> str | None:
     try:
         pythoncom.CoInitialize()
         initialized = True
-    except pythoncom.com_error:  # thread already joined COM in another apartment mode
+    except pythoncom.com_error:
         initialized = False
+    display = None
     try:
         item = shell.SHCreateItemFromParsingName(rf"shell:AppsFolder\{aumid}", None, shell.IID_IShellItem)
-        return item.GetDisplayName(shellcon.SIGDN_NORMALDISPLAY) or None
+        display = item.GetDisplayName(shellcon.SIGDN_NORMALDISPLAY) or None
     except pythoncom.com_error:
-        return None
+        display = None
     finally:
         if initialized:
             pythoncom.CoUninitialize()
+    _packaged_names[aumid] = display
+    return display
 
 
 def _find_address_bar(root):

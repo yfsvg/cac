@@ -19,9 +19,9 @@ def test_resolve_theme(choice, system, expected):
 @pytest.mark.parametrize(
     ("picked", "system", "expected"),
     [
-        ("light", "dark", "light"),  # differs from the OS: saved as an override
+        ("light", "dark", "light"),
         ("dark", "light", "dark"),
-        ("dark", "dark", "system"),  # matches the OS again: back to following it
+        ("dark", "dark", "system"),
         ("light", "light", "system"),
     ],
 )

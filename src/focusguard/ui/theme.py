@@ -102,14 +102,11 @@ def getColors():
 
 
 def systemTheme():
-    # qt reads the OS light/dark setting on windows and mac, light if it can't tell
     if QGuiApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark:
         return "dark"
     return "light"
 
 
-# the saved choice is "system", "light" or "dark". a theme only gets saved as an override when it
-# differs from the OS, so toggling back to whatever the OS uses goes back to following the OS
 def resolveTheme(choice, systemThemeName):
     if choice == "system":
         return systemThemeName

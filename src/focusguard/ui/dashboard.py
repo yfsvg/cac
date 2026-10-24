@@ -12,7 +12,7 @@ BEFORE MAKING EDITS READ GDOC SECTION "Dashboard priorities"
 import os
 import time
 
-from PySide6.QtCore import QEasingCurve, QPointF, QPropertyAnimation, Qt, QTimer, QVariantAnimation
+from PySide6.QtCore import QEasingCurve, QPointF, QPropertyAnimation, QRectF, Qt, QTimer, QVariantAnimation
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPainter, QPainterPath, QPaintEvent, QPen
+from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPainter, QPainterPath, QPaintEvent, QPen, QTransform
 
 from focusguard.core.classifier import classifyTypeOfApp, isIgnoredApp, isUnproductiveSite, siteRoot
 from focusguard.core.enforcement import Enforcer
@@ -198,17 +198,41 @@ def drawMoon(painter: QPainter, color: QColor) -> None:
     painter.drawPath(moon.subtracted(bite))
 
 
-class ThemeToggle(QPushButton):
-    """sun/moon button in the top right. shows the theme you'd switch to (sun while dark), and spins
-    the old icon out while the new one spins in"""
+def drawCog(painter: QPainter, color: QColor) -> None:
+    cog = QPainterPath()
+    cog.addEllipse(QPointF(0, 0), 5.6, 5.6)
+    for toothNumber in range(8):
+        tooth = QPainterPath()
+        tooth.addRoundedRect(QRectF(-1.7, -8.2, 3.4, 4), 0.8, 0.8)
+        cog = cog.united(QTransform().rotate(45 * toothNumber).map(tooth))
+    hole = QPainterPath()
+    hole.addEllipse(QPointF(0, 0), 2.4, 2.4)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(color)
+    painter.drawPath(cog.subtracted(hole))
 
+
+class SettingsButton(QPushButton):
+    def __init__(self) -> None:
+        super().__init__(objectName="ThemeButton", cursor=Qt.CursorShape.PointingHandCursor)
+        self.setFixedSize(32, 32)
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.translate(self.width() / 2, self.height() / 2)
+        drawCog(painter, QColor(getColors()["onSurface"]))
+
+
+class ThemeToggle(QPushButton):
     def __init__(self, dark: bool) -> None:
         super().__init__(objectName="ThemeButton", cursor=Qt.CursorShape.PointingHandCursor)
         self.setFixedSize(32, 32)
         self.dark = dark
-        self.progress = 1.0  # 0 right after a switch, 1 once settled
+        self.progress = 1.0
         self.spin = QVariantAnimation(self, startValue=0.0, endValue=1.0, duration=450)
-        self.spin.setEasingCurve(QEasingCurve.Type.OutBack)  # overshoots a little so it lands with a bounce
+        self.spin.setEasingCurve(QEasingCurve.Type.OutBack)
         self.spin.valueChanged.connect(self.setProgress)
 
     def setDark(self, dark: bool, animate: bool) -> None:
@@ -223,7 +247,7 @@ class ThemeToggle(QPushButton):
         self.update()
 
     def paintEvent(self, event: QPaintEvent) -> None:
-        super().paintEvent(event)  # rounded background + hover from the stylesheet
+        super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.translate(self.width() / 2, self.height() / 2)
@@ -268,7 +292,6 @@ class Dashboard(QWidget):
         self.move(x, y)
 
         self.setObjectName("Dashboard")
-        # "system" follows the OS (and keeps following it live), "light"/"dark" is an override
         self.themeChoice = memory.load()["themeChoice"]
         setTheme(resolveTheme(self.themeChoice, systemTheme()))
         QGuiApplication.styleHints().colorSchemeChanged.connect(self.systemThemeChanged)
@@ -281,7 +304,6 @@ class Dashboard(QWidget):
         mainLayout.setContentsMargins(10, 10, 10, 10)
 
         # all material you as disucssed in gc
-        # header sits outside the scroll area so the theme toggle stays pinned top right
         topRow = QHBoxLayout()
         topRow.setContentsMargins(20, 10, 20, 0)
         topRow.addWidget(label("Focusguard", "AppName"))
@@ -289,8 +311,7 @@ class Dashboard(QWidget):
         self.themeButton = ThemeToggle(getTheme() == "dark")
         self.themeButton.clicked.connect(self.toggleTheme)
         topRow.addWidget(self.themeButton)
-        self.settingsButton = QPushButton("⚙", objectName="ThemeButton", cursor=Qt.CursorShape.PointingHandCursor)
-        self.settingsButton.setFixedSize(32, 32)
+        self.settingsButton = SettingsButton()
         self.settingsButton.clicked.connect(self.openSettings)
         topRow.addWidget(self.settingsButton)
         mainLayout.addLayout(topRow)
@@ -400,7 +421,6 @@ class Dashboard(QWidget):
 
     def tick(self) -> None:
         window = self.backend.get_active_window()
-        # bail before the switch logic too, so clicking the taskbar and back isn't "switching apps"
         if window is None or window.pid == os.getpid() or isIgnoredApp(window):
             return
         if self.pauseScreen is not None:
@@ -496,7 +516,6 @@ class Dashboard(QWidget):
     def switchTheme(self, themeName: str) -> None:
         if themeName == getTheme():
             return
-        # picture of the old look, faded out on top of the new one. skipped while hidden
         oldLook = None
         if self.isVisible():
             oldLook = self.grab()
@@ -517,7 +536,7 @@ class Dashboard(QWidget):
         opacity = QGraphicsOpacityEffect(cover)
         cover.setGraphicsEffect(opacity)
         cover.show()
-        self.themeButton.raise_()  # keep the spinning icon above the fade
+        self.themeButton.raise_()
         fade = QPropertyAnimation(opacity, b"opacity", cover)
         fade.setDuration(350)
         fade.setStartValue(1.0)

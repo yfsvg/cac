@@ -52,7 +52,6 @@ def isUnproductiveSite(site: str | None) -> bool:
 
 
 def isIgnoredApp(window) -> bool:
-    """taskbar, start menu, snipping tool, focusguard itself etc. see ignored_apps.py"""
     return window.app_id.lower() in IGNORED_APPS
 
 
