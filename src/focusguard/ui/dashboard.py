@@ -11,7 +11,7 @@
 import os
 import threading
 import time
-from datetime import date, datetime
+from datetime import date
 
 from PySide6.QtCore import QEasingCurve, QPointF, QPropertyAnimation, QRectF, Qt, QTimer, QVariantAnimation
 from PySide6.QtWidgets import (
@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -35,12 +34,11 @@ from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPainter, QPai
 from focusguard.ai import vision
 from focusguard.ai.site_memory import siteCategory
 from focusguard.core.classifier import classifyTypeOfApp, isIgnoredApp, isUnproductiveSite, siteRoot
-from focusguard.core import enforcement, keep_alive, session, setting_changes
+from focusguard.core import enforcement, keep_alive, setting_changes
 from focusguard.core.enforcement import Enforcer
 from focusguard.storage import memory, time_tracking
 from focusguard.ui.settings_window import SettingsPage
 from focusguard.ui.pause_screen import BreakBadge, CheckInScreen, PauseScreen
-from focusguard.ui.session_screen import SessionCard, SessionPrompt, TimesUpToast
 from focusguard.ui.theme import applyTheme, choiceFor, getColors, getTheme, resolveTheme, setTheme, systemTheme
 from focusguard.platform import get_backend
 
@@ -96,20 +94,7 @@ STYLE = """
     QFrame#TimeCard { background-color: @surfaceContainerLow; border-radius: 24px; }
     QLabel#SplitTitle { color: @onSurface; font-size: 15px; font-weight: 600; }
     QLabel#SplitLegend { color: @onSurface; font-size: 13px; }
-    QFrame#SessionCard { background-color: @secondaryContainer; border-radius: 20px; }
-    QLabel#SessionTime { color: @onSecondaryContainer; font-size: 15px; font-weight: 600; }
-    QPushButton#BailOutButton {
-        color: @onSecondaryContainer;
-        font-size: 13px;
-        font-weight: 600;
-        background-color: @surfaceContainerHighest;
-        border: none;
-        border-radius: 12px;
-        padding: 4px 12px;
-    }
-    QPushButton#BailOutButton:hover { background-color: @errorContainer; color: @onErrorContainer; }
-    QProgressBar#SessionBar { background-color: @surfaceContainerHighest; border: none; border-radius: 3px; }
-    QProgressBar#SessionBar::chunk { background-color: @primary; border-radius: 3px; }
+
 
     QPushButton#DropdownHeader {
         color: @onSurface;
@@ -570,17 +555,7 @@ class Dashboard(QWidget):
         self.showTimes()
         self.refreshStats()
 
-        self.sessionPrompt = None
-        self.timesUpToast = None
-        self.scheduleDoneFor = ""
         self.lastKind = None
-        self.sessionCard = SessionCard(self.askBailOut)
-        sessionRow = QHBoxLayout()
-        sessionRow.setContentsMargins(20, 8, 26, 0)
-        sessionRow.addWidget(self.sessionCard)
-        mainLayout.insertLayout(1, sessionRow)
-        self.sessionTimer = QTimer(self, interval=1000, timeout=self.sessionTick)
-        QTimer.singleShot(0, self.startOrResumeSession)
 
 
     def cardRow(self, colorFamilies, cards: list[tuple[str, str, str, str]]) -> QHBoxLayout:
@@ -859,8 +834,7 @@ class Dashboard(QWidget):
         self.pausedWindow = window
         self.pausedName = appName
         self.pausedSite = site
-        superFocus = memory.load().get("superFocus", False)
-        self.pauseScreen = PauseScreen(appName, self.backend.get_window_rect(window), self.pauseDone, superFocus)
+        self.pauseScreen = PauseScreen(appName, self.backend.get_window_rect(window), self.pauseDone)
         self.pauseScreen.popUp()
 
     def pauseDone(self, choice):
@@ -893,83 +867,8 @@ class Dashboard(QWidget):
 
 
 
-    def startOrResumeSession(self):
-        if not session.resumeAllowed:
-            session.endSession()
-        if session.sessionSecondsLeft() > 0:
-            self.sessionCard.showSession(session.sessionSecondsLeft())
-            self.sessionTimer.start()
-            return
-        self.sessionPrompt = SessionPrompt(self.sessionChosen)
-        self.sessionPrompt.popUp()
-
-    def sessionChosen(self, minutes):
-        self.sessionPrompt = None
-        session.startSession(minutes)
-        self.sessionCard.totalSeconds = int(minutes * 60)
-        self.sessionCard.showSession(session.sessionSecondsLeft())
-        self.sessionTimer.start()
-
-    def sessionTick(self):
-        if self.timesUpToast is not None:
-            return
-        self.checkSchedule()
-        secondsLeft = session.sessionSecondsLeft()
-        if secondsLeft > 0:
-            self.sessionCard.updateTime(secondsLeft)
-            return
-        self.sessionCard.hide()
-        self.timesUpToast = TimesUpToast(self.timesUpDone)
-        self.timesUpToast.popUp()
-
-    def timesUpDone(self, choice):
-        self.timesUpToast = None
-        if choice == "close":
-            self.quitFocusGuard()
-            return
-        session.extendSession(session.CONTINUE_MINUTES)
-        self.sessionCard.totalSeconds = session.CONTINUE_MINUTES * 60
-        self.sessionCard.showSession(session.sessionSecondsLeft())
-
-    def checkSchedule(self):
-        schedule = memory.load().get("studySchedule", {})
-        now = datetime.now()
-        if now.weekday() not in schedule.get("days", []):
-            return
-        startText = schedule.get("start", "")
-        endText = schedule.get("end", "")
-        nowText = now.strftime("%H:%M")
-        if not (startText <= nowText < endText):
-            return
-        blockName = now.strftime("%Y-%m-%d") + " " + startText
-        if self.scheduleDoneFor == blockName:
-            return
-        self.scheduleDoneFor = blockName
-        endHour, endMinute = endText.split(":")
-        endTime = now.replace(hour=int(endHour), minute=int(endMinute), second=0, microsecond=0)
-        if session.extendSessionUntil(endTime.timestamp()):
-            self.sessionCard.totalSeconds = session.sessionSecondsLeft()
-            self.sessionCard.showSession(session.sessionSecondsLeft())
-            self.enforcer.sendNotification("Study time until " + endTime.strftime("%I:%M %p").lstrip("0") + ", your session now runs until then.")
-
-    def askBailOut(self):
-        bailOutsLeft = session.bailOutsLeftThisWeek()
-        if bailOutsLeft == 0:
-            QMessageBox.information(self, "FocusGuard", "You don't have any bail-outs left this week.")
-            return
-        answer = QMessageBox.question(
-            self,
-            "FocusGuard",
-            "Use a bail-out to end your session early? You have " + str(bailOutsLeft) + " left this week. FocusGuard will close.",
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            return
-        session.useBailOut()
-        self.quitFocusGuard()
-
     def quitFocusGuard(self):
         keep_alive.stopHelper()
-        session.endSession()
         self.saveTimes()
         QApplication.quit()
 

@@ -7,7 +7,7 @@ import sys
 
 from PySide6.QtWidgets import QApplication
 
-from focusguard.core import keep_alive, session
+from focusguard.core import keep_alive
 from focusguard.core.models import PermissionState
 from focusguard.platform import get_backend
 from focusguard.storage import parent_pin
@@ -27,7 +27,6 @@ def main() -> None:
     if keep_alive.alreadyRunning():
         return
     parent_pin.upgradeOldPin()
-    session.resumeAllowed = "--resume" in sys.argv
     app = QApplication(sys.argv)
     app.setApplicationName("FocusGuard")
     app.setQuitOnLastWindowClosed(False)

@@ -140,7 +140,7 @@ def helperLoop(appPid: int) -> None:
     while True:
         time.sleep(2)
         if not psutil.pid_exists(appPid):
-            startInBackground(appCommand() + ["--resume"])
+            startInBackground(appCommand())
             return
 
 

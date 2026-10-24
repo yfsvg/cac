@@ -80,7 +80,7 @@ QLineEdit {
 
 class PauseScreen(QWidget):
 
-    def __init__(self, appName, appRect, whenDone, superFocus=False):
+    def __init__(self, appName, appRect, whenDone):
         super().__init__()
         self.whenDone = whenDone
         self.secondsLeft = COUNTDOWN
@@ -109,11 +109,7 @@ class PauseScreen(QWidget):
             if reason == "Emergency":
                 button.setObjectName("Emergency")
             button.clicked.connect(lambda checked=False, r=reason: self.pickReason(r))
-            if superFocus and reason != "Emergency":
-                button.hide()
             reasonLayout.addWidget(button)
-        if superFocus:
-            self.hint.setText("Super Focus Mode is on, no breaks right now.")
 
         self.otherBox = QLineEdit()
         self.otherBox.setPlaceholderText("Tell us in a few words, then press Enter")
