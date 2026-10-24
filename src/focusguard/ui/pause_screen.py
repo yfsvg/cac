@@ -263,22 +263,20 @@ class PauseScreen(QWidget):
         event.ignore()
 
 
-BREAK_SECONDS = 300
-
 TREE_REMINDER = "Saying continue won't harm your tree!"
 
 CHECK_IN_MESSAGES = [
-    "Your 5 minute break is up. Are you feeling alright and ready to get back to work, or still feeling down?",
+    "Your {minutes} minute break is up. Are you feeling alright and ready to get back to work, or still feeling down?",
     "How you feeling now? It's alright if you're still stressed, don't worry! Take your time.",
     "Are you feeling better? If not, don't worry. Studies show that forcing yourself to work while you're down doesn't actually make you more productive, so take your time!",
     "Hey, just checking in again. How are you feeling? Ready to jump back in, or need a little longer? No pressure.",
-    "No rush. Feeling any better, or do you want another 5 minutes? It's totally natural if you feel like you need more time, and it's good for your mind to relax.",
+    "No rush. Feeling any better, or do you want another {minutes} minutes? It's totally natural if you feel like you need more time, and it's good for your mind to relax.",
     "It's okay if you need more time. Ready to give work another go, or still not feeling it? Either way it's ok.",
 ]
 
 
 class CheckInScreen(QWidget):
-    def __init__(self, appName, timesAsked, whenDone):
+    def __init__(self, appName, timesAsked, breakMinutes, breaksLeft, whenDone):
         super().__init__()
         self.whenDone = whenDone
 
@@ -291,16 +289,26 @@ class CheckInScreen(QWidget):
 
 
         messageIndex = timesAsked % len(CHECK_IN_MESSAGES)
-        title = QLabel("5 Minute Check In")
-        message = QLabel(CHECK_IN_MESSAGES[messageIndex], objectName="Hint")
+        title = QLabel(str(breakMinutes) + " Minute Check In")
+        message = QLabel(CHECK_IN_MESSAGES[messageIndex].replace("{minutes}", str(breakMinutes)), objectName="Hint")
         message.setWordWrap(True)
         treeReminder = QLabel(TREE_REMINDER, objectName="Hint")
         treeReminder.setWordWrap(True)
+        breaksLeftText = "You have " + str(breaksLeft) + " breaks left today."
+        if breaksLeft == 1:
+            breaksLeftText = "You have 1 break left today."
+        if breaksLeft == 0:
+            breaksLeftText = "That was your last break for today."
+        breaksLeftLabel = QLabel(breaksLeftText, objectName="Hint")
+        breaksLeftLabel.setWordWrap(True)
 
         readyButton = QPushButton("I'm ready, back to work", objectName="BackButton", cursor=Qt.CursorShape.PointingHandCursor)
         readyButton.clicked.connect(self.bounceBack)
         continueButton = QPushButton("Still feeling down, continue break", objectName="OpenButton", cursor=Qt.CursorShape.PointingHandCursor)
         continueButton.clicked.connect(self.continueBreak)
+        if breaksLeft == 0:
+            continueButton.setText("No breaks left today")
+            continueButton.setEnabled(False)
 
 
         self.box = QFrame(self, objectName="Box")
@@ -313,11 +321,14 @@ class CheckInScreen(QWidget):
         boxLayout.addWidget(title)
         boxLayout.addWidget(message)
         boxLayout.addWidget(treeReminder)
+        boxLayout.addWidget(breaksLeftLabel)
+        boxLayout.addStretch()
         boxLayout.addWidget(readyButton)
         boxLayout.addWidget(continueButton)
 
 
         self.box.adjustSize()
+        self.box.setFixedHeight(int(self.box.height() * 1.5))
 
 
         screen = self.geometry()
@@ -354,7 +365,7 @@ class CheckInScreen(QWidget):
 
 # ---- break badge -----------------------------------------------------------------------------
 # Tiny "Break time!" card in the top right corner with a bar that drains as the break runs out.
-# Click-through and never takes focus, so it doesn't interrupt whatever you're doing.
+# Never takes focus, so it doesn't interrupt whatever you're doing. The x in the corner ends the break early.
 
 BADGE_STYLE = """
 QFrame#Badge {
@@ -369,19 +380,29 @@ QProgressBar {
     border-radius: 3px;
 }
 QProgressBar::chunk { background-color: @primary; border-radius: 3px; }
+QPushButton#CancelBreak {
+    color: @onSurfaceVariant;
+    font-size: 12px;
+    font-weight: 700;
+    background-color: @surfaceContainerHighest;
+    border: none;
+    border-radius: 10px;
+    padding: 0;
+}
+QPushButton#CancelBreak:hover { background-color: @errorContainer; color: @onErrorContainer; }
 """
 
 BADGE_MARGIN = 16
 
 
 class BreakBadge(QWidget):
-    def __init__(self):
+    def __init__(self, whenCancelled):
         super().__init__()
+        self.whenCancelled = whenCancelled
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.WindowDoesNotAcceptFocus
-            | Qt.WindowType.WindowTransparentForInput
             | Qt.WindowType.Window
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
@@ -392,7 +413,16 @@ class BreakBadge(QWidget):
         cardLayout = QVBoxLayout(card)
         cardLayout.setContentsMargins(14, 10, 14, 12)
         cardLayout.setSpacing(6)
-        cardLayout.addWidget(QLabel("Break time!"))
+        topRow = QHBoxLayout()
+        topRow.setContentsMargins(0, 0, 0, 0)
+        topRow.addWidget(QLabel("Break time!"))
+        topRow.addStretch()
+        cancelButton = QPushButton("✕", objectName="CancelBreak", cursor=Qt.CursorShape.PointingHandCursor)
+        cancelButton.setFixedSize(20, 20)
+        cancelButton.setToolTip("End break early")
+        cancelButton.clicked.connect(self.cancelBreak)
+        topRow.addWidget(cancelButton)
+        cardLayout.addLayout(topRow)
         self.progressBar = QProgressBar()
         self.progressBar.setTextVisible(False)
         self.progressBar.setFixedHeight(6)
@@ -430,3 +460,7 @@ class BreakBadge(QWidget):
     def stopBreak(self):
         self.ticker.stop()
         self.hide()
+
+    def cancelBreak(self):
+        self.stopBreak()
+        self.whenCancelled()

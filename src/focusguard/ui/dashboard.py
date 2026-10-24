@@ -34,10 +34,11 @@ from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPainter, QPai
 from focusguard.ai import vision
 from focusguard.ai.site_memory import siteCategory
 from focusguard.core.classifier import classifyTypeOfApp, isIgnoredApp, isUnproductiveSite, siteRoot
+from focusguard.core import enforcement
 from focusguard.core.enforcement import Enforcer
 from focusguard.storage import memory, streak, time_tracking
 from focusguard.ui.settings_window import SettingsPage
-from focusguard.ui.pause_screen import BREAK_SECONDS, BreakBadge, CheckInScreen, PauseScreen
+from focusguard.ui.pause_screen import BreakBadge, CheckInScreen, PauseScreen
 from focusguard.ui.theme import applyTheme, choiceFor, getColors, getTheme, resolveTheme, setTheme, systemTheme
 from focusguard.platform import get_backend
 
@@ -393,9 +394,13 @@ class Dashboard(QWidget):
         self.breakWindow = None
         self.breakName = None
         self.breakSite = None
+        self.currentWindow = None
+        self.currentName = None
+        self.currentSite = None
+        self.currentKind = None
         self.timesAsked = 0
-        self.breakTimer = QTimer(self, singleShot=True, interval=BREAK_SECONDS * 1000, timeout=self.showCheckIn)
-        self.breakBadge = BreakBadge()
+        self.breakTimer = QTimer(self, singleShot=True, timeout=self.showCheckIn)
+        self.breakBadge = BreakBadge(self.cancelBreak)
         self.lastApp = None
         self.emergencyApp = None
         self.passedAt = {}
@@ -455,7 +460,23 @@ class Dashboard(QWidget):
         self.lastApp = appName
         if switchedApp:
             self.emergencyApp = None
-        if appKind == "unproductive" and switchedApp:
+        self.currentWindow = window
+        self.currentName = appName
+        self.currentSite = site
+        self.currentKind = appKind
+        # during a break every unproductive app is allowed, so no pause screen or closing
+        # also NOTE get parth on it
+        onBreak = self.breakName is not None
+
+        if appKind == "unproductive" and not onBreak:
+            if enforcement.breaksLeftToday() == 0:
+                self.enforcer.closeForToday(window, site)
+                self.lastApp = None
+                self.lastBrowserWindow = None
+                return
+
+            
+        if appKind == "unproductive" and switchedApp and not onBreak:
             secondsSincePassed = time.time() - self.passedAt.get(appName, 0)
             if secondsSincePassed > 600:
                 self.showPause(window, appName, site)
@@ -472,7 +493,6 @@ class Dashboard(QWidget):
                 self.checkUnknownSite(window, site)
         self.trackedTimes[key] = self.trackedTimes.get(key, 0) + 1
         self.usedSeconds[appName] = self.usedSeconds.get(appName, 0) + 1
-        onBreak = appName == self.breakName
         if not onBreak and self.enforcer.checkApp(window, appKind, self.usedSeconds[appName], site):
             self.usedSeconds[appName] = 0
             self.passedAt.pop(appName, None)
@@ -505,6 +525,10 @@ class Dashboard(QWidget):
             self.trackedTimes = {}
             self.showTimes()
 
+    def memoryCleared(self) -> None:
+        self.trackedTimes = {}
+        self.timeList.setText("Nothing tracked yet")
+
     def showTimes(self) -> None:
         if not self.trackedTimes:
             return
@@ -521,7 +545,7 @@ class Dashboard(QWidget):
         self.timeList.setText("<table width='100%' cellspacing='0' cellpadding='3'>" + "".join(timeRows) + "</table>")
 
     def openSettings(self) -> None:
-        self.settingsPage = SettingsPage(STYLE, self.closeSettings)
+        self.settingsPage = SettingsPage(STYLE, self.closeSettings, self.memoryCleared)
         self.pages.addWidget(self.settingsPage)
         self.pages.setCurrentWidget(self.settingsPage)
 
@@ -608,21 +632,33 @@ class Dashboard(QWidget):
             self.breakName = appName
             self.breakSite = self.pausedSite
             self.timesAsked = 0
-            self.breakTimer.start()
-            self.breakBadge.startBreak(BREAK_SECONDS)
+            self.startBreakPeriod()
+
+    def startBreakPeriod(self):
+        enforcement.useBreak()
+        breakSeconds = enforcement.getBreakMinutes() * 60
+        self.breakTimer.setInterval(breakSeconds * 1000)
+        self.breakTimer.start()
+        self.breakBadge.startBreak(breakSeconds)
 
     def showCheckIn(self):
         self.breakBadge.stopBreak()
-        if self.lastApp != self.breakName:
+        if self.currentKind != "unproductive":
             self.endBreak()
             return
-        self.checkInScreen = CheckInScreen(self.breakName, self.timesAsked, self.checkInDone)
+        # check in about whatever unproductive app you're on now, not just the one the break started on
+        self.breakWindow = self.currentWindow
+        self.breakName = self.currentName
+        self.breakSite = self.currentSite
+        self.checkInScreen = CheckInScreen(self.breakName, self.timesAsked, enforcement.getBreakMinutes(), enforcement.breaksLeftToday(), self.checkInDone)
         self.checkInScreen.popUp()
 
     def endBreak(self):
         self.breakWindow = None
         self.breakName = None
         self.breakSite = None
+        # once a break is over, every unproductive app needs a new pause before it opens again
+        self.passedAt.clear()
 
     def checkInDone(self, choice):
         self.checkInScreen = None
@@ -637,13 +673,27 @@ class Dashboard(QWidget):
             self.lastApp = None
             self.lastBrowserWindow = None
             self.endBreak()
-            savedMemory = memory.load()
-            savedMemory["bounceBacks"] = savedMemory.get("bounceBacks", 0) + 1
-            memory.save(savedMemory)
+            self.recordBounceBack()
         else:
             self.timesAsked = self.timesAsked + 1
-            self.breakTimer.start()
-            self.breakBadge.startBreak(BREAK_SECONDS)
+            self.startBreakPeriod()
+
+    def cancelBreak(self):
+        # ending a break early counts as bouncing back, same as "I'm ready" on the check-in
+        self.breakTimer.stop()
+        if self.currentKind == "unproductive":
+            self.breakWindow = self.currentWindow
+            self.breakName = self.currentName
+            self.breakSite = self.currentSite
+            self.checkInDone("bounceBack")
+        else:
+            self.endBreak()
+            self.recordBounceBack()
+
+    def recordBounceBack(self):
+        savedMemory = memory.load()
+        savedMemory["bounceBacks"] = savedMemory.get("bounceBacks", 0) + 1
+        memory.save(savedMemory)
 
 
 

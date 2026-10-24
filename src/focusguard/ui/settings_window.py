@@ -6,16 +6,19 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QScrollArea,
+    QSlider,
     QVBoxLayout,
     QWidget,
 )
 
 import time
 
-from focusguard.ai import vision
-from focusguard.storage import memory
+from focusguard.ai import site_memory, vision
+from focusguard.core import enforcement
+from focusguard.storage import memory, time_tracking
 from focusguard.ui.theme import applyTheme, getColors
 
 SETTINGS_STYLE = """
@@ -50,6 +53,18 @@ SETTINGS_STYLE = """
     }
     QLabel#ErrorText { color: @error; font-size: 13px; }
     QCheckBox { color: @onSurface; font-size: 14px; spacing: 10px; }
+    QLabel#SliderLabel { color: @onSurface; font-size: 14px; }
+    QLabel#SliderHint { color: @onSurfaceVariant; font-size: 13px; }
+    QSlider::groove:horizontal { height: 6px; background: @surfaceContainerHighest; border-radius: 3px; }
+    QSlider::sub-page:horizontal { background: @primary; border-radius: 3px; }
+    QSlider::handle:horizontal {
+        background: @primary;
+        width: 18px;
+        height: 18px;
+        margin: -6px 0;
+        border-radius: 9px;
+    }
+    QSlider::handle:horizontal:disabled, QSlider::sub-page:horizontal:disabled { background: @outline; }
 """
 
 def makeBackArrow():
@@ -68,7 +83,7 @@ def makeBackArrow():
     return QIcon(arrow)
 
 
-FREEZE_SECONDS = 3 * 60 * 60
+FREEZE_SECONDS = 3 * 24 * 60 * 60
 
 
 def markChanged(settingName):
@@ -90,8 +105,11 @@ def frozenSecondsLeft(settingName):
 
 
 def frozenText(secondsLeft):
-    hoursLeft = secondsLeft // 3600
+    daysLeft = secondsLeft // 86400
+    hoursLeft = (secondsLeft % 86400) // 3600
     minutesLeft = (secondsLeft % 3600) // 60
+    if daysLeft > 0:
+        return "locked for " + str(daysLeft) + "d " + str(hoursLeft) + "h"
     return "locked for " + str(hoursLeft) + "h " + str(minutesLeft) + "m"
 
 
@@ -116,6 +134,14 @@ def saveLockedSettings(lockedSettings):
     savedMemory = memory.load()
     savedMemory["lockedSettings"] = lockedSettings
     memory.save(savedMemory)
+
+
+def replaceBody(dropdown, newBody):
+    dropdown.layout().removeWidget(dropdown.body)
+    dropdown.body.deleteLater()
+    dropdown.body = newBody
+    newBody.hide()
+    dropdown.layout().addWidget(newBody)
 
 
 class PinDialog(QDialog):
@@ -197,11 +223,12 @@ def askForPin(parent, mainStyle):
 
 
 class SettingsPage(QWidget):
-    def __init__(self, mainStyle, goBack):
+    def __init__(self, mainStyle, goBack, onMemoryCleared=None):
         super().__init__()
         from focusguard.ui.dashboard import Dropdown, label
 
         self.mainStyle = mainStyle
+        self.onMemoryCleared = onMemoryCleared
         self.setStyleSheet(applyTheme(SETTINGS_STYLE))
 
         scroll = QScrollArea(widgetResizable=True)
@@ -237,6 +264,8 @@ class SettingsPage(QWidget):
             dropdown = Dropdown(settingName)
             dropdown.header.clicked.disconnect()
             dropdown.header.clicked.connect(lambda checked=False, d=dropdown: self.openSetting(d))
+            if settingName == "Absolute Time Limits":
+                replaceBody(dropdown, self.makeBreakLimits())
             layout.addWidget(dropdown)
         layout.addSpacing(8)
 
@@ -278,6 +307,20 @@ class SettingsPage(QWidget):
         parentRow.addWidget(self.turnOffButton)
         parentRow.addStretch()
         layout.addLayout(parentRow)
+        layout.addSpacing(8)
+
+        # debug tools for testing, these skip parental controls so take them out before release
+        layout.addWidget(label("Debug", "Section"))
+        layout.addWidget(label("Testing tools. These skip parental controls.", "Streak"))
+        debugRow = QHBoxLayout()
+        resetTimersButton = QPushButton("Reset lock timers", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
+        resetTimersButton.clicked.connect(self.resetLockTimers)
+        clearMemoryButton = QPushButton("Clear all memory", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
+        clearMemoryButton.clicked.connect(self.clearAllMemory)
+        debugRow.addWidget(resetTimersButton)
+        debugRow.addWidget(clearMemoryButton)
+        debugRow.addStretch()
+        layout.addLayout(debugRow)
         layout.addStretch()
 
         self.updateParentSection()
@@ -323,6 +366,67 @@ class SettingsPage(QWidget):
         saveLockedSettings(lockedSettings)
         self.updateParentSection()
 
+    def makeBreakLimits(self):
+        from focusguard.ui.dashboard import label
+
+        breakLimits = QWidget()
+        breakLayout = QVBoxLayout(breakLimits)
+        breakLayout.setContentsMargins(16, 8, 16, 8)
+        breakLayout.setSpacing(8)
+
+        self.breakCountLabel = label("", "SliderLabel")
+        self.breakCountSlider = QSlider(Qt.Orientation.Horizontal)
+        self.breakCountSlider.setRange(enforcement.MIN_BREAKS, enforcement.MAX_BREAKS)
+        self.breakCountSlider.setValue(enforcement.getMaxBreaks())
+        self.breakCountSlider.valueChanged.connect(self.updateBreakLabels)
+
+        self.breakLengthLabel = label("", "SliderLabel")
+        self.breakLengthSlider = QSlider(Qt.Orientation.Horizontal)
+        self.breakLengthSlider.setRange(enforcement.MIN_BREAK_MINUTES, enforcement.MAX_BREAK_MINUTES)
+        self.breakLengthSlider.setValue(enforcement.getBreakMinutes())
+        self.breakLengthSlider.valueChanged.connect(self.updateBreakLabels)
+
+        self.breakTotalLabel = label("", "SliderHint")
+        self.saveBreaksButton = QPushButton("Save", objectName="MainButton", cursor=Qt.CursorShape.PointingHandCursor)
+        self.saveBreaksButton.clicked.connect(self.saveBreakLimits)
+        saveRow = QHBoxLayout()
+        saveRow.addStretch()
+        saveRow.addWidget(self.saveBreaksButton)
+
+        breakLayout.addWidget(self.breakCountLabel)
+        breakLayout.addWidget(self.breakCountSlider)
+        breakLayout.addSpacing(4)
+        breakLayout.addWidget(self.breakLengthLabel)
+        breakLayout.addWidget(self.breakLengthSlider)
+        breakLayout.addWidget(self.breakTotalLabel)
+        breakLayout.addLayout(saveRow)
+        self.updateBreakLabels()
+        return breakLimits
+
+    def updateBreakLabels(self):
+        breakCount = self.breakCountSlider.value()
+        breakMinutes = self.breakLengthSlider.value()
+        self.breakCountLabel.setText("Break periods per day: <b>" + str(breakCount) + "</b>")
+        self.breakLengthLabel.setText("Break length: <b>" + str(breakMinutes) + " minutes</b>")
+        totalMinutes = breakCount * breakMinutes
+        totalText = str(totalMinutes) + " minutes"
+        if totalMinutes >= 60:
+            totalText = str(totalMinutes // 60) + "h " + str(totalMinutes % 60) + "m"
+        hintText = "Up to " + totalText + " of breaks a day. After that, unproductive apps close for the rest of the day."
+        secondsLeft = frozenSecondsLeft("Absolute Time Limits")
+        isFrozen = secondsLeft > 0
+        self.breakCountSlider.setEnabled(not isFrozen)
+        self.breakLengthSlider.setEnabled(not isFrozen)
+        self.saveBreaksButton.setEnabled(not isFrozen)
+        if isFrozen:
+            hintText = hintText + " (" + frozenText(secondsLeft) + ")"
+        self.breakTotalLabel.setText(hintText)
+
+    def saveBreakLimits(self):
+        enforcement.saveBreakSettings(self.breakCountSlider.value(), self.breakLengthSlider.value())
+        markChanged("Absolute Time Limits")
+        self.updateBreakLabels()
+
     def updateKeySection(self):
         secondsLeft = frozenSecondsLeft("Gemini API key")
         self.keyBox.setEnabled(secondsLeft == 0)
@@ -342,6 +446,36 @@ class SettingsPage(QWidget):
         self.keyBox.clear()
         markChanged("Gemini API key")
         self.updateKeySection()
+
+    def refreshEverything(self):
+        self.breakCountSlider.setValue(enforcement.getMaxBreaks())
+        self.breakLengthSlider.setValue(enforcement.getBreakMinutes())
+        self.updateBreakLabels()
+        self.updateKeySection()
+        self.updateParentSection()
+
+    def resetLockTimers(self):
+        savedMemory = memory.load()
+        savedMemory["changedAt"] = {}
+        memory.save(savedMemory)
+        self.refreshEverything()
+
+    def clearAllMemory(self):
+        answer = QMessageBox.question(
+            self,
+            "Clear all memory",
+            "This deletes all saved settings, the parent PIN, streaks, break counts, tracked times and website verdicts. "
+            "The Gemini API key is kept. This can't be undone.",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        memory.FILE.unlink(missing_ok=True)
+        time_tracking.FILE.unlink(missing_ok=True)
+        site_memory.FILE.unlink(missing_ok=True)
+        site_memory.rememberedSites = None
+        if self.onMemoryCleared is not None:
+            self.onMemoryCleared()
+        self.refreshEverything()
 
     def setUpParentalControls(self):
         PinDialog(self, self.mainStyle, True).exec()

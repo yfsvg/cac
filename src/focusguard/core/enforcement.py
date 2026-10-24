@@ -1,3 +1,52 @@
+from __future__ import annotations
+from datetime import date
+
+from focusguard.storage import memory
+
+MIN_BREAKS = 1
+MAX_BREAKS = 8
+DEFAULT_BREAKS = 4
+
+MIN_BREAK_MINUTES = 3
+MAX_BREAK_MINUTES = 15
+DEFAULT_BREAK_MINUTES = 5
+
+
+def getMaxBreaks() -> int:
+    return int(memory.load().get("maxBreaks", DEFAULT_BREAKS))
+
+
+def getBreakMinutes() -> int:
+    return int(memory.load().get("breakMinutes", DEFAULT_BREAK_MINUTES))
+
+
+def saveBreakSettings(maxBreaks: int, breakMinutes: int) -> None:
+    savedMemory = memory.load()
+    savedMemory["maxBreaks"] = maxBreaks
+    savedMemory["breakMinutes"] = breakMinutes
+    memory.save(savedMemory)
+
+
+def breaksUsedToday() -> int:
+    breaksUsed = memory.load().get("breaksUsed", {})
+    if breaksUsed.get("day") != date.today().isoformat():
+        return 0
+    return int(breaksUsed.get("count", 0))
+
+
+def breaksLeftToday() -> int:
+    breaksLeft = getMaxBreaks() - breaksUsedToday()
+    if breaksLeft < 0:
+        return 0
+    return breaksLeft
+
+
+def useBreak() -> None:
+    savedMemory = memory.load()
+    savedMemory["breaksUsed"] = {"day": date.today().isoformat(), "count": breaksUsedToday() + 1}
+    memory.save(savedMemory)
+
+
 LIMIT = 180
 WARNING = 150
 
@@ -7,6 +56,7 @@ class Enforcer:
         self.backend = backend
         self.notify = None
         self.alreadyWarned = []
+        self.closedForToday = []
 
     def sendNotification(self, text):
         if self.notify is not None:
@@ -35,3 +85,15 @@ class Enforcer:
         if appName in self.alreadyWarned:
             self.alreadyWarned.remove(appName)
         return True
+
+    def closeForToday(self, window, siteName=None):
+        appName = window.app_name
+        if siteName is not None:
+            appName = siteName
+        if appName not in self.closedForToday:
+            self.closedForToday.append(appName)
+            self.sendNotification("You've used all your breaks for today, so " + appName + " stays closed until tomorrow. You've got this!")
+        if siteName is None:
+            self.backend.close_app(window.pid)
+        else:
+            self.backend.close_tab(window)
