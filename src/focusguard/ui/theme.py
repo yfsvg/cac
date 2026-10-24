@@ -37,17 +37,76 @@ COLORS = {
     "outline": "#79747E",
     "outlineVariant": "#CAC4D0",
     "scrim": "rgba(29, 27, 32, 140)",
+    "chipBackground": "rgba(255, 255, 255, 170)",
+    "primaryHover": "#7965AF",
 }
+
+DARK = {
+    "primary": "#D0BCFF",
+    "onPrimary": "#381E72",
+    "primaryContainer": "#4F378B",
+    "onPrimaryContainer": "#EADDFF",
+    "secondary": "#CCC2DC",
+    "secondaryContainer": "#4A4458",
+    "onSecondaryContainer": "#E8DEF8",
+    "tertiary": "#EFB8C8",
+    "tertiaryContainer": "#633B48",
+    "onTertiaryContainer": "#FFD8E4",
+    "error": "#F2B8B5",
+    "errorContainer": "#8C1D18",
+    "onErrorContainer": "#F9DEDC",
+
+    "greenContainer": "#1F5130",
+    "onGreenContainer": "#C4EED0",
+    "green": "#8FD8A3",
+    "orangeContainer": "#73350A",
+    "onOrangeContainer": "#FFDBC8",
+    "orange": "#FFB68B",
+    "blueContainer": "#0B4A9E",
+    "onBlueContainer": "#D3E3FD",
+    "blue": "#A8C7FA",
+
+    "surface": "#2E2E2E",
+    "surfaceContainerLow": "#333333",
+    "surfaceContainer": "#383838",
+    "surfaceContainerHigh": "#404040",
+    "surfaceContainerHighest": "#4A4A4A",
+    "onSurface": "#E6E1E5",
+    "onSurfaceVariant": "#CAC4D0",
+    "outline": "#938F99",
+    "outlineVariant": "#4F4B55",
+    "scrim": "rgba(0, 0, 0, 160)",
+    "chipBackground": "rgba(0, 0, 0, 90)",
+    "primaryHover": "#E0D2FF",
+}
+
+currentTheme = "light"
+
+
+def setTheme(themeName):
+    global currentTheme
+    currentTheme = themeName
+
+
+def getTheme():
+    return currentTheme
+
+
+def getColors():
+    if currentTheme == "dark":
+        return DARK
+    return COLORS
 
 
 
 
 def applyTheme(styleText):
     # parse longest names first
-    tokenNames = sorted(COLORS.keys(), key=len, reverse=True)
+    colors = getColors()
+    tokenNames = sorted(colors.keys(), key=len, reverse=True)
 
 
     for tokenName in tokenNames:
 
-        styleText = styleText.replace("@" + tokenName, COLORS[tokenName])
+        styleText = styleText.replace("@" + tokenName, colors[tokenName])
     return styleText

@@ -31,7 +31,7 @@ FILE = dataDirectory() / "memory.json"
 
 
 def load() -> dict:
-    defaultMemory = {"first_time": True}
+    defaultMemory = {"first_time": True, "theme": "light"}
     try:
         loadedMemory = json.loads(FILE.read_text())
     except (OSError, ValueError):

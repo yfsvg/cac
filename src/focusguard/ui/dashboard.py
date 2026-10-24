@@ -32,7 +32,7 @@ from focusguard.core.classifier import classifyTypeOfApp
 from focusguard.core.enforcement import Enforcer
 from focusguard.storage import memory
 from focusguard.ui.pause_screen import PauseScreen
-from focusguard.ui.theme import COLORS, applyTheme
+from focusguard.ui.theme import applyTheme, getColors, getTheme, setTheme
 from focusguard.platform import get_backend
 
 
@@ -72,7 +72,7 @@ STYLE = """
     QLabel#Chip {
         font-size: 12px;
         font-weight: 600;
-        background-color: rgba(255, 255, 255, 170);
+        background-color: @chipBackground;
         border-radius: 10px;
         padding: 3px 10px;
     }
@@ -97,10 +97,19 @@ STYLE = """
 
 
     QPushButton#DropdownHeader:hover { background-color: @surfaceContainerHigh; }
+
+    QPushButton#ThemeButton {
+        color: @onSurface;
+        font-size: 16px;
+        background-color: @surfaceContainerHigh;
+        border: none;
+        border-radius: 16px;
+    }
+    QPushButton#ThemeButton:hover { background-color: @surfaceContainerHighest; }
 """
 
 # dot colour per app kind in the time list
-KIND_COLORS = {"browser": COLORS["blue"], "unproductive": COLORS["error"], "neutral": COLORS["secondary"]}
+KIND_COLORS = {"browser": "blue", "unproductive": "error", "neutral": "secondary"}
 
 
 def label(text: str, name: str, align: Qt.AlignmentFlag = Qt.AlignmentFlag.AlignLeft) -> QLabel:
@@ -113,9 +122,10 @@ class StatCard(QFrame):
     def __init__(self, number: str, caption: str, status: str, statusColor: str, colorFamily: str) -> None:
         super().__init__(objectName="StatCard")
         # each card is a tonal container, text uses the matching "on" colour
-        containerColor = COLORS[colorFamily + "Container"]
-        onContainerColor = COLORS["on" + colorFamily[0].upper() + colorFamily[1:] + "Container"]
-        self.setStyleSheet(f"QFrame#StatCard {{ background-color: {containerColor}; }} QLabel {{ color: {onContainerColor}; }}")
+        containerColor = "@" + colorFamily + "Container"
+        onContainerColor = "@on" + colorFamily[0].upper() + colorFamily[1:] + "Container"
+        self.cardStyle = f"QFrame#StatCard {{ background-color: {containerColor}; }} QLabel {{ color: {onContainerColor}; }}"
+        self.setStyleSheet(applyTheme(self.cardStyle))
         self.setFixedHeight(150)
         # ignore caption width so all 3 cards split the row evenly
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
@@ -126,9 +136,14 @@ class StatCard(QFrame):
         layout.addWidget(label(number, "BigNumber", center))
         layout.addWidget(label(caption, "Caption", center))
         layout.addStretch()
-        statusChip = QLabel(status, objectName="Chip")
-        statusChip.setStyleSheet(applyTheme(f"color: {statusColor};"))
-        layout.addWidget(statusChip, alignment=center)
+        self.statusChip = QLabel(status, objectName="Chip")
+        self.chipStyle = f"color: {statusColor};"
+        self.statusChip.setStyleSheet(applyTheme(self.chipStyle))
+        layout.addWidget(self.statusChip, alignment=center)
+
+    def restyle(self) -> None:
+        self.setStyleSheet(applyTheme(self.cardStyle))
+        self.statusChip.setStyleSheet(applyTheme(self.chipStyle))
 
 
 class Dropdown(QWidget):
@@ -183,6 +198,8 @@ class Dashboard(QWidget):
         self.move(x, y)
 
         self.setObjectName("Dashboard")
+        setTheme(memory.load().get("theme", "light"))
+        self.statCards = []
         # apple system font (SF Pro on mac), everything inside inherits it
         self.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont))
         self.setStyleSheet(applyTheme(STYLE)) #blurless now
@@ -211,7 +228,15 @@ class Dashboard(QWidget):
 
 
         # all material you as disucssed in gc
-        layout.addWidget(label("Focusguard", "AppName"))
+        topRow = QHBoxLayout()
+        topRow.addWidget(label("Focusguard", "AppName"))
+        topRow.addStretch()
+        self.themeButton = QPushButton(objectName="ThemeButton", cursor=Qt.CursorShape.PointingHandCursor)
+        self.themeButton.setFixedSize(32, 32)
+        self.themeButton.clicked.connect(self.toggleTheme)
+        topRow.addWidget(self.themeButton)
+        layout.addLayout(topRow)
+        self.updateThemeButton()
         heroCard = QFrame(objectName="Hero")
         heroLayout = QVBoxLayout(heroCard)
 
@@ -287,7 +312,9 @@ class Dashboard(QWidget):
         row.setSpacing(8)
         cardIndex = 0
         for number, caption, status, statusColor in cards:
-            row.addWidget(StatCard(number, caption, status, statusColor, colorFamilies[cardIndex]))
+            card = StatCard(number, caption, status, statusColor, colorFamilies[cardIndex])
+            self.statCards.append(card)
+            row.addWidget(card)
             cardIndex = cardIndex + 1
         return row
 
@@ -318,16 +345,42 @@ class Dashboard(QWidget):
             self.usedSeconds[window.app_name] = 0
             self.passedAt.pop(window.app_name, None)
             self.lastApp = None
+        self.showTimes()
+
+    def showTimes(self) -> None:
+        if not self.trackedTimes:
+            return
+        colors = getColors()
         rows = sorted(self.trackedTimes.items(), key=lambda kv: -kv[1])
         timeRows = []
         for (name, rowKind), seconds in rows:
-            dotColor = KIND_COLORS[rowKind]
+            dotColor = colors[KIND_COLORS[rowKind]]
             timeRows.append(
                 f"<tr><td width='18' style='color:{dotColor}; font-size:16px;'>●</td>"
-                f"<td width='100%' style='padding-left:4px;'><b>{name}</b> <span style='color:{COLORS['onSurfaceVariant']};'>{rowKind}</span></td>"
+                f"<td width='100%' style='padding-left:4px;'><b>{name}</b> <span style='color:{colors['onSurfaceVariant']};'>{rowKind}</span></td>"
                 f"<td style='padding-left:16px;' align='right' nowrap>{seconds // 60}m {seconds % 60}s</td></tr>"
             )
         self.timeList.setText("<table width='100%' cellspacing='0' cellpadding='3'>" + "".join(timeRows) + "</table>")
+
+    def updateThemeButton(self) -> None:
+        if getTheme() == "dark":
+            self.themeButton.setText("☀")
+        else:
+            self.themeButton.setText("☾")
+
+    def toggleTheme(self) -> None:
+        if getTheme() == "dark":
+            setTheme("light")
+        else:
+            setTheme("dark")
+        savedMemory = memory.load()
+        savedMemory["theme"] = getTheme()
+        memory.save(savedMemory)
+        self.setStyleSheet(applyTheme(STYLE))
+        for card in self.statCards:
+            card.restyle()
+        self.updateThemeButton()
+        self.showTimes()
 
     def showPause(self, window):
         self.pausedWindow = window
@@ -340,9 +393,9 @@ class Dashboard(QWidget):
         if choice == "back":
             self.backend.close_app(window.pid)
             self.lastApp = None
-            data = memory.load()
-            data["backed_out"] = data.get("backed_out", 0) + 1
-            memory.save(data)
+            savedMemory = memory.load()
+            savedMemory["backedOut"] = savedMemory.get("backedOut", 0) + 1
+            memory.save(savedMemory)
         else:
             self.passedAt[window.app_name] = time.time()
             self.usedSeconds[window.app_name] = 0

@@ -52,7 +52,7 @@ QPushButton#BackButton {
     color: @onPrimary;
     font-weight: 600;
 }
-QPushButton#BackButton:hover { background-color: #7965AF; color: @onPrimary; }
+QPushButton#BackButton:hover { background-color: @primaryHover; color: @onPrimary; }
 QPushButton#OpenButton { text-align: center; background-color: @tertiaryContainer; color: @onTertiaryContainer; }
 QPushButton:disabled { background-color: @surfaceContainerHighest; color: @outline; }
 QLineEdit {
