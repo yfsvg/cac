@@ -1,14 +1,13 @@
-"""using q widget to make the window. for mac this appears in the top corner"""
-"""
-Everything to be added to dashboard:
-1. streak + welcome msg
-2. Daily stats
-3. Weekly stats
-4. Settings and config (read figma doc for more)
+# Using QWidget to make the window. For mac this appears in the top corner
+# Dashboard is split into four segments:
+# 1. Streak + welcome msg
+# 2. Daily stats
+# 3. Weekly stats
+# 4. Settings and config (read figma doc for more)
+#
+# BEFORE MAKING EDITS READ GDOC SECTION "Dashboard priorities"
 
 
-BEFORE MAKING EDITS READ GDOC SECTION "Dashboard priorities"
-"""
 import os
 import threading
 import time
@@ -43,14 +42,15 @@ from focusguard.ui.theme import applyTheme, choiceFor, getColors, getTheme, reso
 from focusguard.platform import get_backend
 
 
-# placeholder text for every dropdown until the real stuff exists
+# Placeholder text for every dropdown until the real stuff exists
+
 LOREM = (
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor "
     "incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud "
     "exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
 )
 
-# status chip text colours (theme tokens)
+# Status chip text colours (theme tokens)
 GOOD = "@green"
 PERFECT = "@green"
 OK = "@orange"
@@ -100,9 +100,6 @@ STYLE = """
         border-radius: 16px;
         padding: 12px 16px;
     }
-
-
-
     QPushButton#DropdownHeader:hover { background-color: @surfaceContainerHigh; }
 
     QPushButton#ThemeButton {
@@ -115,9 +112,13 @@ STYLE = """
     QPushButton#ThemeButton:hover { background-color: @surfaceContainerHighest; }
 """
 
-# dot colour per app kind in the time list
+# Dot colour per app kind in the time list
 KIND_COLORS = {"browser": "blue", "unproductive": "error", "neutral": "secondary"}
 
+
+
+
+# Small widgets, labels + cards + dropdowns
 
 def label(text: str, name: str, align: Qt.AlignmentFlag = Qt.AlignmentFlag.AlignLeft) -> QLabel:
     newLabel = QLabel(text, objectName=name, alignment=align)
@@ -128,47 +129,52 @@ def label(text: str, name: str, align: Qt.AlignmentFlag = Qt.AlignmentFlag.Align
 class StatCard(QFrame):
     def __init__(self, number: str, caption: str, status: str, statusColor: str, colorFamily: str) -> None:
         super().__init__(objectName="StatCard")
-        # each card is a tonal container, text uses the matching "on" colour
+
+        # Each card is a tonal container, text uses the matching "on" colour
         containerColor = "@" + colorFamily + "Container"
         onContainerColor = "@on" + colorFamily[0].upper() + colorFamily[1:] + "Container"
         self.cardStyle = f"QFrame#StatCard {{ background-color: {containerColor}; }} QLabel {{ color: {onContainerColor}; }}"
         self.setStyleSheet(applyTheme(self.cardStyle))
         self.setFixedHeight(150)
-        # ignore caption width so all 3 cards split the row evenly
+
+        # Ignore caption width so all 3 cards split the row evenly
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
-        center = Qt.AlignmentFlag.AlignHCenter
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 14, 8, 14)
-        layout.setSpacing(0)
-        layout.addWidget(label(number, "BigNumber", center))
-        layout.addWidget(label(caption, "Caption", center))
-        layout.addStretch()
+
+        centerAlign = Qt.AlignmentFlag.AlignHCenter
+        cardLayout = QVBoxLayout(self)
+        cardLayout.setContentsMargins(8, 14, 8, 14)
+        cardLayout.setSpacing(0)
+        cardLayout.addWidget(label(number, "BigNumber", centerAlign))
+        cardLayout.addWidget(label(caption, "Caption", centerAlign))
+        cardLayout.addStretch()
+
         self.statusChip = QLabel(status, objectName="Chip")
         self.chipStyle = f"color: {statusColor};"
         self.statusChip.setStyleSheet(applyTheme(self.chipStyle))
-        layout.addWidget(self.statusChip, alignment=center)
+        cardLayout.addWidget(self.statusChip, alignment=centerAlign)
 
     def restyle(self) -> None:
         self.setStyleSheet(applyTheme(self.cardStyle))
         self.statusChip.setStyleSheet(applyTheme(self.chipStyle))
 
 
-class Dropdown(QWidget):
-    """chevron header that opens/closes a paragraph underneath. no real content yet"""
+# Chevron header that opens/closes a paragraph underneath. No real content yet
 
+class Dropdown(QWidget):
     def __init__(self, title: str) -> None:
         super().__init__()
         self.title = title
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        dropdownLayout = QVBoxLayout(self)
+        dropdownLayout.setContentsMargins(0, 0, 0, 0)
+        dropdownLayout.setSpacing(4)
 
         self.header = QPushButton(objectName="DropdownHeader", cursor=Qt.CursorShape.PointingHandCursor)
         self.header.clicked.connect(self.toggle)
         self.body = label(LOREM, "DropdownBody")
         self.body.hide()
-        layout.addWidget(self.header)
-        layout.addWidget(self.body)
+
+        dropdownLayout.addWidget(self.header)
+        dropdownLayout.addWidget(self.body)
         self.updateHeader()
 
     def toggle(self) -> None:
@@ -182,39 +188,48 @@ class Dropdown(QWidget):
         self.header.setText(f" {chevron}   {self.title}")
 
 
+
+
+# Icons, drawn by hand so they follow the theme colours
+
 def drawSun(painter: QPainter, color: QColor) -> None:
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(color)
     painter.drawEllipse(QPointF(0, 0), 4, 4)
     painter.setPen(QPen(color, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-    for ray in range(8):
+    for rayNumber in range(8):
         painter.drawLine(QPointF(0, -6.5), QPointF(0, -8.5))
         painter.rotate(45)
 
 
 def drawMoon(painter: QPainter, color: QColor) -> None:
-    moon = QPainterPath()
-    moon.addEllipse(QPointF(0, 0), 7, 7)
-    bite = QPainterPath()
-    bite.addEllipse(QPointF(3.5, -3), 6, 6)
+    moonShape = QPainterPath()
+    moonShape.addEllipse(QPointF(0, 0), 7, 7)
+    moonBite = QPainterPath()
+    moonBite.addEllipse(QPointF(3.5, -3), 6, 6)
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(color)
-    painter.drawPath(moon.subtracted(bite))
+    painter.drawPath(moonShape.subtracted(moonBite))
 
 
 def drawCog(painter: QPainter, color: QColor) -> None:
-    cog = QPainterPath()
-    cog.addEllipse(QPointF(0, 0), 5.6, 5.6)
+    cogShape = QPainterPath()
+    cogShape.addEllipse(QPointF(0, 0), 5.6, 5.6)
     for toothNumber in range(8):
-        tooth = QPainterPath()
-        tooth.addRoundedRect(QRectF(-1.7, -8.2, 3.4, 4), 0.8, 0.8)
-        cog = cog.united(QTransform().rotate(45 * toothNumber).map(tooth))
-    hole = QPainterPath()
-    hole.addEllipse(QPointF(0, 0), 2.4, 2.4)
+        cogTooth = QPainterPath()
+        cogTooth.addRoundedRect(QRectF(-1.7, -8.2, 3.4, 4), 0.8, 0.8)
+        cogShape = cogShape.united(QTransform().rotate(45 * toothNumber).map(cogTooth))
+
+    cogHole = QPainterPath()
+    cogHole.addEllipse(QPointF(0, 0), 2.4, 2.4)
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(color)
-    painter.drawPath(cog.subtracted(hole))
+    painter.drawPath(cogShape.subtracted(cogHole))
 
+
+
+
+# Top row buttons, settings cog + sun/moon theme toggle
 
 class SettingsButton(QPushButton):
     def __init__(self) -> None:
@@ -230,24 +245,26 @@ class SettingsButton(QPushButton):
 
 
 class ThemeToggle(QPushButton):
-    def __init__(self, dark: bool) -> None:
+    def __init__(self, usingDarkTheme: bool) -> None:
         super().__init__(objectName="ThemeButton", cursor=Qt.CursorShape.PointingHandCursor)
         self.setFixedSize(32, 32)
-        self.dark = dark
-        self.progress = 1.0
-        self.spin = QVariantAnimation(self, startValue=0.0, endValue=1.0, duration=450)
-        self.spin.setEasingCurve(QEasingCurve.Type.OutBack)
-        self.spin.valueChanged.connect(self.setProgress)
+        self.usingDarkTheme = usingDarkTheme
 
-    def setDark(self, dark: bool, animate: bool) -> None:
-        self.dark = dark
+        # 0 -> 1 while the icon spins over to the new one
+        self.spinProgress = 1.0
+        self.spinAnimation = QVariantAnimation(self, startValue=0.0, endValue=1.0, duration=450)
+        self.spinAnimation.setEasingCurve(QEasingCurve.Type.OutBack)
+        self.spinAnimation.valueChanged.connect(self.setProgress)
+
+    def setDark(self, usingDarkTheme: bool, animate: bool) -> None:
+        self.usingDarkTheme = usingDarkTheme
         if animate:
-            self.spin.start()
+            self.spinAnimation.start()
         else:
             self.setProgress(1.0)
 
     def setProgress(self, value: float) -> None:
-        self.progress = value
+        self.spinProgress = value
         self.update()
 
     def paintEvent(self, event: QPaintEvent) -> None:
@@ -255,29 +272,41 @@ class ThemeToggle(QPushButton):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.translate(self.width() / 2, self.height() / 2)
-        color = QColor(getColors()["onSurface"])
-        if self.progress < 1:
-            self.drawIcon(painter, not self.dark, color, -120 * self.progress, 1 - self.progress)
-        self.drawIcon(painter, self.dark, color, 120 * (1 - self.progress), self.progress)
+        iconColor = QColor(getColors()["onSurface"])
 
-    def drawIcon(self, painter: QPainter, dark: bool, color: QColor, angle: float, amount: float) -> None:
+        # Old icon spins out while the new one spins in
+        if self.spinProgress < 1:
+            self.drawIcon(painter, not self.usingDarkTheme, iconColor, -120 * self.spinProgress, 1 - self.spinProgress)
+        self.drawIcon(painter, self.usingDarkTheme, iconColor, 120 * (1 - self.spinProgress), self.spinProgress)
+
+    def drawIcon(self, painter: QPainter, usingDarkTheme: bool, color: QColor, angle: float, amount: float) -> None:
         painter.save()
-        painter.setOpacity(max(0.0, min(1.0, amount)))
+        iconOpacity = amount
+        if iconOpacity > 1.0:
+            iconOpacity = 1.0
+        if iconOpacity < 0.0:
+            iconOpacity = 0.0
+        painter.setOpacity(iconOpacity)
         painter.rotate(angle)
-        size = 0.5 + 0.5 * amount
-        painter.scale(size, size)
-        if dark:
+        iconScale = 0.5 + 0.5 * amount
+        painter.scale(iconScale, iconScale)
+
+        if usingDarkTheme:
             drawSun(painter, color)
         else:
             drawMoon(painter, color)
         painter.restore()
 
 
+
+
+# Main dashboard window
+
 class Dashboard(QWidget):
     def __init__(self) -> None:
         super().__init__()
 
-        # no close tabs
+        # No close tabs
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window
         )
@@ -286,11 +315,12 @@ class Dashboard(QWidget):
 
 
 
-        # init window & styling & layout
+        # Init window & styling & layout
         self.setWindowTitle("focus guard appie")
         windowPropertiesSize = QApplication.primaryScreen().availableGeometry()
         self.resize(500, windowPropertiesSize.height() - 50) # padding boy
-        # set to right corner
+
+        # Set to right corner
         x = windowPropertiesSize.x() + (windowPropertiesSize.width() - 500) - 25
         y = windowPropertiesSize.y() + 25  # Top boundary of usable space
         self.move(x, y)
@@ -300,21 +330,27 @@ class Dashboard(QWidget):
         setTheme(resolveTheme(self.themeChoice, systemTheme()))
         QGuiApplication.styleHints().colorSchemeChanged.connect(self.systemThemeChanged)
         self.statCards = []
-        # apple system font (SF Pro on mac), everything inside inherits it
+
+        # Apple system font (SF Pro on mac), everything inside inherits it
         self.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont))
-        self.setStyleSheet(applyTheme(STYLE)) #blurless now
+        self.setStyleSheet(applyTheme(STYLE)) # blurless now
 
         mainLayout = QVBoxLayout(self)
         mainLayout.setContentsMargins(10, 10, 10, 10)
 
-        # all material you as disucssed in gc
+
+
+
+        # Top row, all material you as disucssed in gc
         topRow = QHBoxLayout()
         topRow.setContentsMargins(20, 10, 20, 0)
         topRow.addWidget(label("Focusguard", "AppName"))
         topRow.addStretch()
+
         self.themeButton = ThemeToggle(getTheme() == "dark")
         self.themeButton.clicked.connect(self.toggleTheme)
         topRow.addWidget(self.themeButton)
+
         self.settingsButton = SettingsButton()
         self.settingsButton.clicked.connect(self.openSettings)
         topRow.addWidget(self.settingsButton)
@@ -323,29 +359,27 @@ class Dashboard(QWidget):
 
 
 
+        # Everything scrolls since the config list + time list
+        scrollArea = QScrollArea(widgetResizable=True)
+        scrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-
-        # everything scrolls since the config list + time list
-        scroll = QScrollArea(widgetResizable=True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-
-        content = QWidget(objectName = "Content")
-        scroll.setWidget(content)
+        scrollContent = QWidget(objectName="Content")
+        scrollArea.setWidget(scrollContent)
         self.pages = QStackedWidget()
-        self.pages.addWidget(scroll)
+        self.pages.addWidget(scrollArea)
         mainLayout.addWidget(self.pages)
         self.settingsPage = None
 
-        layout = QVBoxLayout(content)
+        layout = QVBoxLayout(scrollContent)
         layout.setContentsMargins(20, 10, 20, 20)
         layout.setSpacing(12)
 
 
 
 
+        # Hero card, welcome msg + streak
         heroCard = QFrame(objectName="Hero")
         heroLayout = QVBoxLayout(heroCard)
-
         heroLayout.setContentsMargins(24, 20, 24, 22)
         heroLayout.setSpacing(6)
         heroLayout.addWidget(label("Hello, User", "Hello"))
@@ -355,7 +389,8 @@ class Dashboard(QWidget):
 
 
 
-        # daily stats larp
+
+        # Stats, daily (larp)
         layout.addWidget(label("Today’s Stats", "Section"))
         layout.addLayout(self.cardRow(["primary", "green", "tertiary"], [
             ("97", "% time focused", "Looking good!", GOOD),
@@ -364,7 +399,8 @@ class Dashboard(QWidget):
         ]))
         layout.addWidget(Dropdown("Show more stats"))
         layout.addSpacing(8)
-        # weekly 
+
+        # Stats, weekly
         layout.addWidget(label("Weekly Stats", "Section"))
         layout.addLayout(self.cardRow(["blue", "orange", "secondary"], [
             ("90", "% time focused", "Looking good!", GOOD),
@@ -377,36 +413,47 @@ class Dashboard(QWidget):
 
 
 
-        # new display for time tracking, for every heartbeat/change update
+        # Time tracking display, updates every heartbeat/change
         layout.addWidget(label("Time Tracked", "Section"))
         self.backend = get_backend()
         self.trackedTimes: dict[tuple[str, str], int] = time_tracking.loadToday()
         self.trackedDay = time_tracking.todayName()
         self.enforcer = Enforcer(self.backend)
+
+        # Pause screen
         self.pauseScreen = None
         self.pausedWindow = None
         self.pausedName = None
         self.pausedSite = None
+
+        # Browser site reading, only re-read the url when the tab changes
         self.lastBrowserWindow = None
-        self.lastSite = None
+        self.lastReadSite = None
         self.siteReadAt = 0
+
+        # Breaks + check ins
         self.checkInScreen = None
         self.breakWindow = None
         self.breakName = None
         self.breakSite = None
+        self.timesAsked = 0
+        self.breakTimer = QTimer(self, singleShot=True, timeout=self.showCheckIn)
+        self.breakBadge = BreakBadge(self.cancelBreak)
+
+        # Whatever app/site is in front right now
         self.currentWindow = None
         self.currentName = None
         self.currentSite = None
         self.currentKind = None
-        self.timesAsked = 0
-        self.breakTimer = QTimer(self, singleShot=True, timeout=self.showCheckIn)
-        self.breakBadge = BreakBadge(self.cancelBreak)
+
+        # Per app memory for this session
         self.lastApp = None
         self.emergencyApp = None
         self.passedAt = {}
         self.usedSeconds = {}
         self.unknownSeconds = {}
         self.askedSites = []
+
         timeCard = QFrame(objectName="TimeCard")
         timeCardLayout = QVBoxLayout(timeCard)
         timeCardLayout.setContentsMargins(20, 16, 20, 16)
@@ -415,37 +462,49 @@ class Dashboard(QWidget):
         timeCardLayout.addWidget(self.timeList)
         layout.addWidget(timeCard)
         layout.addStretch()
-        self.timer = QTimer(self, interval=1000, timeout=self.tick)
-        self.timer.start()
+
+
+
+
+        # Timers, check the front app every second and save times every 10
+        self.tickTimer = QTimer(self, interval=1000, timeout=self.tick)
+        self.tickTimer.start()
         self.saveTimer = QTimer(self, interval=10000, timeout=self.saveTimes)
         self.saveTimer.start()
         QApplication.instance().aboutToQuit.connect(self.saveTimes)
         self.showTimes()
 
 
-    
     def cardRow(self, colorFamilies, cards: list[tuple[str, str, str, str]]) -> QHBoxLayout:
-        row = QHBoxLayout()
+        cardRowLayout = QHBoxLayout()
+        cardRowLayout.setSpacing(8)
 
-        row.setSpacing(8)
         cardIndex = 0
         for number, caption, status, statusColor in cards:
-            card = StatCard(number, caption, status, statusColor, colorFamilies[cardIndex])
-            self.statCards.append(card)
-            row.addWidget(card)
+            statCard = StatCard(number, caption, status, statusColor, colorFamilies[cardIndex])
+            self.statCards.append(statCard)
+            cardRowLayout.addWidget(statCard)
             cardIndex = cardIndex + 1
-        return row
+        return cardRowLayout
+
+
+
+
+    # Tracking, runs every second
 
     def tick(self) -> None:
         window = self.backend.get_active_window()
         while len(vision.notices) > 0:
             self.enforcer.sendNotification(vision.notices.pop(0))
+
         if window is None or window.pid == os.getpid() or isIgnoredApp(window):
             return
         if self.pauseScreen is not None:
             return
         if self.checkInScreen is not None:
             return
+
+        # Figure out what's in front, browsers count as whatever site they're on
         appKind = classifyTypeOfApp(self.backend, window)
         appName = window.app_name
         site = None
@@ -464,19 +523,21 @@ class Dashboard(QWidget):
         self.currentName = appName
         self.currentSite = site
         self.currentKind = appKind
-        # during a break every unproductive app is allowed, so no pause screen or closing
-        # also NOTE get parth on it
-        onBreak = self.breakName is not None
 
-        if appKind == "unproductive" and not onBreak:
+        # During a break every unproductive app is allowed, so no pause screen or closing
+        # Also NOTE get parth on it
+        onBreakRightNow = self.breakName is not None
+
+        # Out of breaks for today, unproductive stuff just closes
+        if appKind == "unproductive" and not onBreakRightNow:
             if enforcement.breaksLeftToday() == 0:
                 self.enforcer.closeForToday(window, site)
                 self.lastApp = None
                 self.lastBrowserWindow = None
                 return
 
-            
-        if appKind == "unproductive" and switchedApp and not onBreak:
+        # Just opened something unproductive, ask why first
+        if appKind == "unproductive" and switchedApp and not onBreakRightNow:
             secondsSincePassed = time.time() - self.passedAt.get(appName, 0)
             if secondsSincePassed > 600:
                 self.showPause(window, appName, site)
@@ -484,16 +545,18 @@ class Dashboard(QWidget):
         if appName == self.emergencyApp:
             return
 
-        key = (appName, appKind)
+        # Add a second to the time list
+        timeKey = (appName, appKind)
         if site is not None and appKind == "unproductive":
-            key = ("Browser unproductive", "unproductive")
+            timeKey = ("Browser unproductive", "unproductive")
         elif appKind == "browser":
-            key = ("Browser productive", "browser")
+            timeKey = ("Browser productive", "browser")
             if site is not None:
                 self.checkUnknownSite(window, site)
-        self.trackedTimes[key] = self.trackedTimes.get(key, 0) + 1
+        self.trackedTimes[timeKey] = self.trackedTimes.get(timeKey, 0) + 1
         self.usedSeconds[appName] = self.usedSeconds.get(appName, 0) + 1
-        if not onBreak and self.enforcer.checkApp(window, appKind, self.usedSeconds[appName], site):
+
+        if not onBreakRightNow and self.enforcer.checkApp(window, appKind, self.usedSeconds[appName], site):
             self.usedSeconds[appName] = 0
             self.passedAt.pop(appName, None)
             self.lastApp = None
@@ -506,17 +569,24 @@ class Dashboard(QWidget):
         self.unknownSeconds[site] = self.unknownSeconds.get(site, 0) + 1
         if self.unknownSeconds[site] < 60:
             return
+
+        # If youve on an unknown site for a minute,  ask the AI about it in the background
         self.askedSites.append(site)
         threading.Thread(target=vision.classifySite, args=(self.backend, window, site), daemon=True).start()
 
     def browserSite(self, window):
         browserWindow = (window.window_handle, window.title)
-        noTitle = window.title == "" and time.time() - self.siteReadAt > 10
-        if browserWindow != self.lastBrowserWindow or noTitle:
+        needsTitleRecheck = window.title == "" and time.time() - self.siteReadAt > 10
+        if browserWindow != self.lastBrowserWindow or needsTitleRecheck:
             self.lastBrowserWindow = browserWindow
-            self.lastSite = siteRoot(self.backend.get_browser_url(window))
+            self.lastReadSite = siteRoot(self.backend.get_browser_url(window))
             self.siteReadAt = time.time()
-        return self.lastSite
+        return self.lastReadSite
+
+
+
+
+    # Saving + showing tracked times
 
     def saveTimes(self) -> None:
         time_tracking.saveDay(self.trackedDay, self.trackedTimes)
@@ -533,9 +603,10 @@ class Dashboard(QWidget):
         if not self.trackedTimes:
             return
         colors = getColors()
-        rows = sorted(self.trackedTimes.items(), key=lambda kv: -kv[1])
+        sortedTimes = sorted(self.trackedTimes.items(), key=lambda timeEntry: -timeEntry[1])
+
         timeRows = []
-        for (name, rowKind), seconds in rows:
+        for (name, rowKind), seconds in sortedTimes:
             dotColor = colors[KIND_COLORS[rowKind]]
             timeRows.append(
                 f"<tr><td width='18' style='color:{dotColor}; font-size:16px;'>●</td>"
@@ -543,6 +614,11 @@ class Dashboard(QWidget):
                 f"<td style='padding-left:16px;' align='right' nowrap>{seconds // 60}m {seconds % 60}s</td></tr>"
             )
         self.timeList.setText("<table width='100%' cellspacing='0' cellpadding='3'>" + "".join(timeRows) + "</table>")
+
+
+
+
+    # Settings page
 
     def openSettings(self) -> None:
         self.settingsPage = SettingsPage(STYLE, self.closeSettings, self.memoryCleared)
@@ -555,11 +631,17 @@ class Dashboard(QWidget):
         self.settingsPage.deleteLater()
         self.settingsPage = None
 
+
+
+
+    # Theme switching, light / dark / follow system
+
     def toggleTheme(self) -> None:
         newTheme = "dark"
         if getTheme() == "dark":
             newTheme = "light"
         self.themeChoice = choiceFor(newTheme, systemTheme())
+
         savedMemory = memory.load()
         savedMemory["themeChoice"] = self.themeChoice
         memory.save(savedMemory)
@@ -572,34 +654,43 @@ class Dashboard(QWidget):
     def switchTheme(self, themeName: str) -> None:
         if themeName == getTheme():
             return
+
+        # Screenshot the old look first so it can fade out on top of the new one
         oldLook = None
         if self.isVisible():
             oldLook = self.grab()
+
         setTheme(themeName)
         self.setStyleSheet(applyTheme(STYLE))
-        for card in self.statCards:
-            card.restyle()
+        for statCard in self.statCards:
+            statCard.restyle()
         self.showTimes()
         self.themeButton.setDark(themeName == "dark", animate=oldLook is not None)
         if oldLook is not None:
             self.fadeOut(oldLook)
 
     def fadeOut(self, oldLook) -> None:
-        cover = QLabel(self)
-        cover.setPixmap(oldLook)
-        cover.setGeometry(self.rect())
-        cover.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        opacity = QGraphicsOpacityEffect(cover)
-        cover.setGraphicsEffect(opacity)
-        cover.show()
+        oldLookCover = QLabel(self)
+        oldLookCover.setPixmap(oldLook)
+        oldLookCover.setGeometry(self.rect())
+        oldLookCover.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        coverOpacity = QGraphicsOpacityEffect(oldLookCover)
+        oldLookCover.setGraphicsEffect(coverOpacity)
+        oldLookCover.show()
         self.themeButton.raise_()
-        fade = QPropertyAnimation(opacity, b"opacity", cover)
-        fade.setDuration(350)
-        fade.setStartValue(1.0)
-        fade.setEndValue(0.0)
-        fade.setEasingCurve(QEasingCurve.Type.InOutQuad)
-        fade.finished.connect(cover.deleteLater)
-        fade.start()
+
+        fadeAnimation = QPropertyAnimation(coverOpacity, b"opacity", oldLookCover)
+        fadeAnimation.setDuration(350)
+        fadeAnimation.setStartValue(1.0)
+        fadeAnimation.setEndValue(0.0)
+        fadeAnimation.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        fadeAnimation.finished.connect(oldLookCover.deleteLater)
+        fadeAnimation.start()
+
+
+
+
+    # Pause screen, pops up when you open something unproductive
 
     def showPause(self, window, appName, site):
         self.pausedWindow = window
@@ -612,6 +703,7 @@ class Dashboard(QWidget):
         window = self.pausedWindow
         appName = self.pausedName
         self.pauseScreen = None
+
         if choice == "back":
             if self.pausedSite is None:
                 self.backend.close_app(window.pid)
@@ -625,6 +717,7 @@ class Dashboard(QWidget):
         else:
             self.passedAt[appName] = time.time()
             self.usedSeconds[appName] = 0
+
         if choice == "emergency":
             self.emergencyApp = appName
         if choice == "open":
@@ -633,6 +726,11 @@ class Dashboard(QWidget):
             self.breakSite = self.pausedSite
             self.timesAsked = 0
             self.startBreakPeriod()
+
+
+
+
+    # Breaks, starting + checking in
 
     def startBreakPeriod(self):
         enforcement.useBreak()
@@ -646,7 +744,8 @@ class Dashboard(QWidget):
         if self.currentKind != "unproductive":
             self.endBreak()
             return
-        # check in about whatever unproductive app you're on now, not just the one the break started on
+
+        # Check in about whatever unproductive app you're on now, not just the one the break started on
         self.breakWindow = self.currentWindow
         self.breakName = self.currentName
         self.breakSite = self.currentSite
@@ -657,7 +756,8 @@ class Dashboard(QWidget):
         self.breakWindow = None
         self.breakName = None
         self.breakSite = None
-        # once a break is over, every unproductive app needs a new pause before it opens again
+
+        # Once a break is over, every unproductive app needs a new pause before it opens again
         self.passedAt.clear()
 
     def checkInDone(self, choice):
@@ -678,8 +778,13 @@ class Dashboard(QWidget):
             self.timesAsked = self.timesAsked + 1
             self.startBreakPeriod()
 
+
+
+
+    # Breaks, ending early from the x on the badge
+
     def cancelBreak(self):
-        # ending a break early counts as bouncing back, same as "I'm ready" on the check-in
+        # Ending a break early counts as bouncing back, same as "I'm ready" on the check in
         self.breakTimer.stop()
         if self.currentKind == "unproductive":
             self.breakWindow = self.currentWindow
@@ -697,12 +802,15 @@ class Dashboard(QWidget):
 
 
 
+
+    # Drawing, lets the stylesheet paint the rounded background
+
     def paintEvent(self, event: QPaintEvent) -> None:
-        opt = QStyleOption()
-        opt.initFrom(self)
+        styleOption = QStyleOption()
+        styleOption.initFrom(self)
         painter = QPainter(self)
         self.style().drawPrimitive(
-            QStyle.PrimitiveElement.PE_Widget, opt, painter, self
+            QStyle.PrimitiveElement.PE_Widget, styleOption, painter, self
         )
 
 
