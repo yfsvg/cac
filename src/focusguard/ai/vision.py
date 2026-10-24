@@ -102,5 +102,8 @@ def classifySite(backend, window, site: str) -> None:
         if screenshot is not None:
             notices.append("FocusGuard took a screenshot of your browser to check " + site + ".")
             category = askGemini(site, window.title, screenshot)
+    if category == "unsure":
+        category = "productive"
     if category == "productive" or category == "unproductive":
         saveSiteCategory(site, category)
+        notices.append("FocusGuard's AI checked " + site + ": " + category + ".")

@@ -151,49 +151,33 @@ class SessionPrompt(QWidget):
         event.ignore()
 
 
-class SessionBadge(QWidget):
+class SessionCard(QFrame):
     def __init__(self, whenBailOut):
-        super().__init__()
-        self.whenBailOut = whenBailOut
-        self.setWindowFlags(floatingWindowFlags())
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
-        self.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont))
-
-        card = QFrame(self, objectName="Badge")
-        cardLayout = QVBoxLayout(card)
-        cardLayout.setContentsMargins(14, 10, 14, 12)
-        cardLayout.setSpacing(6)
+        super().__init__(objectName="SessionCard")
+        cardLayout = QVBoxLayout(self)
+        cardLayout.setContentsMargins(20, 12, 20, 14)
+        cardLayout.setSpacing(8)
         topRow = QHBoxLayout()
         topRow.setContentsMargins(0, 0, 0, 0)
-        self.timeLabel = QLabel("Focus session")
+        self.timeLabel = QLabel("Focus session", objectName="SessionTime")
         topRow.addWidget(self.timeLabel)
         topRow.addStretch()
-        bailOutButton = QPushButton("✕", objectName="CancelBreak", cursor=Qt.CursorShape.PointingHandCursor)
-        bailOutButton.setFixedSize(20, 20)
+        bailOutButton = QPushButton("Bail out", objectName="BailOutButton", cursor=Qt.CursorShape.PointingHandCursor)
         bailOutButton.setToolTip("Use a bail-out to end the session early")
-        bailOutButton.clicked.connect(self.whenBailOut)
+        bailOutButton.clicked.connect(whenBailOut)
         topRow.addWidget(bailOutButton)
         cardLayout.addLayout(topRow)
-        self.progressBar = QProgressBar()
+        self.progressBar = QProgressBar(objectName="SessionBar")
         self.progressBar.setTextVisible(False)
         self.progressBar.setFixedHeight(6)
         cardLayout.addWidget(self.progressBar)
-
-        outerLayout = QVBoxLayout(self)
-        outerLayout.setContentsMargins(0, 0, 0, 0)
-        outerLayout.addWidget(card)
-        self.setFixedWidth(180)
         self.totalSeconds = 1
+        self.hide()
 
     def showSession(self, secondsLeft):
-        self.setStyleSheet(applyTheme(BADGE_STYLE))
         if secondsLeft > self.totalSeconds:
             self.totalSeconds = secondsLeft
         self.updateTime(secondsLeft)
-        self.adjustSize()
-        screen = QApplication.primaryScreen().availableGeometry()
-        self.move(screen.right() - self.width() - BADGE_MARGIN, screen.top() + BADGE_MARGIN)
         self.show()
 
     def updateTime(self, secondsLeft):

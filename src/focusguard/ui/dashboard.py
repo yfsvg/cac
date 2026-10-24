@@ -40,7 +40,7 @@ from focusguard.core.enforcement import Enforcer
 from focusguard.storage import memory, streak, time_tracking
 from focusguard.ui.settings_window import SettingsPage
 from focusguard.ui.pause_screen import BreakBadge, CheckInScreen, PauseScreen
-from focusguard.ui.session_screen import SessionBadge, SessionPrompt, TimesUpToast
+from focusguard.ui.session_screen import SessionCard, SessionPrompt, TimesUpToast
 from focusguard.ui.theme import applyTheme, choiceFor, getColors, getTheme, resolveTheme, setTheme, systemTheme
 from focusguard.platform import get_backend
 
@@ -93,6 +93,20 @@ STYLE = """
     QFrame#StatCard { border-radius: 24px; }
 
     QFrame#TimeCard { background-color: @surfaceContainerLow; border-radius: 24px; }
+    QFrame#SessionCard { background-color: @secondaryContainer; border-radius: 20px; }
+    QLabel#SessionTime { color: @onSecondaryContainer; font-size: 15px; font-weight: 600; }
+    QPushButton#BailOutButton {
+        color: @onSecondaryContainer;
+        font-size: 13px;
+        font-weight: 600;
+        background-color: @surfaceContainerHighest;
+        border: none;
+        border-radius: 12px;
+        padding: 4px 12px;
+    }
+    QPushButton#BailOutButton:hover { background-color: @errorContainer; color: @onErrorContainer; }
+    QProgressBar#SessionBar { background-color: @surfaceContainerHighest; border: none; border-radius: 3px; }
+    QProgressBar#SessionBar::chunk { background-color: @primary; border-radius: 3px; }
 
     QPushButton#DropdownHeader {
         color: @onSurface;
@@ -448,7 +462,12 @@ class Dashboard(QWidget):
         self.sessionPrompt = None
         self.timesUpToast = None
         self.scheduleDoneFor = ""
-        self.sessionBadge = SessionBadge(self.askBailOut)
+        self.lastKind = None
+        self.sessionCard = SessionCard(self.askBailOut)
+        sessionRow = QHBoxLayout()
+        sessionRow.setContentsMargins(20, 8, 26, 0)
+        sessionRow.addWidget(self.sessionCard)
+        mainLayout.insertLayout(1, sessionRow)
         self.sessionTimer = QTimer(self, interval=1000, timeout=self.sessionTick)
         QTimer.singleShot(0, self.startOrResumeSession)
 
@@ -490,7 +509,9 @@ class Dashboard(QWidget):
                 appKind = "unproductive"
 
         switchedApp = appName != self.lastApp
+        justSorted = appKind == "unproductive" and self.lastKind != "unproductive"
         self.lastApp = appName
+        self.lastKind = appKind
         if switchedApp:
             self.emergencyApp = None
         self.currentWindow = window
@@ -507,7 +528,7 @@ class Dashboard(QWidget):
                 self.lastBrowserWindow = None
                 return
 
-        if appKind == "unproductive" and switchedApp and not onBreakRightNow:
+        if appKind == "unproductive" and (switchedApp or justSorted) and not onBreakRightNow:
             secondsSincePassed = time.time() - self.passedAt.get(appName, 0)
             if secondsSincePassed > 600:
                 self.showPause(window, appName, site)
@@ -688,7 +709,7 @@ class Dashboard(QWidget):
 
     def startOrResumeSession(self):
         if session.sessionSecondsLeft() > 0:
-            self.sessionBadge.showSession(session.sessionSecondsLeft())
+            self.sessionCard.showSession(session.sessionSecondsLeft())
             self.sessionTimer.start()
             return
         self.sessionPrompt = SessionPrompt(self.sessionChosen)
@@ -697,8 +718,8 @@ class Dashboard(QWidget):
     def sessionChosen(self, minutes):
         self.sessionPrompt = None
         session.startSession(minutes)
-        self.sessionBadge.totalSeconds = minutes * 60
-        self.sessionBadge.showSession(session.sessionSecondsLeft())
+        self.sessionCard.totalSeconds = minutes * 60
+        self.sessionCard.showSession(session.sessionSecondsLeft())
         self.sessionTimer.start()
 
     def sessionTick(self):
@@ -707,9 +728,9 @@ class Dashboard(QWidget):
         self.checkSchedule()
         secondsLeft = session.sessionSecondsLeft()
         if secondsLeft > 0:
-            self.sessionBadge.updateTime(secondsLeft)
+            self.sessionCard.updateTime(secondsLeft)
             return
-        self.sessionBadge.hide()
+        self.sessionCard.hide()
         self.timesUpToast = TimesUpToast(self.timesUpDone)
         self.timesUpToast.popUp()
 
@@ -719,8 +740,8 @@ class Dashboard(QWidget):
             self.quitFocusGuard()
             return
         session.extendSession(session.CONTINUE_MINUTES)
-        self.sessionBadge.totalSeconds = session.CONTINUE_MINUTES * 60
-        self.sessionBadge.showSession(session.sessionSecondsLeft())
+        self.sessionCard.totalSeconds = session.CONTINUE_MINUTES * 60
+        self.sessionCard.showSession(session.sessionSecondsLeft())
 
     def checkSchedule(self):
         schedule = memory.load().get("studySchedule", {})
@@ -739,8 +760,8 @@ class Dashboard(QWidget):
         endHour, endMinute = endText.split(":")
         endTime = now.replace(hour=int(endHour), minute=int(endMinute), second=0, microsecond=0)
         if session.extendSessionUntil(endTime.timestamp()):
-            self.sessionBadge.totalSeconds = session.sessionSecondsLeft()
-            self.sessionBadge.showSession(session.sessionSecondsLeft())
+            self.sessionCard.totalSeconds = session.sessionSecondsLeft()
+            self.sessionCard.showSession(session.sessionSecondsLeft())
             self.enforcer.sendNotification("Study time until " + endTime.strftime("%I:%M %p").lstrip("0") + ", your session now runs until then.")
 
     def askBailOut(self):
@@ -769,9 +790,6 @@ class Dashboard(QWidget):
         breakSeconds = enforcement.getBreakMinutes() * 60
         self.breakTimer.setInterval(breakSeconds * 1000)
         self.breakTimer.start()
-        self.breakBadge.topOffset = 0
-        if self.sessionBadge.isVisible():
-            self.breakBadge.topOffset = self.sessionBadge.height() + 8
         self.breakBadge.startBreak(breakSeconds)
 
     def showCheckIn(self):
