@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QProgressBar,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -54,7 +55,14 @@ QPushButton#BackButton {
 }
 QPushButton#BackButton:hover { background-color: @primaryHover; color: @onPrimary; }
 QPushButton#OpenButton { text-align: center; background-color: @tertiaryContainer; color: @onTertiaryContainer; }
+QPushButton#OpenButton:disabled { background-color: @surfaceContainerHighest; color: @outline; }
 QPushButton:disabled { background-color: @surfaceContainerHighest; color: @outline; }
+QProgressBar {
+    background-color: @surfaceContainerHighest;
+    border: none;
+    border-radius: 3px;
+}
+QProgressBar::chunk { background-color: @primary; border-radius: 3px; }
 QLineEdit {
     color: @onSurface;
     font-size: 14px;
@@ -126,6 +134,13 @@ class PauseScreen(QWidget):
         boxLayout.addWidget(self.reasonButtons)
         boxLayout.addWidget(self.otherBox)
         boxLayout.addLayout(bottomRow)
+        self.progressBar = QProgressBar()
+        self.progressBar.setRange(0, COUNTDOWN * 10)
+        self.progressBar.setValue(0)
+        self.progressBar.setTextVisible(False)
+        self.progressBar.setFixedHeight(6)
+        self.progressBar.hide()
+        boxLayout.addWidget(self.progressBar)
         self.box.adjustSize()
 
         self.appRect = appRect
@@ -133,6 +148,8 @@ class PauseScreen(QWidget):
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.countDown)
+        self.fillTimer = QTimer(self)
+        self.fillTimer.timeout.connect(self.fillOpenButton)
         self.shakeTimer = QTimer(self)
         self.shakeTimer.timeout.connect(self.shakeMove)
 
@@ -205,9 +222,18 @@ class PauseScreen(QWidget):
         self.hint.hide()
         self.title.setText("Wait " + str(self.secondsLeft) + " seconds")
         self.openButton.show()
+        self.progressBar.show()
         self.box.adjustSize()
         self.placeBox()
         self.timer.start(1000)
+        self.fillStep = 0
+        self.fillTimer.start(100)
+
+    def fillOpenButton(self):
+        self.fillStep = self.fillStep + 1
+        self.progressBar.setValue(self.fillStep)
+        if self.fillStep >= COUNTDOWN * 10:
+            self.fillTimer.stop()
 
     def countDown(self):
         self.secondsLeft = self.secondsLeft - 1
@@ -225,6 +251,7 @@ class PauseScreen(QWidget):
 
     def finishWithChoice(self, choice):
         self.timer.stop()
+        self.fillTimer.stop()
         self.hide()
         self.whenDone(choice)
 

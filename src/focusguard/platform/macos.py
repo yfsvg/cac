@@ -83,6 +83,21 @@ tell application id "{bundle_id}"
 end tell
 """
 
+_SAFARI_URL_SCRIPT = """
+tell application id "com.apple.safari"
+    if (count of windows) is 0 then return ""
+    return URL of current tab of front window
+end tell
+"""
+
+CHROME_FAMILY = (
+    "com.google.chrome",
+    "com.microsoft.edgemac",
+    "com.brave.browser",
+    "com.vivaldi.vivaldi",
+    "org.chromium.chromium",
+)
+
 _OSASCRIPT_TIMEOUT = 2.0
 _ANY_INPUT_EVENT = getattr(Quartz, "kCGAnyInputEventType", 0xFFFFFFFF)
 
@@ -121,6 +136,8 @@ class MacOSBackend(PlatformBackend):
         # Bundle ids are case-insensitive to AppleScript, so the lowercased app_id is fine.
 
         script = _URL_SCRIPT.format(bundle_id=window.app_id)
+        if window.app_id == "com.apple.safari":
+            script = _SAFARI_URL_SCRIPT
         try:
             result = subprocess.run(
                 ["osascript", "-e", script],
@@ -172,6 +189,28 @@ class MacOSBackend(PlatformBackend):
             return True
         except psutil.Error:
             return False
+
+    def close_tab(self, window: ActiveWindow) -> bool:
+        if window.app_id == "com.apple.safari":
+            script = 'tell application id "com.apple.safari" to close current tab of front window'
+        elif window.app_id in CHROME_FAMILY:
+            script = 'tell application id "' + window.app_id + '" to close active tab of front window'
+        else:
+            script = (
+                'tell application id "' + window.app_id + '" to activate\n'
+                'delay 0.2\n'
+                'tell application "System Events" to keystroke "w" using command down'
+            )
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=_OSASCRIPT_TIMEOUT,
+            )
+        except subprocess.TimeoutExpired:
+            return False
+        return result.returncode == 0
 
     def hide_from_taskbar(self) -> None:
         NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)

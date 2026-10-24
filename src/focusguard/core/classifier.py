@@ -7,6 +7,7 @@ import os
 from urllib.parse import urlsplit
 
 from focusguard.core.unproductive_apps import UNPRODUCTIVE_APPS
+from focusguard.core.unproductive_sites import UNPRODUCTIVE_SITES
 
 
 def siteRoot(url: str | None) -> str | None:
@@ -31,6 +32,16 @@ def siteRoot(url: str | None) -> str | None:
     if hostName.startswith("www."):
         hostName = hostName[4:]
     return hostName
+
+
+def isUnproductiveSite(site: str | None) -> bool:
+    if not site:
+        return False
+    siteParts = site.split(".")
+    for index in range(len(siteParts) - 1):
+        if ".".join(siteParts[index:]) in UNPRODUCTIVE_SITES:
+            return True
+    return False
 
 
 

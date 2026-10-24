@@ -61,6 +61,9 @@ class PlatformBackend(ABC):
     def close_app(self, pid: int, force: bool = False) -> bool:
         """Ask the app owning `pid` to quit, or kill it outright with `force`. Returns True if it was signalled."""
 
+    def close_tab(self, window: ActiveWindow) -> bool:
+        return self.close_app(window.pid)
+
     @abstractmethod
     def hide_from_taskbar(self) -> None:
         """Run as a background app: no Dock icon on macOS. Call after the Qt app is created."""

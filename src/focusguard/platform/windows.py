@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 import logging
 import subprocess
+import time
 import winreg
 from ctypes import wintypes
 from pathlib import Path
@@ -69,6 +70,9 @@ SWP_NOMOVE = 0x0002
 SWP_NOACTIVATE = 0x0010
 SWP_FRAMECHANGED = 0x0020
 LWA_ALPHA = 0x00000002
+VK_CONTROL = 0x11
+VK_W = 0x57
+KEYEVENTF_KEYUP = 0x0002
 
 WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 
@@ -93,6 +97,8 @@ user32.SetWindowPos.argtypes = [
 ]
 user32.SetLayeredWindowAttributes.argtypes = [wintypes.HWND, wintypes.COLORREF, wintypes.BYTE, wintypes.DWORD]
 user32.GetLastInputInfo.argtypes = [ctypes.POINTER(LASTINPUTINFO)]
+user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ctypes.c_size_t]
 kernel32.GetTickCount.restype = wintypes.DWORD
 
 # The *LongPtr variants only exist in 64-bit user32.
@@ -146,6 +152,8 @@ class WindowsBackend(PlatformBackend):
                 edit = _find_address_bar(root) if root else None
                 if edit is None:
                     return None
+                if edit.HasKeyboardFocus:
+                    return None
                 return edit.GetValuePattern().Value.strip() or None
         except Exception:  # UIA throws COM errors when windows vanish mid-query
             log.debug("UI Automation lookup failed for %s", window.app_name, exc_info=True)
@@ -194,6 +202,20 @@ class WindowsBackend(PlatformBackend):
             return True
         except psutil.Error:
             return False
+
+    def close_tab(self, window: ActiveWindow) -> bool:
+        if not window.window_handle:
+            return False
+        if user32.GetForegroundWindow() != window.window_handle:
+            user32.SetForegroundWindow(window.window_handle)
+            time.sleep(0.2)
+        if user32.GetForegroundWindow() != window.window_handle:
+            return False
+        user32.keybd_event(VK_CONTROL, 0, 0, 0)
+        user32.keybd_event(VK_W, 0, 0, 0)
+        user32.keybd_event(VK_W, 0, KEYEVENTF_KEYUP, 0)
+        user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
+        return True
 
     def get_window_rect(self, window: ActiveWindow) -> tuple[int, int, int, int] | None:
         if not window.window_handle:

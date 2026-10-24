@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QStackedWidget,
     QStyle,
     QStyleOption,
     QVBoxLayout,
@@ -28,9 +29,10 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QFontDatabase, QPainter, QPaintEvent
 
-from focusguard.core.classifier import classifyTypeOfApp
+from focusguard.core.classifier import classifyTypeOfApp, isUnproductiveSite, siteRoot
 from focusguard.core.enforcement import Enforcer
-from focusguard.storage import memory
+from focusguard.storage import memory, time_tracking
+from focusguard.ui.settings_window import SettingsPage
 from focusguard.ui.pause_screen import PauseScreen
 from focusguard.ui.theme import applyTheme, getColors, getTheme, setTheme
 from focusguard.platform import get_backend
@@ -218,7 +220,10 @@ class Dashboard(QWidget):
 
         content = QWidget(objectName = "Content")
         scroll.setWidget(content)
-        mainLayout.addWidget(scroll)
+        self.pages = QStackedWidget()
+        self.pages.addWidget(scroll)
+        mainLayout.addWidget(self.pages)
+        self.settingsPage = None
 
         layout = QVBoxLayout(content)
         layout.setContentsMargins(20, 10, 20, 20)
@@ -235,6 +240,10 @@ class Dashboard(QWidget):
         self.themeButton.setFixedSize(32, 32)
         self.themeButton.clicked.connect(self.toggleTheme)
         topRow.addWidget(self.themeButton)
+        self.settingsButton = QPushButton("⚙", objectName="ThemeButton", cursor=Qt.CursorShape.PointingHandCursor)
+        self.settingsButton.setFixedSize(32, 32)
+        self.settingsButton.clicked.connect(self.openSettings)
+        topRow.addWidget(self.settingsButton)
         layout.addLayout(topRow)
         self.updateThemeButton()
         heroCard = QFrame(objectName="Hero")
@@ -271,24 +280,19 @@ class Dashboard(QWidget):
 
 
 
-        # settings and config
-        layout.addWidget(label("App Config", "Section"))
-        
-        for name in ["Absolute Time Limits", "Schedule Time Limits", "AI Categorizations",
-                     "Super Focus Mode", "Bail-Outs", "Parental Controls"]:
-            layout.addWidget(Dropdown(name))
-        layout.addSpacing(8)
-
-
-
-
         # new display for time tracking, for every heartbeat/change update
         layout.addWidget(label("Time Tracked", "Section"))
         self.backend = get_backend()
-        self.trackedTimes: dict[tuple[str, str], int] = {}
+        self.trackedTimes: dict[tuple[str, str], int] = time_tracking.loadToday()
+        self.trackedDay = time_tracking.todayName()
         self.enforcer = Enforcer(self.backend)
         self.pauseScreen = None
         self.pausedWindow = None
+        self.pausedName = None
+        self.pausedSite = None
+        self.lastBrowserWindow = None
+        self.lastSite = None
+        self.siteReadAt = 0
         self.lastApp = None
         self.emergencyApp = None
         self.passedAt = {}
@@ -303,6 +307,10 @@ class Dashboard(QWidget):
         layout.addStretch()
         self.timer = QTimer(self, interval=1000, timeout=self.tick)
         self.timer.start()
+        self.saveTimer = QTimer(self, interval=10000, timeout=self.saveTimes)
+        self.saveTimer.start()
+        QApplication.instance().aboutToQuit.connect(self.saveTimes)
+        self.showTimes()
 
 
     
@@ -325,27 +333,52 @@ class Dashboard(QWidget):
         if self.pauseScreen is not None:
             return
         appKind = classifyTypeOfApp(self.backend, window)
+        appName = window.app_name
+        site = None
+        if appKind == "browser":
+            site = self.browserSite(window)
+        if site is not None:
+            appName = site
+            if isUnproductiveSite(site):
+                appKind = "unproductive"
 
-        switchedApp = window.app_name != self.lastApp
-        self.lastApp = window.app_name
+        switchedApp = appName != self.lastApp
+        self.lastApp = appName
         if switchedApp:
             self.emergencyApp = None
         if appKind == "unproductive" and switchedApp:
-            secondsSincePassed = time.time() - self.passedAt.get(window.app_name, 0)
+            secondsSincePassed = time.time() - self.passedAt.get(appName, 0)
             if secondsSincePassed > 600:
-                self.showPause(window)
+                self.showPause(window, appName, site)
                 return
-        if window.app_name == self.emergencyApp:
+        if appName == self.emergencyApp:
             return
 
-        key = (window.app_name, appKind)
+        key = (appName, appKind)
         self.trackedTimes[key] = self.trackedTimes.get(key, 0) + 1
-        self.usedSeconds[window.app_name] = self.usedSeconds.get(window.app_name, 0) + 1
-        if self.enforcer.checkApp(window, appKind, self.usedSeconds[window.app_name]):
-            self.usedSeconds[window.app_name] = 0
-            self.passedAt.pop(window.app_name, None)
+        self.usedSeconds[appName] = self.usedSeconds.get(appName, 0) + 1
+        if self.enforcer.checkApp(window, appKind, self.usedSeconds[appName], site):
+            self.usedSeconds[appName] = 0
+            self.passedAt.pop(appName, None)
             self.lastApp = None
+            self.lastBrowserWindow = None
         self.showTimes()
+
+    def browserSite(self, window):
+        browserWindow = (window.window_handle, window.title)
+        noTitle = window.title == "" and time.time() - self.siteReadAt > 10
+        if browserWindow != self.lastBrowserWindow or noTitle:
+            self.lastBrowserWindow = browserWindow
+            self.lastSite = siteRoot(self.backend.get_browser_url(window))
+            self.siteReadAt = time.time()
+        return self.lastSite
+
+    def saveTimes(self) -> None:
+        time_tracking.saveDay(self.trackedDay, self.trackedTimes)
+        if time_tracking.todayName() != self.trackedDay:
+            self.trackedDay = time_tracking.todayName()
+            self.trackedTimes = {}
+            self.showTimes()
 
     def showTimes(self) -> None:
         if not self.trackedTimes:
@@ -368,6 +401,17 @@ class Dashboard(QWidget):
         else:
             self.themeButton.setText("☾")
 
+    def openSettings(self) -> None:
+        self.settingsPage = SettingsPage(STYLE, self.closeSettings)
+        self.pages.addWidget(self.settingsPage)
+        self.pages.setCurrentWidget(self.settingsPage)
+
+    def closeSettings(self) -> None:
+        self.pages.setCurrentIndex(0)
+        self.pages.removeWidget(self.settingsPage)
+        self.settingsPage.deleteLater()
+        self.settingsPage = None
+
     def toggleTheme(self) -> None:
         if getTheme() == "dark":
             setTheme("light")
@@ -382,25 +426,32 @@ class Dashboard(QWidget):
         self.updateThemeButton()
         self.showTimes()
 
-    def showPause(self, window):
+    def showPause(self, window, appName, site):
         self.pausedWindow = window
-        self.pauseScreen = PauseScreen(window.app_name, self.backend.get_window_rect(window), self.pauseDone)
+        self.pausedName = appName
+        self.pausedSite = site
+        self.pauseScreen = PauseScreen(appName, self.backend.get_window_rect(window), self.pauseDone)
         self.pauseScreen.popUp()
 
     def pauseDone(self, choice):
         window = self.pausedWindow
+        appName = self.pausedName
         self.pauseScreen = None
         if choice == "back":
-            self.backend.close_app(window.pid)
+            if self.pausedSite is None:
+                self.backend.close_app(window.pid)
+            else:
+                self.backend.close_tab(window)
             self.lastApp = None
+            self.lastBrowserWindow = None
             savedMemory = memory.load()
             savedMemory["backedOut"] = savedMemory.get("backedOut", 0) + 1
             memory.save(savedMemory)
         else:
-            self.passedAt[window.app_name] = time.time()
-            self.usedSeconds[window.app_name] = 0
+            self.passedAt[appName] = time.time()
+            self.usedSeconds[appName] = 0
         if choice == "emergency":
-            self.emergencyApp = window.app_name
+            self.emergencyApp = appName
 
 
 
