@@ -8,6 +8,8 @@ import time
 import psutil
 from PySide6.QtCore import QTimer
 
+from focusguard.storage.memory import dataDirectory
+
 helper = None
 helperTimer = None
 
@@ -77,6 +79,24 @@ def runWithoutTerminal() -> None:
     sys.exit(0)
 
 
+def alreadyRunning() -> bool:
+    pidFile = dataDirectory() / "running.pid"
+    try:
+        otherPid = int(pidFile.read_text())
+    except (OSError, ValueError):
+        otherPid = 0
+    if otherPid != 0 and otherPid != os.getpid() and psutil.pid_exists(otherPid):
+        try:
+            otherCommand = " ".join(psutil.Process(otherPid).cmdline()).lower()
+        except psutil.Error:
+            otherCommand = ""
+        if "focusguard" in otherCommand and "keep_alive" not in otherCommand and "--keep-alive" not in otherCommand:
+            return True
+    pidFile.parent.mkdir(parents=True, exist_ok=True)
+    pidFile.write_text(str(os.getpid()))
+    return False
+
+
 def startHelper() -> None:
     global helper, helperTimer
     if isDebugMode():
@@ -104,7 +124,7 @@ def helperLoop(appPid: int) -> None:
     while True:
         time.sleep(2)
         if not psutil.pid_exists(appPid):
-            startInBackground(appCommand())
+            startInBackground(appCommand() + ["--resume"])
             return
 
 

@@ -3,6 +3,7 @@ from PySide6.QtGui import QColor, QFontDatabase, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -67,6 +68,54 @@ SETTINGS_STYLE = """
         border-radius: 9px;
     }
     QSlider::handle:horizontal:disabled, QSlider::sub-page:horizontal:disabled { background: @outline; }
+    QCheckBox::indicator {
+        width: 18px;
+        height: 18px;
+        border-radius: 6px;
+        border: 2px solid @outline;
+        background-color: transparent;
+    }
+    QCheckBox::indicator:checked { background-color: @primary; border-color: @primary; }
+    QCheckBox#Switch::indicator {
+        width: 40px;
+        height: 22px;
+        border-radius: 11px;
+        border: none;
+        background-color: @surfaceContainerHighest;
+        image: none;
+    }
+    QCheckBox#Switch::indicator:checked { background-color: @primary; }
+    QPushButton#DayChip {
+        color: @onSurfaceVariant;
+        font-size: 13px;
+        font-weight: 600;
+        background-color: @surfaceContainerHighest;
+        border: none;
+        border-radius: 15px;
+        min-width: 42px;
+        min-height: 30px;
+    }
+    QPushButton#DayChip:checked { color: @onPrimary; background-color: @primary; }
+    QPushButton#DayChip:disabled { color: @outline; }
+    QFrame#TimeChip { background-color: @surfaceContainerHighest; border-radius: 10px; }
+    QTimeEdit { color: @onSurface; background-color: transparent; font-size: 14px; font-weight: 600; }
+    QLabel#ChipOn {
+        color: @onGreenContainer;
+        background-color: @greenContainer;
+        font-size: 12px;
+        font-weight: 600;
+        border-radius: 10px;
+        padding: 3px 10px;
+    }
+    QLabel#ChipOff {
+        color: @onErrorContainer;
+        background-color: @errorContainer;
+        font-size: 12px;
+        font-weight: 600;
+        border-radius: 10px;
+        padding: 3px 10px;
+    }
+    QLabel#SitesList { color: @onSurface; font-size: 13px; }
 """
 
 def makeBackArrow():
@@ -461,7 +510,8 @@ class SettingsPage(QWidget):
         dayRow = QHBoxLayout()
         self.dayBoxes = []
         for dayNumber in range(7):
-            dayBox = QCheckBox(DAY_NAMES[dayNumber])
+            dayBox = QPushButton(DAY_NAMES[dayNumber], objectName="DayChip", cursor=Qt.CursorShape.PointingHandCursor)
+            dayBox.setCheckable(True)
             dayBox.setChecked(dayNumber in schedule.get("days", []))
             self.dayBoxes.append(dayBox)
             dayRow.addWidget(dayBox)
@@ -469,12 +519,21 @@ class SettingsPage(QWidget):
         timeRow = QHBoxLayout()
         self.startTimeBox = QTimeEdit(QTime.fromString(schedule.get("start", "16:00"), "HH:mm"))
         self.startTimeBox.setDisplayFormat("HH:mm")
+        self.startTimeBox.setButtonSymbols(QTimeEdit.ButtonSymbols.NoButtons)
+        self.startTimeBox.setFrame(False)
+        self.startTimeBox.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.startTimeBox.setFixedSize(64, 32)
         self.endTimeBox = QTimeEdit(QTime.fromString(schedule.get("end", "18:00"), "HH:mm"))
         self.endTimeBox.setDisplayFormat("HH:mm")
-        timeRow.addWidget(label("From", "SliderLabel"))
-        timeRow.addWidget(self.startTimeBox)
-        timeRow.addWidget(label("to", "SliderLabel"))
-        timeRow.addWidget(self.endTimeBox)
+        self.endTimeBox.setButtonSymbols(QTimeEdit.ButtonSymbols.NoButtons)
+        self.endTimeBox.setFrame(False)
+        self.endTimeBox.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.endTimeBox.setFixedSize(64, 32)
+        timeRow.setSpacing(10)
+        timeRow.addWidget(label("From", "SliderLabel"), alignment=Qt.AlignmentFlag.AlignVCenter)
+        timeRow.addWidget(self.makeTimeChip(self.startTimeBox))
+        timeRow.addWidget(label("to", "SliderLabel"), alignment=Qt.AlignmentFlag.AlignVCenter)
+        timeRow.addWidget(self.makeTimeChip(self.endTimeBox))
         timeRow.addStretch()
         tabLayout.addLayout(timeRow)
         self.scheduleHint = label("", "SliderHint")
@@ -484,6 +543,13 @@ class SettingsPage(QWidget):
         tabLayout.addLayout(self.makeSaveRow(self.saveScheduleButton))
         self.updateSchedule()
         return tab
+
+    def makeTimeChip(self, timeBox):
+        timeChip = QFrame(objectName="TimeChip")
+        chipLayout = QHBoxLayout(timeChip)
+        chipLayout.setContentsMargins(8, 2, 8, 2)
+        chipLayout.addWidget(timeBox)
+        return timeChip
 
     def updateSchedule(self):
         secondsLeft = frozenSecondsLeft("Schedule Time Limits")
@@ -522,8 +588,12 @@ class SettingsPage(QWidget):
             "after you've been on them for 1 minute. Each answer is remembered, so a site is only checked once."
         )
         tabLayout.addWidget(label(explanation, "SliderHint"))
-        self.keyText = label("", "SliderLabel")
-        tabLayout.addWidget(self.keyText)
+        keyStatusRow = QHBoxLayout()
+        self.keyText = label("", "ChipOn")
+        self.keyText.setWordWrap(False)
+        keyStatusRow.addWidget(self.keyText)
+        keyStatusRow.addStretch()
+        tabLayout.addLayout(keyStatusRow)
         keyRow = QHBoxLayout()
         self.keyBox = QLineEdit()
         self.keyBox.setEchoMode(QLineEdit.EchoMode.Password)
@@ -535,27 +605,36 @@ class SettingsPage(QWidget):
         tabLayout.addLayout(keyRow)
         self.aiCountLabel = label("", "SliderHint")
         tabLayout.addWidget(self.aiCountLabel)
-        self.aiSitesLabel = label("", "SliderHint")
+        self.aiSitesLabel = label("", "SitesList")
+        self.aiSitesLabel.setTextFormat(Qt.TextFormat.RichText)
         tabLayout.addWidget(self.aiSitesLabel)
         self.updateKeySection()
         return tab
 
     def updateAiSites(self):
-        self.aiCountLabel.setText("AI checks today: " + str(vision.aiChecksToday()) + " of " + str(vision.AI_CHECKS_PER_DAY))
+        self.aiCountLabel.setText(str(vision.aiChecksToday()) + " of " + str(vision.AI_CHECKS_PER_DAY) + " AI checks used today")
         sitesList = site_memory.rememberedSitesList()
         if len(sitesList) == 0:
             self.aiSitesLabel.setText("The AI hasn't sorted any websites yet.")
             return
-        siteLines = []
+        colors = getColors()
+        siteRows = []
         for site, category in sitesList:
-            siteLines.append(site + ": " + category)
-        self.aiSitesLabel.setText("Sites the AI sorted:\n" + "\n".join(siteLines))
+            dotColor = colors["green"]
+            if category == "unproductive":
+                dotColor = colors["error"]
+            siteRows.append(
+                "<tr><td width='16' style='color:" + dotColor + "; font-size:13px;'>●</td>"
+                + "<td width='100%'>" + site + "</td>"
+                + "<td align='right' style='color:" + colors["onSurfaceVariant"] + ";'>" + category + "</td></tr>"
+            )
+        self.aiSitesLabel.setText("<b>Sites the AI sorted</b><table width='100%' cellspacing='0' cellpadding='3'>" + "".join(siteRows) + "</table>")
 
     def makeSuperFocus(self):
         from focusguard.ui.dashboard import label
 
         tab, tabLayout = self.makeTab()
-        self.superFocusBox = QCheckBox("Super Focus Mode")
+        self.superFocusBox = QCheckBox("Turn on Super Focus Mode", objectName="Switch")
         self.superFocusBox.setChecked(memory.load().get("superFocus", False))
         tabLayout.addWidget(self.superFocusBox)
         self.superFocusHint = label("", "SliderHint")
@@ -623,12 +702,16 @@ class SettingsPage(QWidget):
         self.keyBox.setEnabled(secondsLeft == 0)
         self.saveKeyButton.setEnabled(secondsLeft == 0)
         if vision.getApiKey() == "":
-            keyStatus = "No key saved. Unknown websites won't be checked by AI."
+            keyStatus = "No key saved"
+            self.keyText.setObjectName("ChipOff")
         else:
-            keyStatus = "Key saved. Unknown websites are checked by AI after 1 minute."
+            keyStatus = "Key saved"
+            self.keyText.setObjectName("ChipOn")
         if secondsLeft > 0:
-            keyStatus = keyStatus + " (" + frozenText(secondsLeft) + ")"
+            keyStatus = keyStatus + ", " + frozenText(secondsLeft)
         self.keyText.setText(keyStatus)
+        self.keyText.style().unpolish(self.keyText)
+        self.keyText.style().polish(self.keyText)
         self.updateAiSites()
 
     def saveKey(self):

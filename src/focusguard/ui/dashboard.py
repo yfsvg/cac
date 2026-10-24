@@ -93,6 +93,8 @@ STYLE = """
     QFrame#StatCard { border-radius: 24px; }
 
     QFrame#TimeCard { background-color: @surfaceContainerLow; border-radius: 24px; }
+    QLabel#SplitTitle { color: @onSurface; font-size: 15px; font-weight: 600; }
+    QLabel#SplitLegend { color: @onSurface; font-size: 13px; }
     QFrame#SessionCard { background-color: @secondaryContainer; border-radius: 20px; }
     QLabel#SessionTime { color: @onSecondaryContainer; font-size: 15px; font-weight: 600; }
     QPushButton#BailOutButton {
@@ -173,6 +175,48 @@ class StatCard(QFrame):
 
 
 # Chevron header that opens/closes a paragraph underneath. No real content yet
+
+def isSiteName(name):
+    return "." in name and " " not in name
+
+
+def durationText(seconds):
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    if hours > 0:
+        return str(hours) + "h " + str(minutes) + "m"
+    return str(minutes) + "m " + str(seconds % 60) + "s"
+
+
+class SplitBar(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setFixedHeight(14)
+        self.productiveSeconds = 0
+        self.unproductiveSeconds = 0
+
+    def setTimes(self, productiveSeconds: int, unproductiveSeconds: int) -> None:
+        self.productiveSeconds = productiveSeconds
+        self.unproductiveSeconds = unproductiveSeconds
+        self.update()
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        colors = getColors()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        barShape = QPainterPath()
+        barShape.addRoundedRect(QRectF(self.rect()), 7, 7)
+        painter.setClipPath(barShape)
+        painter.fillRect(self.rect(), QColor(colors["surfaceContainerHighest"]))
+        totalSeconds = self.productiveSeconds + self.unproductiveSeconds
+        if totalSeconds == 0:
+            return
+        productiveWidth = int(self.width() * self.productiveSeconds / totalSeconds)
+        painter.fillRect(0, 0, productiveWidth, self.height(), QColor(colors["green"]))
+        painter.fillRect(productiveWidth, 0, self.width() - productiveWidth, self.height(), QColor(colors["error"]))
+        if 0 < productiveWidth < self.width():
+            painter.fillRect(productiveWidth - 1, 0, 2, self.height(), QColor(colors["surfaceContainerLow"]))
+
 
 class Dropdown(QWidget):
     def __init__(self, title: str) -> None:
@@ -444,9 +488,23 @@ class Dashboard(QWidget):
         timeCard = QFrame(objectName="TimeCard")
         timeCardLayout = QVBoxLayout(timeCard)
         timeCardLayout.setContentsMargins(20, 16, 20, 16)
+        timeCardLayout.setSpacing(6)
         self.timeList = QLabel("Nothing tracked yet", alignment=Qt.AlignmentFlag.AlignTop)
-        self.timeList.setTextFormat(Qt.TextFormat.RichText)
         timeCardLayout.addWidget(self.timeList)
+        self.splitTitle = label("Productive vs unproductive", "SplitTitle")
+        self.splitBar = SplitBar()
+        self.splitLegend = label("", "SplitLegend")
+        self.splitLegend.setTextFormat(Qt.TextFormat.RichText)
+        for splitPart in (self.splitTitle, self.splitBar, self.splitLegend):
+            splitPart.hide()
+            timeCardLayout.addWidget(splitPart)
+        timeCardLayout.addSpacing(4)
+        self.appsDropdown = Dropdown("Apps")
+        self.sitesDropdown = Dropdown("Websites")
+        for timeDropdown in (self.appsDropdown, self.sitesDropdown):
+            timeDropdown.body.setTextFormat(Qt.TextFormat.RichText)
+            timeDropdown.hide()
+            timeCardLayout.addWidget(timeDropdown)
         layout.addWidget(timeCard)
         layout.addStretch()
 
@@ -537,12 +595,8 @@ class Dashboard(QWidget):
             return
 
         timeKey = (appName, appKind)
-        if site is not None and appKind == "unproductive":
-            timeKey = ("Browser unproductive", "unproductive")
-        elif appKind == "browser":
-            timeKey = ("Browser productive", "browser")
-            if site is not None:
-                self.checkUnknownSite(window, site)
+        if appKind == "browser" and site is not None:
+            self.checkUnknownSite(window, site)
         self.trackedTimes[timeKey] = self.trackedTimes.get(timeKey, 0) + 1
         self.usedSeconds[appName] = self.usedSeconds.get(appName, 0) + 1
 
@@ -565,8 +619,13 @@ class Dashboard(QWidget):
 
     def browserSite(self, window):
         browserWindow = (window.window_handle, window.title)
-        needsTitleRecheck = window.title == "" and time.time() - self.siteReadAt > 10
-        if browserWindow != self.lastBrowserWindow or needsTitleRecheck:
+        retrySeconds = 10
+        if self.lastReadSite is None:
+            retrySeconds = 2
+        needsRecheck = window.title == "" or self.lastReadSite is None
+        if needsRecheck and time.time() - self.siteReadAt < retrySeconds:
+            needsRecheck = False
+        if browserWindow != self.lastBrowserWindow or needsRecheck:
             self.lastBrowserWindow = browserWindow
             self.lastReadSite = siteRoot(self.backend.get_browser_url(window))
             self.siteReadAt = time.time()
@@ -584,22 +643,64 @@ class Dashboard(QWidget):
     def memoryCleared(self) -> None:
         self.trackedTimes = {}
         self.timeList.setText("Nothing tracked yet")
+        self.timeList.show()
+        for timePart in (self.splitTitle, self.splitBar, self.splitLegend, self.appsDropdown, self.sitesDropdown):
+            timePart.hide()
 
     def showTimes(self) -> None:
-        if not self.trackedTimes:
+        appRows = []
+        siteRows = []
+        productiveSeconds = 0
+        unproductiveSeconds = 0
+        for (name, rowKind), seconds in self.trackedTimes.items():
+            if name.startswith("Browser "):
+                continue
+            if rowKind == "unproductive":
+                unproductiveSeconds = unproductiveSeconds + seconds
+            else:
+                productiveSeconds = productiveSeconds + seconds
+            if isSiteName(name):
+                siteKind = "productive"
+                if rowKind == "unproductive":
+                    siteKind = "unproductive"
+                siteRows.append((name, siteKind, rowKind, seconds))
+            else:
+                appRows.append((name, rowKind, rowKind, seconds))
+        if productiveSeconds + unproductiveSeconds == 0:
             return
+        self.timeList.hide()
+        self.splitBar.setTimes(productiveSeconds, unproductiveSeconds)
         colors = getColors()
-        sortedTimes = sorted(self.trackedTimes.items(), key=lambda timeEntry: -timeEntry[1])
+        totalSeconds = productiveSeconds + unproductiveSeconds
+        productivePercent = round(100 * productiveSeconds / totalSeconds)
+        self.splitLegend.setText(
+            "<span style='color:" + colors["green"] + ";'>●</span> Productive <b>" + durationText(productiveSeconds) + "</b>"
+            + "&nbsp;&nbsp;&nbsp;<span style='color:" + colors["error"] + ";'>●</span> Unproductive <b>" + durationText(unproductiveSeconds) + "</b>"
+            + "&nbsp;&nbsp;&nbsp;<span style='color:" + colors["onSurfaceVariant"] + ";'>" + str(productivePercent) + "% productive</span>"
+        )
+        for splitPart in (self.splitTitle, self.splitBar, self.splitLegend):
+            splitPart.show()
+        self.fillTimeDropdown(self.appsDropdown, "Apps", appRows)
+        self.fillTimeDropdown(self.sitesDropdown, "Websites", siteRows)
 
+    def fillTimeDropdown(self, timeDropdown, title, rows):
+        totalSeconds = 0
+        for row in rows:
+            totalSeconds = totalSeconds + row[3]
+        timeDropdown.title = title + "   " + durationText(totalSeconds)
+        timeDropdown.updateHeader()
+        timeDropdown.setVisible(len(rows) > 0)
+        colors = getColors()
+        sortedRows = sorted(rows, key=lambda row: -row[3])
         timeRows = []
-        for (name, rowKind), seconds in sortedTimes:
-            dotColor = colors[KIND_COLORS[rowKind]]
+        for name, kindText, colorKind, seconds in sortedRows:
+            dotColor = colors[KIND_COLORS[colorKind]]
             timeRows.append(
-                f"<tr><td width='18' style='color:{dotColor}; font-size:16px;'>●</td>"
-                f"<td width='100%' style='padding-left:4px;'><b>{name}</b> <span style='color:{colors['onSurfaceVariant']};'>{rowKind}</span></td>"
-                f"<td style='padding-left:16px;' align='right' nowrap>{seconds // 60}m {seconds % 60}s</td></tr>"
+                f"<tr><td width='18' style='color:{dotColor}; font-size:14px;'>●</td>"
+                f"<td width='100%' style='padding-left:4px; color:{colors['onSurface']};'><b>{name}</b> <span style='color:{colors['onSurfaceVariant']};'>{kindText}</span></td>"
+                f"<td style='padding-left:16px; color:{colors['onSurface']};' align='right' nowrap>{durationText(seconds)}</td></tr>"
             )
-        self.timeList.setText("<table width='100%' cellspacing='0' cellpadding='3'>" + "".join(timeRows) + "</table>")
+        timeDropdown.body.setText("<table width='100%' cellspacing='0' cellpadding='3'>" + "".join(timeRows) + "</table>")
 
 
 
@@ -708,6 +809,8 @@ class Dashboard(QWidget):
 
 
     def startOrResumeSession(self):
+        if not session.resumeAllowed:
+            session.endSession()
         if session.sessionSecondsLeft() > 0:
             self.sessionCard.showSession(session.sessionSecondsLeft())
             self.sessionTimer.start()
@@ -718,7 +821,7 @@ class Dashboard(QWidget):
     def sessionChosen(self, minutes):
         self.sessionPrompt = None
         session.startSession(minutes)
-        self.sessionCard.totalSeconds = minutes * 60
+        self.sessionCard.totalSeconds = int(minutes * 60)
         self.sessionCard.showSession(session.sessionSecondsLeft())
         self.sessionTimer.start()
 

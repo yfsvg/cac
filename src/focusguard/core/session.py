@@ -8,6 +8,8 @@ CONTINUE_MINUTES = 30
 DEFAULT_BAIL_OUTS = 2
 MAX_BAIL_OUTS = 5
 
+resumeAllowed = False
+
 
 def startSession(minutes: int) -> None:
     savedMemory = memory.load()

@@ -7,7 +7,7 @@ import sys
 
 from PySide6.QtWidgets import QApplication
 
-from focusguard.core import keep_alive
+from focusguard.core import keep_alive, session
 from focusguard.core.models import PermissionState
 from focusguard.platform import get_backend
 from focusguard.ui.tray import Tray
@@ -22,6 +22,9 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     keep_alive.stopCtrlC()
     keep_alive.runWithoutTerminal()
+    if keep_alive.alreadyRunning():
+        return
+    session.resumeAllowed = "--resume" in sys.argv
     app = QApplication(sys.argv)
     app.setApplicationName("FocusGuard")
     app.setQuitOnLastWindowClosed(False)

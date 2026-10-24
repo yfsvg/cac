@@ -53,6 +53,7 @@ QLabel#ToastHint { color: @onSurfaceVariant; font-size: 12px; font-weight: 400; 
 """
 
 PRESETS = [("30 min", 30), ("1 hour", 60), ("2 hours", 120), ("3 hours", 180)]
+TEST_SECONDS = 15
 TOAST_SECONDS = 10
 
 
@@ -107,6 +108,8 @@ class SessionPrompt(QWidget):
 
         startButton = QPushButton("Start", objectName="BackButton", cursor=Qt.CursorShape.PointingHandCursor)
         startButton.clicked.connect(self.start)
+        testButton = QPushButton("15 sec (testing)", objectName="Preset", cursor=Qt.CursorShape.PointingHandCursor)
+        testButton.clicked.connect(self.startTest)
 
         self.box = QFrame(self, objectName="Box")
         self.box.setFixedWidth(420)
@@ -119,6 +122,7 @@ class SessionPrompt(QWidget):
         boxLayout.addWidget(self.slider)
         boxLayout.addWidget(self.choiceLabel)
         boxLayout.addWidget(startButton)
+        boxLayout.addWidget(testButton)
         self.updateChoice()
         self.box.adjustSize()
         screen = self.geometry()
@@ -146,6 +150,10 @@ class SessionPrompt(QWidget):
     def start(self):
         self.hide()
         self.whenDone(self.chosenMinutes())
+
+    def startTest(self):
+        self.hide()
+        self.whenDone(TEST_SECONDS / 60)
 
     def closeEvent(self, event):
         event.ignore()
