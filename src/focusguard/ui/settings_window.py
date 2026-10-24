@@ -227,12 +227,13 @@ def askForPin(parent, mainStyle):
 
 
 class SettingsPage(QWidget):
-    def __init__(self, mainStyle, goBack, onMemoryCleared=None):
+    def __init__(self, mainStyle, goBack, onMemoryCleared=None, onForceQuit=None):
         super().__init__()
         from focusguard.ui.dashboard import Dropdown, label
 
         self.mainStyle = mainStyle
         self.onMemoryCleared = onMemoryCleared
+        self.onForceQuit = onForceQuit
         self.setStyleSheet(applyTheme(SETTINGS_STYLE))
 
         scroll = QScrollArea(widgetResizable=True)
@@ -304,6 +305,16 @@ class SettingsPage(QWidget):
         parentRow.addWidget(self.turnOffButton)
         parentRow.addStretch()
         layout.addLayout(parentRow)
+        layout.addSpacing(8)
+
+        layout.addWidget(label("Testing", "Section"))
+        layout.addWidget(label("Only for the testing phase. Completely closes FocusGuard right away.", "Streak"))
+        forceQuitRow = QHBoxLayout()
+        forceQuitButton = QPushButton("Force quit", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
+        forceQuitButton.clicked.connect(self.forceQuit)
+        forceQuitRow.addWidget(forceQuitButton)
+        forceQuitRow.addStretch()
+        layout.addLayout(forceQuitRow)
         layout.addSpacing(8)
 
         if os.environ.get("FOCUSGUARD_DEBUG") == "1":
@@ -423,6 +434,10 @@ class SettingsPage(QWidget):
         enforcement.saveBreakSettings(self.breakCountSlider.value(), self.breakLengthSlider.value())
         markChanged("Absolute Time Limits")
         self.updateBreakLabels()
+
+    def forceQuit(self):
+        if self.onForceQuit is not None:
+            self.onForceQuit()
 
     def makeTab(self):
         tab = QWidget()

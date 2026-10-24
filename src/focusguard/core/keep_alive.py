@@ -13,7 +13,9 @@ helperTimer = None
 
 
 def isDebugMode() -> bool:
-    return os.environ.get("FOCUSGUARD_DEBUG") == "1"
+    if os.environ.get("FOCUSGUARD_DEBUG") == "1":
+        return True
+    return "debugpy" in sys.modules
 
 
 def isFrozen() -> bool:

@@ -584,7 +584,7 @@ class Dashboard(QWidget):
 
 
     def openSettings(self) -> None:
-        self.settingsPage = SettingsPage(STYLE, self.closeSettings, self.memoryCleared)
+        self.settingsPage = SettingsPage(STYLE, self.closeSettings, self.memoryCleared, self.quitFocusGuard)
         self.pages.addWidget(self.settingsPage)
         self.pages.setCurrentWidget(self.settingsPage)
 
