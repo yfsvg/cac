@@ -1,6 +1,9 @@
 # massive list of material you themes. Palette generated with claude
 # FOR THIS PROJECT we're probably not going to edit this for dark mode but its a nice way to keep coding simple with the new material you design
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QGuiApplication
+
 COLORS = {
     "primary": "#6750A4",
     "onPrimary": "#FFFFFF",
@@ -96,6 +99,24 @@ def getColors():
     if currentTheme == "dark":
         return DARK
     return COLORS
+
+
+def systemTheme():
+    if QGuiApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark:
+        return "dark"
+    return "light"
+
+
+def resolveTheme(choice, systemThemeName):
+    if choice == "system":
+        return systemThemeName
+    return choice
+
+
+def choiceFor(themeName, systemThemeName):
+    if themeName == systemThemeName:
+        return "system"
+    return themeName
 
 
 

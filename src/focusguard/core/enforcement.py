@@ -12,11 +12,13 @@ class Enforcer:
         if self.notify is not None:
             self.notify("FocusGuard", text)
 
-    def checkApp(self, window, appKind, secondsUsed):
+    def checkApp(self, window, appKind, secondsUsed, siteName=None):
         if appKind != "unproductive":
             return False
 
         appName = window.app_name
+        if siteName is not None:
+            appName = siteName
         if secondsUsed >= WARNING:
             if appName not in self.alreadyWarned:
                 self.alreadyWarned.append(appName)
@@ -26,7 +28,10 @@ class Enforcer:
             return False
 
         self.sendNotification("Closing " + appName + " for now. Take a breath, you've got this.")
-        self.backend.close_app(window.pid)
+        if siteName is None:
+            self.backend.close_app(window.pid)
+        else:
+            self.backend.close_tab(window)
         if appName in self.alreadyWarned:
             self.alreadyWarned.remove(appName)
         return True

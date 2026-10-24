@@ -6,7 +6,9 @@ from __future__ import annotations
 import os
 from urllib.parse import urlsplit
 
+from focusguard.core.ignored_apps import IGNORED_APPS
 from focusguard.core.unproductive_apps import UNPRODUCTIVE_APPS
+from focusguard.ai.site_memory import siteCategory
 
 
 def siteRoot(url: str | None) -> str | None:
@@ -33,10 +35,12 @@ def siteRoot(url: str | None) -> str | None:
     return hostName
 
 
+def isUnproductiveSite(site: str | None) -> bool:
+    return siteCategory(site) == "unproductive"
 
 
-
-
+def isIgnoredApp(window) -> bool:
+    return window.app_id.lower() in IGNORED_APPS
 
 
 def possibleNames(window) -> list[str]:

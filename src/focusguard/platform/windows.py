@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 import logging
 import subprocess
+import time
 import winreg
 from ctypes import wintypes
 from pathlib import Path
@@ -12,7 +13,7 @@ from pathlib import Path
 import psutil
 
 from focusguard.core.models import ActiveWindow, PermissionState, RunningApp
-from focusguard.platform.base import PlatformBackend
+from focusguard.platform.base import PlatformBackend, grab_region
 
 log = logging.getLogger(__name__)
 
@@ -69,6 +70,11 @@ SWP_NOMOVE = 0x0002
 SWP_NOACTIVATE = 0x0010
 SWP_FRAMECHANGED = 0x0020
 LWA_ALPHA = 0x00000002
+VK_CONTROL = 0x11
+VK_W = 0x57
+KEYEVENTF_KEYUP = 0x0002
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+ERROR_INSUFFICIENT_BUFFER = 122
 
 WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 
@@ -93,7 +99,14 @@ user32.SetWindowPos.argtypes = [
 ]
 user32.SetLayeredWindowAttributes.argtypes = [wintypes.HWND, wintypes.COLORREF, wintypes.BYTE, wintypes.DWORD]
 user32.GetLastInputInfo.argtypes = [ctypes.POINTER(LASTINPUTINFO)]
+user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ctypes.c_size_t]
 kernel32.GetTickCount.restype = wintypes.DWORD
+kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+kernel32.OpenProcess.restype = wintypes.HANDLE
+kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+kernel32.GetApplicationUserModelId.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.UINT), wintypes.LPWSTR]
+kernel32.GetApplicationUserModelId.restype = wintypes.LONG
 
 # The *LongPtr variants only exist in 64-bit user32.
 _GetWindowLong = getattr(user32, "GetWindowLongPtrW", user32.GetWindowLongW)
@@ -146,6 +159,8 @@ class WindowsBackend(PlatformBackend):
                 edit = _find_address_bar(root) if root else None
                 if edit is None:
                     return None
+                if edit.HasKeyboardFocus:
+                    return None
                 return edit.GetValuePattern().Value.strip() or None
         except Exception:  # UIA throws COM errors when windows vanish mid-query
             log.debug("UI Automation lookup failed for %s", window.app_name, exc_info=True)
@@ -195,6 +210,20 @@ class WindowsBackend(PlatformBackend):
         except psutil.Error:
             return False
 
+    def close_tab(self, window: ActiveWindow) -> bool:
+        if not window.window_handle:
+            return False
+        if user32.GetForegroundWindow() != window.window_handle:
+            user32.SetForegroundWindow(window.window_handle)
+            time.sleep(0.2)
+        if user32.GetForegroundWindow() != window.window_handle:
+            return False
+        user32.keybd_event(VK_CONTROL, 0, 0, 0)
+        user32.keybd_event(VK_W, 0, 0, 0)
+        user32.keybd_event(VK_W, 0, KEYEVENTF_KEYUP, 0)
+        user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
+        return True
+
     def get_window_rect(self, window: ActiveWindow) -> tuple[int, int, int, int] | None:
         if not window.window_handle:
             return None
@@ -208,6 +237,14 @@ class WindowsBackend(PlatformBackend):
             int((rect.right - rect.left) / scale),
             int((rect.bottom - rect.top) / scale),
         )
+
+    def capture_window(self, window: ActiveWindow) -> bytes | None:
+        if not window.window_handle:
+            return None
+        rect = wintypes.RECT()
+        if not user32.GetWindowRect(wintypes.HWND(window.window_handle), ctypes.byref(rect)):
+            return None
+        return grab_region((rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top))
 
     def hide_from_taskbar(self) -> None:
         # Nothing app-wide on Windows: WS_EX_TOOLWINDOW (set per window above) keeps windows
@@ -329,26 +366,95 @@ def _proc_exe(proc: psutil.Process) -> str | None:
 
 
 def _friendly_name(proc: psutil.Process, exe: str | None) -> str:
-    """The exe's FileDescription ("Google Chrome"), falling back to its file name ("chrome")."""
     name = _proc_name(proc)
+    aumid = _app_user_model_id(proc.pid)
+    if aumid:
+        display = _packaged_app_name(aumid)
+        if display:
+            return display
+    if exe:
+        desc = _file_description(exe)
+        if desc:
+            return _tidy_description(desc)
     if name in BROWSERS:
         return BROWSERS[name]
     if exe:
-        try:
-            import win32api
-
-            langs = win32api.GetFileVersionInfo(exe, r"\VarFileInfo\Translation")
-            if langs:
-                lang, codepage = langs[0]
-                desc = win32api.GetFileVersionInfo(
-                    exe, rf"\StringFileInfo\{lang:04x}{codepage:04x}\FileDescription"
-                )
-                if desc:
-                    return str(desc)
-        except Exception:  # pywin32 missing, or the exe has no version resource
-            pass
         return Path(exe).stem
-    return Path(name).stem if name else "Unknown"
+    if name:
+        return Path(name).stem
+    return "Unknown"
+
+
+def _file_description(exe: str) -> str | None:
+    try:
+        import win32api
+
+        langs = win32api.GetFileVersionInfo(exe, r"\VarFileInfo\Translation")
+        if not langs:
+            return None
+        lang, codepage = langs[0]
+        desc = win32api.GetFileVersionInfo(exe, rf"\StringFileInfo\{lang:04x}{codepage:04x}\FileDescription")
+        desc = str(desc or "").strip()
+        if desc == "":
+            return None
+        return desc
+    except Exception:
+        return None
+
+
+def _tidy_description(desc: str) -> str:
+    parts = desc.split(".")
+    if len(parts) < 2:
+        return desc
+    for part in parts:
+        if part == "" or not part[0].isupper() or not part.isalnum():
+            return desc
+    return desc.replace(".", " ")
+
+
+def _app_user_model_id(pid: int) -> str | None:
+    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not handle:
+        return None
+    try:
+        length = wintypes.UINT(0)
+        if kernel32.GetApplicationUserModelId(handle, ctypes.byref(length), None) != ERROR_INSUFFICIENT_BUFFER:
+            return None
+        buf = ctypes.create_unicode_buffer(length.value)
+        if kernel32.GetApplicationUserModelId(handle, ctypes.byref(length), buf) != 0:
+            return None
+        return buf.value
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+_packaged_names: dict[str, str | None] = {}
+
+
+def _packaged_app_name(aumid: str) -> str | None:
+    if aumid in _packaged_names:
+        return _packaged_names[aumid]
+    try:
+        import pythoncom
+        from win32com.shell import shell, shellcon
+    except ImportError:
+        return None
+    try:
+        pythoncom.CoInitialize()
+        initialized = True
+    except pythoncom.com_error:
+        initialized = False
+    display = None
+    try:
+        item = shell.SHCreateItemFromParsingName(rf"shell:AppsFolder\{aumid}", None, shell.IID_IShellItem)
+        display = item.GetDisplayName(shellcon.SIGDN_NORMALDISPLAY) or None
+    except pythoncom.com_error:
+        display = None
+    finally:
+        if initialized:
+            pythoncom.CoUninitialize()
+    _packaged_names[aumid] = display
+    return display
 
 
 def _find_address_bar(root):

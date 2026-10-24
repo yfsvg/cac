@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QProgressBar,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -27,44 +28,51 @@ REASONS = [
 SHAKE = [12, -12, 9, -9, 5, -5, 0]
 
 STYLE = """
-    QFrame#Box {
-        background-color: @surfaceContainerHigh;
-        border: none;
-        border-radius: 28px;
-    }
-    QLabel { color: @onSurface; font-size: 22px; font-weight: 600; }
-    QLabel#Hint { color: @onSurfaceVariant; font-size: 14px; font-weight: 400; }
-    QPushButton {
-        color: @onSecondaryContainer;
-        font-size: 14px;
-        font-weight: 500;
-        text-align: left;
-        padding: 10px 16px;
-        background-color: @secondaryContainer;
-        border: none;
-        border-radius: 16px;
-    }
-    QPushButton:hover { background-color: @primaryContainer; color: @onPrimaryContainer; }
-    QPushButton#Emergency { background-color: @errorContainer; color: @onErrorContainer; }
-    QPushButton#BackButton {
-        text-align: center;
-        background-color: @primary;
-        color: @onPrimary;
-        font-weight: 600;
-    }
-    QPushButton#BackButton:hover { background-color: @primaryHover; color: @onPrimary; }
-    QPushButton#OpenButton { text-align: center; background-color: @tertiaryContainer; color: @onTertiaryContainer; }
-    QPushButton:disabled { background-color: @surfaceContainerHighest; color: @outline; }
-    QLineEdit {
-        color: @onSurface;
-        font-size: 14px;
-        padding: 10px 14px;
-        background-color: @surfaceContainerHighest;
-        border: none;
-        border-bottom: 2px solid @primary;
-        border-top-left-radius: 8px;
-        border-top-right-radius: 8px;
-    }
+QFrame#Box {
+    background-color: @surfaceContainerHigh;
+    border: none;
+    border-radius: 28px;
+}
+QLabel { color: @onSurface; font-size: 22px; font-weight: 600; }
+QLabel#Hint { color: @onSurfaceVariant; font-size: 14px; font-weight: 400; }
+QPushButton {
+    color: @onSecondaryContainer;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: left;
+    padding: 10px 16px;
+    background-color: @secondaryContainer;
+    border: none;
+    border-radius: 16px;
+}
+QPushButton:hover { background-color: @primaryContainer; color: @onPrimaryContainer; }
+QPushButton#Emergency { background-color: @errorContainer; color: @onErrorContainer; }
+QPushButton#BackButton {
+    text-align: center;
+    background-color: @primary;
+    color: @onPrimary;
+    font-weight: 600;
+}
+QPushButton#BackButton:hover { background-color: @primaryHover; color: @onPrimary; }
+QPushButton#OpenButton { text-align: center; background-color: @tertiaryContainer; color: @onTertiaryContainer; }
+QPushButton#OpenButton:disabled { background-color: @surfaceContainerHighest; color: @outline; }
+QPushButton:disabled { background-color: @surfaceContainerHighest; color: @outline; }
+QProgressBar {
+    background-color: @surfaceContainerHighest;
+    border: none;
+    border-radius: 3px;
+}
+QProgressBar::chunk { background-color: @primary; border-radius: 3px; }
+QLineEdit {
+    color: @onSurface;
+    font-size: 14px;
+    padding: 10px 14px;
+    background-color: @surfaceContainerHighest;
+    border: none;
+    border-bottom: 2px solid @primary;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+}
 """
 
 
@@ -128,6 +136,13 @@ class PauseScreen(QWidget):
         boxLayout.addWidget(self.reasonButtons)
         boxLayout.addWidget(self.otherBox)
         boxLayout.addLayout(bottomRow)
+        self.progressBar = QProgressBar()
+        self.progressBar.setRange(0, COUNTDOWN * 10)
+        self.progressBar.setValue(0)
+        self.progressBar.setTextVisible(False)
+        self.progressBar.setFixedHeight(6)
+        self.progressBar.hide()
+        boxLayout.addWidget(self.progressBar)
         self.box.adjustSize()
 
         self.appRect = appRect
@@ -135,6 +150,8 @@ class PauseScreen(QWidget):
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.countDown)
+        self.fillTimer = QTimer(self)
+        self.fillTimer.timeout.connect(self.fillOpenButton)
         self.shakeTimer = QTimer(self)
         self.shakeTimer.timeout.connect(self.shakeMove)
 
@@ -207,9 +224,18 @@ class PauseScreen(QWidget):
         self.hint.hide()
         self.title.setText("Take a breath... " + str(self.secondsLeft) + " seconds")
         self.openButton.show()
+        self.progressBar.show()
         self.box.adjustSize()
         self.placeBox()
         self.timer.start(1000)
+        self.fillStep = 0
+        self.fillTimer.start(100)
+
+    def fillOpenButton(self):
+        self.fillStep = self.fillStep + 1
+        self.progressBar.setValue(self.fillStep)
+        if self.fillStep >= COUNTDOWN * 10:
+            self.fillTimer.stop()
 
     def countDown(self):
         self.secondsLeft = self.secondsLeft - 1
@@ -227,6 +253,7 @@ class PauseScreen(QWidget):
 
     def finishWithChoice(self, choice):
         self.timer.stop()
+        self.fillTimer.stop()
         self.hide()
         self.whenDone(choice)
 
