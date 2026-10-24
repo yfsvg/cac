@@ -31,7 +31,7 @@ from PySide6.QtGui import QFontDatabase, QPainter, QPaintEvent
 from focusguard.core.classifier import classifyTypeOfApp
 from focusguard.core.enforcement import Enforcer
 from focusguard.storage import memory
-from focusguard.ui.pause_screen import PauseScreen
+from focusguard.ui.pause_screen import BREAK_SECONDS, CheckInScreen, PauseScreen
 from focusguard.ui.theme import applyTheme, getColors, getTheme, setTheme
 from focusguard.platform import get_backend
 
@@ -289,6 +289,11 @@ class Dashboard(QWidget):
         self.enforcer = Enforcer(self.backend)
         self.pauseScreen = None
         self.pausedWindow = None
+        # bounce-back: after a break starts, check in every 5 minutes until you're ready
+        self.checkInScreen = None
+        self.breakWindow = None
+        self.timesAsked = 0
+        self.breakTimer = QTimer(self, singleShot=True, interval=BREAK_SECONDS * 1000, timeout=self.showCheckIn)
         self.lastApp = None
         self.emergencyApp = None
         self.passedAt = {}
@@ -324,6 +329,8 @@ class Dashboard(QWidget):
             return
         if self.pauseScreen is not None:
             return
+        if self.checkInScreen is not None:
+            return
         appKind = classifyTypeOfApp(self.backend, window)
 
         switchedApp = window.app_name != self.lastApp
@@ -341,7 +348,12 @@ class Dashboard(QWidget):
         key = (window.app_name, appKind)
         self.trackedTimes[key] = self.trackedTimes.get(key, 0) + 1
         self.usedSeconds[window.app_name] = self.usedSeconds.get(window.app_name, 0) + 1
-        if self.enforcer.checkApp(window, appKind, self.usedSeconds[window.app_name]):
+        onBreak = False
+        if self.breakWindow is not None:
+            if window.app_name == self.breakWindow.app_name:
+                onBreak = True
+        # the app you're on a break with doesn't get auto-closed, the check-in handles it instead
+        if not onBreak and self.enforcer.checkApp(window, appKind, self.usedSeconds[window.app_name]):
             self.usedSeconds[window.app_name] = 0
             self.passedAt.pop(window.app_name, None)
             self.lastApp = None
@@ -401,6 +413,30 @@ class Dashboard(QWidget):
             self.usedSeconds[window.app_name] = 0
         if choice == "emergency":
             self.emergencyApp = window.app_name
+        if choice == "open":
+            self.breakWindow = window
+            self.timesAsked = 0
+            self.breakTimer.start()
+
+    def showCheckIn(self):
+        self.checkInScreen = CheckInScreen(self.breakWindow.app_name, self.timesAsked, self.checkInDone)
+        self.checkInScreen.popUp()
+
+    def checkInDone(self, choice):
+        self.checkInScreen = None
+        window = self.breakWindow
+        if choice == "bounceBack":
+            self.backend.close_app(window.pid)
+            self.lastApp = None
+            self.breakWindow = None
+            # tree isn't built yet, it'll grow from this count
+            savedMemory = memory.load()
+            savedMemory["bounceBacks"] = savedMemory.get("bounceBacks", 0) + 1
+            memory.save(savedMemory)
+        else:
+            # continuing never costs anything, just ask again in another 5 minutes
+            self.timesAsked = self.timesAsked + 1
+            self.breakTimer.start()
 
 
 

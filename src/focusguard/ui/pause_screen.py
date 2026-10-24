@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 from focusguard.platform import get_backend
 from focusguard.ui.theme import applyTheme
 
-COUNTDOWN = 15
+COUNTDOWN = 3 # probably turn this up later, 5 is just for testing
 
 REASONS = [
     "Taking a short break",
@@ -27,48 +27,49 @@ REASONS = [
 SHAKE = [12, -12, 9, -9, 5, -5, 0]
 
 STYLE = """
-QFrame#Box {
-    background-color: @surfaceContainerHigh;
-    border: none;
-    border-radius: 28px;
-}
-QLabel { color: @onSurface; font-size: 22px; font-weight: 600; }
-QLabel#Hint { color: @onSurfaceVariant; font-size: 14px; font-weight: 400; }
-QPushButton {
-    color: @onSecondaryContainer;
-    font-size: 14px;
-    font-weight: 500;
-    text-align: left;
-    padding: 10px 16px;
-    background-color: @secondaryContainer;
-    border: none;
-    border-radius: 16px;
-}
-QPushButton:hover { background-color: @primaryContainer; color: @onPrimaryContainer; }
-QPushButton#Emergency { background-color: @errorContainer; color: @onErrorContainer; }
-QPushButton#BackButton {
-    text-align: center;
-    background-color: @primary;
-    color: @onPrimary;
-    font-weight: 600;
-}
-QPushButton#BackButton:hover { background-color: @primaryHover; color: @onPrimary; }
-QPushButton#OpenButton { text-align: center; background-color: @tertiaryContainer; color: @onTertiaryContainer; }
-QPushButton:disabled { background-color: @surfaceContainerHighest; color: @outline; }
-QLineEdit {
-    color: @onSurface;
-    font-size: 14px;
-    padding: 10px 14px;
-    background-color: @surfaceContainerHighest;
-    border: none;
-    border-bottom: 2px solid @primary;
-    border-top-left-radius: 8px;
-    border-top-right-radius: 8px;
-}
+    QFrame#Box {
+        background-color: @surfaceContainerHigh;
+        border: none;
+        border-radius: 28px;
+    }
+    QLabel { color: @onSurface; font-size: 22px; font-weight: 600; }
+    QLabel#Hint { color: @onSurfaceVariant; font-size: 14px; font-weight: 400; }
+    QPushButton {
+        color: @onSecondaryContainer;
+        font-size: 14px;
+        font-weight: 500;
+        text-align: left;
+        padding: 10px 16px;
+        background-color: @secondaryContainer;
+        border: none;
+        border-radius: 16px;
+    }
+    QPushButton:hover { background-color: @primaryContainer; color: @onPrimaryContainer; }
+    QPushButton#Emergency { background-color: @errorContainer; color: @onErrorContainer; }
+    QPushButton#BackButton {
+        text-align: center;
+        background-color: @primary;
+        color: @onPrimary;
+        font-weight: 600;
+    }
+    QPushButton#BackButton:hover { background-color: @primaryHover; color: @onPrimary; }
+    QPushButton#OpenButton { text-align: center; background-color: @tertiaryContainer; color: @onTertiaryContainer; }
+    QPushButton:disabled { background-color: @surfaceContainerHighest; color: @outline; }
+    QLineEdit {
+        color: @onSurface;
+        font-size: 14px;
+        padding: 10px 14px;
+        background-color: @surfaceContainerHighest;
+        border: none;
+        border-bottom: 2px solid @primary;
+        border-top-left-radius: 8px;
+        border-top-right-radius: 8px;
+    }
 """
 
 
 class PauseScreen(QWidget):
+
     def __init__(self, appName, appRect, whenDone):
         super().__init__()
         self.whenDone = whenDone
@@ -85,9 +86,10 @@ class PauseScreen(QWidget):
         self.setStyleSheet(applyTheme(STYLE))
         self.setGeometry(QApplication.primaryScreen().geometry())
 
-        self.title = QLabel("Why are you opening " + appName + "?")
+
+        self.title = QLabel("Taking a break with " + appName + "?")
         self.title.setWordWrap(True)
-        self.hint = QLabel("Pick a reason to use " + appName, objectName="Hint")
+        self.hint = QLabel("That's okay! Just let us know what's up.", objectName="Hint")
 
         self.reasonButtons = QWidget()
         reasonLayout = QVBoxLayout(self.reasonButtons)
@@ -100,7 +102,7 @@ class PauseScreen(QWidget):
             reasonLayout.addWidget(button)
 
         self.otherBox = QLineEdit()
-        self.otherBox.setPlaceholderText("Type your reason and press Enter")
+        self.otherBox.setPlaceholderText("Tell us in a few words, then press Enter")
         self.otherBox.returnPressed.connect(self.otherTyped)
         self.otherBox.hide()
 
@@ -203,7 +205,7 @@ class PauseScreen(QWidget):
         self.reasonButtons.hide()
         self.otherBox.hide()
         self.hint.hide()
-        self.title.setText("Wait " + str(self.secondsLeft) + " seconds")
+        self.title.setText("Take a breath... " + str(self.secondsLeft) + " seconds")
         self.openButton.show()
         self.box.adjustSize()
         self.placeBox()
@@ -211,10 +213,10 @@ class PauseScreen(QWidget):
 
     def countDown(self):
         self.secondsLeft = self.secondsLeft - 1
-        self.title.setText("Wait " + str(self.secondsLeft) + " seconds")
+        self.title.setText("Take a breath... " + str(self.secondsLeft) + " seconds")
         if self.secondsLeft <= 0:
             self.timer.stop()
-            self.title.setText("You can open it now")
+            self.title.setText("All set, enjoy your break!")
             self.openButton.setEnabled(True)
 
     def openAnyway(self):
@@ -227,6 +229,116 @@ class PauseScreen(QWidget):
         self.timer.stop()
         self.hide()
         self.whenDone(choice)
+
+    def closeEvent(self, event):
+        event.ignore()
+
+
+
+
+
+
+
+
+
+
+
+
+# Check-in code every five minutes (change as break_seconds)
+# if you come back and get to work is what youll grow el tree, but no hurt if you cont
+
+BREAK_SECONDS = 300
+
+TREE_REMINDER = "Saying continue won't harm your tree!"
+
+# a different gentle message each time it asks
+CHECK_IN_MESSAGES = [
+    "How you feeling now? It's alright if you're still stressed, don't worry! Take your time."
+    "Are you feeling better? If not, don't worry. Studies show that forcing yourself to work while you're down doesn't actually make you more productive, so take your time!"
+    "Your 5 minute break is up. Are you feeling alright and ready to get back to work, or still feeling down?",
+    "Hey, just checking in again. How are you feeling? Ready to jump back in, or need a little longer? Deadass no pressure.",
+    "No rush. Feeling any better, or do you want another 5 minutes? It's totally natural if you feel like you need more time, and it's good for your mind to relax.",
+    "It's okay if you need more time. Ready to give work another go, or still not feeling it? Either way it's ok.",
+
+]
+
+
+class CheckInScreen(QWidget):
+    def __init__(self, appName, timesAsked, whenDone):
+        super().__init__()
+        self.whenDone = whenDone
+
+        self.setWindowFlags( Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Window )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont))
+        
+        self.setStyleSheet(applyTheme(STYLE))
+        self.setGeometry(QApplication.primaryScreen().geometry())
+
+
+        messageIndex = timesAsked % len(CHECK_IN_MESSAGES)
+        title = QLabel("5 Minute Check In")
+        message = QLabel(CHECK_IN_MESSAGES[messageIndex], objectName="Hint")
+        message.setWordWrap(True)
+        treeReminder = QLabel(TREE_REMINDER, objectName="Hint")
+        treeReminder.setWordWrap(True)
+
+# display options
+        readyButton = QPushButton("I'm ready, back to work", objectName="BackButton", cursor=Qt.CursorShape.PointingHandCursor)
+        readyButton.clicked.connect(self.bounceBack)
+        continueButton = QPushButton("Still feeling down, continue break", objectName="OpenButton", cursor=Qt.CursorShape.PointingHandCursor)
+        continueButton.clicked.connect(self.continueBreak)
+
+
+
+
+
+        self.box = QFrame(self, objectName="Box")
+        self.box.setFixedWidth(360)
+        boxLayout = QVBoxLayout(self.box)
+        boxLayout.setContentsMargins(24, 24, 24, 24)
+
+
+        boxLayout.setSpacing(12)
+        boxLayout.addWidget(title)
+        boxLayout.addWidget(message)
+        boxLayout.addWidget(treeReminder)
+        boxLayout.addWidget(readyButton)
+        boxLayout.addWidget(continueButton)
+
+
+        self.box.adjustSize()
+
+
+        screen = self.geometry()
+        self.box.move(screen.width() // 2 - self.box.width() // 2, screen.height() // 2 - self.box.height() // 2)
+
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(29, 27, 32, 140))  # M3 scrim
+
+
+
+    def popUp(self):
+        self.show()
+        try:
+            get_backend().float_above_everything(int(self.winId()))
+        except Exception:
+            pass
+        self.raise_()
+        self.activateWindow()
+
+
+
+    def bounceBack(self):
+        self.hide()
+        self.whenDone("bounceBack")
+
+
+    def continueBreak(self):
+        self.hide()
+        self.whenDone("continue")
 
     def closeEvent(self, event):
         event.ignore()

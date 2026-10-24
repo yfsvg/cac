@@ -20,12 +20,12 @@ class Enforcer:
         if secondsUsed >= WARNING:
             if appName not in self.alreadyWarned:
                 self.alreadyWarned.append(appName)
-                self.sendNotification(appName + " is unproductive. It will close in " + str(LIMIT - secondsUsed) + " seconds.")
+                self.sendNotification("Hey, you've been on " + appName + " for a little while. It'll close in " + str(LIMIT - secondsUsed) + " seconds, no stress, your work will be right where you left it.")
 
         if secondsUsed < LIMIT:
             return False
 
-        self.sendNotification("Time's up! Closing " + appName + ".")
+        self.sendNotification("Closing " + appName + " for now. Take a breath, you've got this.")
         self.backend.close_app(window.pid)
         if appName in self.alreadyWarned:
             self.alreadyWarned.remove(appName)
