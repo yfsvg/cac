@@ -103,6 +103,14 @@ class PlatformBackend(ABC):
     def request_permissions(self) -> None:
         """Trigger the OS prompts for any missing permissions."""
 
+    def is_admin(self) -> bool:
+        """Whether FocusGuard has the admin rights it needs. Only Windows asks for them."""
+        return True
+
+    def run_as_admin(self, command: list[str]) -> bool:
+        """Start `command` with admin rights after asking the user. Returns True if they said yes."""
+        return False
+
     # ---- shared helpers --------------------------------------------------------------------
 
     @staticmethod

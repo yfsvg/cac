@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 import os
 import signal
 import subprocess
@@ -6,18 +7,16 @@ import sys
 import time
 
 import psutil
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QCoreApplication, QTimer
 
+from focusguard.core.debug_mode import isDebugMode
+from focusguard.platform import get_backend
 from focusguard.storage.memory import dataDirectory
+
+log = logging.getLogger(__name__)
 
 helper = None
 helperTimer = None
-
-
-def isDebugMode() -> bool:
-    if os.environ.get("FOCUSGUARD_DEBUG") == "1":
-        return True
-    return "debugpy" in sys.modules
 
 
 def isFrozen() -> bool:
@@ -62,6 +61,23 @@ def stopCtrlC() -> None:
     if sys.platform != "win32":
         signal.signal(signal.SIGHUP, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
+
+
+def quitOnCtrlC() -> None:
+    if isDebugMode():
+        signal.signal(signal.SIGINT, lambda signalNumber, frame: QCoreApplication.quit())
+
+
+def makeSureIsAdmin() -> None:
+    if isDebugMode():
+        return
+    backend = get_backend()
+    if backend.is_admin():
+        return
+    if backend.run_as_admin(appCommand() + sys.argv[1:]):
+        sys.exit(0)
+    log.warning("FocusGuard needs administrator rights to run, closing")
+    sys.exit(1)
 
 
 def startedFromTerminal() -> bool:
