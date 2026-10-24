@@ -136,6 +136,8 @@ def saveLockedSettings(lockedSettings):
     memory.save(savedMemory)
 
 
+# Swaps a dropdown's placeholder text for real controls
+
 def replaceBody(dropdown, newBody):
     dropdown.layout().removeWidget(dropdown.body)
     dropdown.body.deleteLater()
@@ -309,7 +311,7 @@ class SettingsPage(QWidget):
         layout.addLayout(parentRow)
         layout.addSpacing(8)
 
-        # debug tools for testing, these skip parental controls so take them out before release
+        # Debug tools for testing, these skip parental controls so take them out before release
         layout.addWidget(label("Debug", "Section"))
         layout.addWidget(label("Testing tools. These skip parental controls.", "Streak"))
         debugRow = QHBoxLayout()
@@ -365,6 +367,8 @@ class SettingsPage(QWidget):
                 markChanged("Lock " + settingName)
         saveLockedSettings(lockedSettings)
         self.updateParentSection()
+
+    # Absolute time limits, break count + break length sliders
 
     def makeBreakLimits(self):
         from focusguard.ui.dashboard import label
@@ -447,6 +451,8 @@ class SettingsPage(QWidget):
         markChanged("Gemini API key")
         self.updateKeySection()
 
+    # Debug buttons, reset lock timers + clear all memory
+
     def refreshEverything(self):
         self.breakCountSlider.setValue(enforcement.getMaxBreaks())
         self.breakLengthSlider.setValue(enforcement.getBreakMinutes())
@@ -461,13 +467,13 @@ class SettingsPage(QWidget):
         self.refreshEverything()
 
     def clearAllMemory(self):
-        answer = QMessageBox.question(
+        clearAnswer = QMessageBox.question(
             self,
             "Clear all memory",
             "This deletes all saved settings, the parent PIN, streaks, break counts, tracked times and website verdicts. "
             "The Gemini API key is kept. This can't be undone.",
         )
-        if answer != QMessageBox.StandardButton.Yes:
+        if clearAnswer != QMessageBox.StandardButton.Yes:
             return
         memory.FILE.unlink(missing_ok=True)
         time_tracking.FILE.unlink(missing_ok=True)

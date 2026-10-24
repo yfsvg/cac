@@ -11,6 +11,7 @@
 import os
 import threading
 import time
+from datetime import date
 
 from PySide6.QtCore import QEasingCurve, QPointF, QPropertyAnimation, QRectF, Qt, QTimer, QVariantAnimation
 from PySide6.QtWidgets import (
@@ -35,7 +36,7 @@ from focusguard.ai.site_memory import siteCategory
 from focusguard.core.classifier import classifyTypeOfApp, isIgnoredApp, isUnproductiveSite, siteRoot
 from focusguard.core import enforcement
 from focusguard.core.enforcement import Enforcer
-from focusguard.storage import memory, streak, time_tracking
+from focusguard.storage import memory, time_tracking
 from focusguard.ui.settings_window import SettingsPage
 from focusguard.ui.pause_screen import BreakBadge, CheckInScreen, PauseScreen
 from focusguard.ui.theme import applyTheme, choiceFor, getColors, getTheme, resolveTheme, setTheme, systemTheme
@@ -54,6 +55,7 @@ LOREM = (
 GOOD = "@green"
 PERFECT = "@green"
 OK = "@orange"
+NO_DATA = "@onSurfaceVariant"
 
 STYLE = """
     QWidget#Dashboard {
@@ -144,7 +146,8 @@ class StatCard(QFrame):
         cardLayout = QVBoxLayout(self)
         cardLayout.setContentsMargins(8, 14, 8, 14)
         cardLayout.setSpacing(0)
-        cardLayout.addWidget(label(number, "BigNumber", centerAlign))
+        self.numberLabel = label(number, "BigNumber", centerAlign)
+        cardLayout.addWidget(self.numberLabel)
         cardLayout.addWidget(label(caption, "Caption", centerAlign))
         cardLayout.addStretch()
 
@@ -156,6 +159,54 @@ class StatCard(QFrame):
     def restyle(self) -> None:
         self.setStyleSheet(applyTheme(self.cardStyle))
         self.statusChip.setStyleSheet(applyTheme(self.chipStyle))
+
+    def setValues(self, number: str, status: str, statusColor: str) -> None:
+        self.numberLabel.setText(number)
+        self.statusChip.setText(status)
+        self.chipStyle = f"color: {statusColor};"
+        self.statusChip.setStyleSheet(applyTheme(self.chipStyle))
+
+
+
+
+# Stat card wording, always encouraging so it never feels like a punishment
+
+def focusedStatus(percent):
+    if percent is None:
+        return "No data yet", NO_DATA
+    if percent >= 90:
+        return "Perfect!", PERFECT
+    if percent >= 75:
+        return "Looking good!", GOOD
+    if percent >= 50:
+        return "Doing OK", OK
+    return "Keep going!", OK
+
+
+def hoursStatus(hours, goodHours):
+    if hours == 0:
+        return "Just getting started", NO_DATA
+    if hours >= goodHours:
+        return "Perfect!", PERFECT
+    if hours >= goodHours / 3:
+        return "Looking good!", GOOD
+    return "Doing OK", OK
+
+
+def reboundStatus(averageBreaks):
+    if averageBreaks is None:
+        return "No breaks yet", NO_DATA
+    if averageBreaks <= 1.5:
+        return "Perfect!", PERFECT
+    if averageBreaks <= 2.5:
+        return "Looking good!", GOOD
+    return "Doing OK", OK
+
+
+def numberText(value):
+    if value is None:
+        return "–"
+    return str(value)
 
 
 # Chevron header that opens/closes a paragraph underneath. No real content yet
@@ -383,7 +434,7 @@ class Dashboard(QWidget):
         heroLayout.setContentsMargins(24, 20, 24, 22)
         heroLayout.setSpacing(6)
         heroLayout.addWidget(label("Hello, User", "Hello"))
-        heroLayout.addWidget(label(streak.streakText(streak.markOpenedToday()), "Streak"))
+        heroLayout.addWidget(label(memory.streakText(memory.markOpenedToday()), "Streak"))
         layout.addWidget(heroCard)
         layout.addSpacing(8)
 
@@ -393,20 +444,22 @@ class Dashboard(QWidget):
         # Stats, daily (larp)
         layout.addWidget(label("Today’s Stats", "Section"))
         layout.addLayout(self.cardRow(["primary", "green", "tertiary"], [
-            ("97", "% time focused", "Looking good!", GOOD),
-            ("2.3", "Hours spent productive", "Perfect!", PERFECT),
-            ("0.3", "Hours spent unproductive", "Perfect!", PERFECT),
+            ("–", "% time focused", "No data yet", NO_DATA),
+            ("–", "Hours spent productive", "No data yet", NO_DATA),
+            ("–", "Average rebounding speed", "No data yet", NO_DATA),
         ]))
+        self.todayCards = self.statCards[-3:]
         layout.addWidget(Dropdown("Show more stats"))
         layout.addSpacing(8)
 
         # Stats, weekly
         layout.addWidget(label("Weekly Stats", "Section"))
         layout.addLayout(self.cardRow(["blue", "orange", "secondary"], [
-            ("90", "% time focused", "Looking good!", GOOD),
-            ("7", "Warnings", "Doing OK", OK),
-            ("0", "Bail-outs used", "Perfect!", PERFECT),
+            ("–", "% time focused", "No data yet", NO_DATA),
+            ("–", "Hours spent productive", "No data yet", NO_DATA),
+            ("–", "Average rebounding speed", "No data yet", NO_DATA),
         ]))
+        self.weekCards = self.statCards[-3:]
         layout.addWidget(Dropdown("Show more stats"))
         layout.addSpacing(8)
 
@@ -473,6 +526,7 @@ class Dashboard(QWidget):
         self.saveTimer.start()
         QApplication.instance().aboutToQuit.connect(self.saveTimes)
         self.showTimes()
+        self.refreshStats()
 
 
     def cardRow(self, colorFamilies, cards: list[tuple[str, str, str, str]]) -> QHBoxLayout:
@@ -594,10 +648,40 @@ class Dashboard(QWidget):
             self.trackedDay = time_tracking.todayName()
             self.trackedTimes = {}
             self.showTimes()
+        self.refreshStats()
 
     def memoryCleared(self) -> None:
         self.trackedTimes = {}
         self.timeList.setText("Nothing tracked yet")
+        self.refreshStats()
+
+
+
+
+    # Stats cards, refreshed every 10 seconds when times save + after every rebound
+
+    def refreshStats(self) -> None:
+        today = date.today()
+        allRebounds = memory.savedRebounds()
+        weekTimes = memory.weekTimes(self.trackedTimes, today)
+
+        todayPercent = memory.percentFocused(self.trackedTimes)
+        todayHours = memory.hoursProductive(self.trackedTimes)
+        todayRebound = memory.averageRebound(allRebounds, [today.isoformat()])
+        self.setCardRow(self.todayCards, todayPercent, todayHours, todayRebound, 3)
+
+        weekPercent = memory.percentFocused(weekTimes)
+        weekHours = memory.hoursProductive(weekTimes)
+        weekRebound = memory.averageRebound(allRebounds, memory.lastSevenDays(today))
+        self.setCardRow(self.weekCards, weekPercent, weekHours, weekRebound, 15)
+
+    def setCardRow(self, cards, percent, hours, averageBreaks, goodHours) -> None:
+        focusedText, focusedColor = focusedStatus(percent)
+        cards[0].setValues(numberText(percent), focusedText, focusedColor)
+        hoursText, hoursColor = hoursStatus(hours, goodHours)
+        cards[1].setValues(numberText(hours), hoursText, hoursColor)
+        reboundText, reboundColor = reboundStatus(averageBreaks)
+        cards[2].setValues(numberText(averageBreaks), reboundText, reboundColor)
 
     def showTimes(self) -> None:
         if not self.trackedTimes:
@@ -741,7 +825,10 @@ class Dashboard(QWidget):
 
     def showCheckIn(self):
         self.breakBadge.stopBreak()
+
+        # Already went back to work on your own, still counts as a rebound
         if self.currentKind != "unproductive":
+            self.recordRebound()
             self.endBreak()
             return
 
@@ -796,9 +883,23 @@ class Dashboard(QWidget):
             self.recordBounceBack()
 
     def recordBounceBack(self):
+        self.recordRebound()
         savedMemory = memory.load()
         savedMemory["bounceBacks"] = savedMemory.get("bounceBacks", 0) + 1
         memory.save(savedMemory)
+
+
+
+
+    # Stats, rebounding speed (how many break periods it took to get back to work)
+
+    def recordRebound(self):
+        savedMemory = memory.load()
+        allRebounds = savedMemory.get("rebounds", [])
+        allRebounds.append({"day": time_tracking.todayName(), "breakPeriods": self.timesAsked + 1})
+        savedMemory["rebounds"] = allRebounds
+        memory.save(savedMemory)
+        self.refreshStats()
 
 
 

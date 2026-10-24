@@ -23,7 +23,11 @@ def loadAllDays() -> dict:
 
 
 def loadToday() -> dict:
-    savedTimes = loadAllDays().get(todayName(), {})
+    return loadDay(todayName())
+
+
+def loadDay(dayName: str) -> dict:
+    savedTimes = loadAllDays().get(dayName, {})
     times = {}
     for savedKey in savedTimes:
         if "|" not in savedKey:

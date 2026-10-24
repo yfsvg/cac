@@ -3,6 +3,9 @@ from datetime import date
 
 from focusguard.storage import memory
 
+
+# Break limits, how many breaks you get per day + how long each one is
+
 MIN_BREAKS = 1
 MAX_BREAKS = 8
 DEFAULT_BREAKS = 4
@@ -11,6 +14,10 @@ MIN_BREAK_MINUTES = 3
 MAX_BREAK_MINUTES = 15
 DEFAULT_BREAK_MINUTES = 5
 
+
+
+
+# Break limits, saved settings + how many breaks were used today
 
 def getMaxBreaks() -> int:
     return int(memory.load().get("maxBreaks", DEFAULT_BREAKS))
@@ -46,6 +53,10 @@ def useBreak() -> None:
     savedMemory["breaksUsed"] = {"day": date.today().isoformat(), "count": breaksUsedToday() + 1}
     memory.save(savedMemory)
 
+
+
+
+# Enforcer, warns you then closes unproductive apps
 
 LIMIT = 180
 WARNING = 150
@@ -86,6 +97,7 @@ class Enforcer:
             self.alreadyWarned.remove(appName)
         return True
 
+    # Out of breaks for today, closes it with one gentle notification per app
     def closeForToday(self, window, siteName=None):
         appName = window.app_name
         if siteName is not None:
