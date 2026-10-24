@@ -32,6 +32,7 @@ from focusguard.core.classifier import classifyTypeOfApp
 from focusguard.core.enforcement import Enforcer
 from focusguard.storage import memory
 from focusguard.ui.pause_screen import PauseScreen
+from focusguard.ui.theme import COLORS, applyTheme
 from focusguard.platform import get_backend
 
 
@@ -42,58 +43,64 @@ LOREM = (
     "exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
 )
 
-# status text colours from the design
-GOOD = "#d4f53c"
-PERFECT = "#3cff2e"
-OK = "#f5e83c"
+# status chip text colours (theme tokens)
+GOOD = "@green"
+PERFECT = "@green"
+OK = "@orange"
 
 STYLE = """
-
-
     QWidget#Dashboard {
-        background-color: rgba(0, 0, 0, 120);
-        border-radius: 12px;
-        border: solid rgba(255, 255, 255, 100);
-        border-width: 0.5px;
+        background-color: @surface;
+        border-radius: 28px;
+        border: 1px solid @outlineVariant;
     }
 
     QScrollArea, QWidget#Content { background: transparent; border: none; }
     QScrollBar:vertical { background: transparent; width: 6px; margin: 4px 0; }
-    QScrollBar::handle:vertical { background: rgba(255, 255, 255, 60); border-radius: 3px; min-height: 30px; }
+    QScrollBar::handle:vertical { background: @outlineVariant; border-radius: 3px; min-height: 30px; }
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
     QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { height: 0; background: none; }
 
-    QLabel { color: white; }
-    QLabel#AppName { color: rgba(255, 255, 255, 150); font-size: 16px; }
-    QLabel#Hello { font-size: 32px; font-weight: 700; }
-    QLabel#Streak { font-size: 15px; }
-    QLabel#Section { font-size: 24px; }
-    QLabel#BigNumber { font-size: 56px; font-weight: 800; }
-    QLabel#Caption { font-size: 13px; color: rgba(255, 255, 255, 220); }
-    QLabel#Status { font-size: 13px; font-weight: 600; }
-    QLabel#DropdownBody { font-size: 13px; color: rgba(255, 255, 255, 130); padding-left: 24px; }
+    QLabel { color: @onSurface; }
+    QLabel#AppName { color: @primary; font-size: 14px; font-weight: 600; }
+    QLabel#Hello { color: @onPrimaryContainer; font-size: 32px; font-weight: 700; }
 
-    QFrame#Divider { background-color: rgba(255, 255, 255, 90); border: none; }
-    QFrame#TodayCard, QFrame#WeekCard {
-        border: 1px solid rgba(255, 255, 255, 60);
-        border-radius: 8px;
+    QLabel#Section { color: @onSurface; font-size: 22px; font-weight: 600; }
+    QLabel#BigNumber { font-size: 44px; font-weight: 800; }
+    QLabel#Caption { font-size: 12px; }
+
+    QLabel#Chip {
+        font-size: 12px;
+        font-weight: 600;
+        background-color: rgba(255, 255, 255, 170);
+        border-radius: 10px;
+        padding: 3px 10px;
     }
-    QFrame#TodayCard { background-color: rgba(0, 0, 0, 70); }
-    QFrame#WeekCard { background-color: rgba(0, 0, 0, 70); }
+
+    QLabel#DropdownBody { font-size: 13px; color: @onSurfaceVariant; padding: 4px 16px 8px 16px; }
+
+    QFrame#Hero { background-color: @primaryContainer; border-radius: 28px; }
+    QFrame#StatCard { border-radius: 24px; }
+
+    QFrame#TimeCard { background-color: @surfaceContainerLow; border-radius: 24px; }
 
     QPushButton#DropdownHeader {
-
-        color: rgba(255, 255, 255, 150);
-        font-size: 17px;
+        color: @onSurface;
+        font-size: 15px;
         text-align: left;
-        background: transparent;
+        background-color: @surfaceContainer;
         border: none;
-        padding: 2px 0;
+        border-radius: 16px;
+        padding: 12px 16px;
     }
-    QPushButton#DropdownHeader:hover { color: rgba(255, 255, 255, 220); }
 
 
+
+    QPushButton#DropdownHeader:hover { background-color: @surfaceContainerHigh; }
 """
+
+# dot colour per app kind in the time list
+KIND_COLORS = {"browser": COLORS["blue"], "unproductive": COLORS["error"], "neutral": COLORS["secondary"]}
 
 
 def label(text: str, name: str, align: Qt.AlignmentFlag = Qt.AlignmentFlag.AlignLeft) -> QLabel:
@@ -102,29 +109,26 @@ def label(text: str, name: str, align: Qt.AlignmentFlag = Qt.AlignmentFlag.Align
     return newLabel
 
 
-def divider() -> QFrame:
-    # short line under each section like the figma
-    line = QFrame(objectName="Divider")
-    line.setFixedSize(190, 1)
-    return line
-
-
 class StatCard(QFrame):
-    def __init__(self, number: str, caption: str, status: str, color: str, cardType: str) -> None:
-        super().__init__(objectName=cardType)
-        self.setFixedHeight(140)
+    def __init__(self, number: str, caption: str, status: str, statusColor: str, colorFamily: str) -> None:
+        super().__init__(objectName="StatCard")
+        # each card is a tonal container, text uses the matching "on" colour
+        containerColor = COLORS[colorFamily + "Container"]
+        onContainerColor = COLORS["on" + colorFamily[0].upper() + colorFamily[1:] + "Container"]
+        self.setStyleSheet(f"QFrame#StatCard {{ background-color: {containerColor}; }} QLabel {{ color: {onContainerColor}; }}")
+        self.setFixedHeight(150)
         # ignore caption width so all 3 cards split the row evenly
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         center = Qt.AlignmentFlag.AlignHCenter
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 8, 6, 12)
+        layout.setContentsMargins(8, 14, 8, 14)
         layout.setSpacing(0)
         layout.addWidget(label(number, "BigNumber", center))
         layout.addWidget(label(caption, "Caption", center))
         layout.addStretch()
-        statusLabel = label(status, "Status", center)
-        statusLabel.setStyleSheet(f"color: {color};")
-        layout.addWidget(statusLabel)
+        statusChip = QLabel(status, objectName="Chip")
+        statusChip.setStyleSheet(applyTheme(f"color: {statusColor};"))
+        layout.addWidget(statusChip, alignment=center)
 
 
 class Dropdown(QWidget):
@@ -181,13 +185,7 @@ class Dashboard(QWidget):
         self.setObjectName("Dashboard")
         # apple system font (SF Pro on mac), everything inside inherits it
         self.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont))
-        self.setStyleSheet(STYLE)
-
-        # blur the desktop behind the panel. mac only, if it breaks (or wintoes) just skip it
-        try:
-            get_backend().blur_behind(int(self.winId()), corner_radius=12)
-        except Exception as e:
-            print(f"background blur unavailable: {e}")
+        self.setStyleSheet(applyTheme(STYLE)) #blurless now
 
         mainLayout = QVBoxLayout(self)
         mainLayout.setContentsMargins(10, 10, 10, 10)
@@ -212,44 +210,38 @@ class Dashboard(QWidget):
 
 
 
-        # NOTE: all of the text and stuff is all just 
-        # uploaded original figma design in discord gc
-        layout.addWidget(label("Focusguard Application", "AppName"))
+        # all material you as disucssed in gc
+        layout.addWidget(label("Focusguard", "AppName"))
+        heroCard = QFrame(objectName="Hero")
+        heroLayout = QVBoxLayout(heroCard)
 
-        layout.addWidget(divider())
-        layout.addSpacing(6)
-
-        layout.addWidget(label("Hello, User!", "Hello"))
-        layout.addWidget(label(
-            "You’re on a <b><u>4</u></b> day streak of using Focusguard to stay "
-            "disciplined! Lets keep that going!", "Streak"))
-        
-        layout.addSpacing(6)
-
-        layout.addWidget(divider())
+        heroLayout.setContentsMargins(24, 20, 24, 22)
+        heroLayout.setSpacing(6)
+        heroLayout.addWidget(label("Hello, User", "Hello"))
+        heroLayout.addWidget(label("Replace now with the tree system parth or japmann work?", "Streak"))
+        layout.addWidget(heroCard)
+        layout.addSpacing(8)
 
 
 
         # daily stats larp
         layout.addWidget(label("Today’s Stats", "Section"))
-        layout.addLayout(self.cardRow("TodayCard", [
+        layout.addLayout(self.cardRow(["primary", "green", "tertiary"], [
             ("97", "% time focused", "Looking good!", GOOD),
             ("2.3", "Hours spent productive", "Perfect!", PERFECT),
             ("0.3", "Hours spent unproductive", "Perfect!", PERFECT),
         ]))
         layout.addWidget(Dropdown("Show more stats"))
-        layout.addSpacing(6)
-        layout.addWidget(divider())
+        layout.addSpacing(8)
         # weekly 
         layout.addWidget(label("Weekly Stats", "Section"))
-        layout.addLayout(self.cardRow("WeekCard", [
+        layout.addLayout(self.cardRow(["blue", "orange", "secondary"], [
             ("90", "% time focused", "Looking good!", GOOD),
             ("7", "Warnings", "Doing OK", OK),
             ("0", "Bail-outs used", "Perfect!", PERFECT),
         ]))
         layout.addWidget(Dropdown("Show more stats"))
-        layout.addSpacing(6)
-        layout.addWidget(divider())
+        layout.addSpacing(8)
 
 
 
@@ -260,8 +252,7 @@ class Dashboard(QWidget):
         for name in ["Absolute Time Limits", "Schedule Time Limits", "AI Categorizations",
                      "Super Focus Mode", "Bail-Outs", "Parental Controls"]:
             layout.addWidget(Dropdown(name))
-        layout.addSpacing(6)
-        layout.addWidget(divider())
+        layout.addSpacing(8)
 
 
 
@@ -277,20 +268,27 @@ class Dashboard(QWidget):
         self.emergencyApp = None
         self.passedAt = {}
         self.usedSeconds = {}
-        self.timeList = QLabel(styleSheet="color: white;", alignment=Qt.AlignmentFlag.AlignTop)
-        layout.addWidget(self.timeList)
+        timeCard = QFrame(objectName="TimeCard")
+        timeCardLayout = QVBoxLayout(timeCard)
+        timeCardLayout.setContentsMargins(20, 16, 20, 16)
+        self.timeList = QLabel("Nothing tracked yet", alignment=Qt.AlignmentFlag.AlignTop)
+        self.timeList.setTextFormat(Qt.TextFormat.RichText)
+        timeCardLayout.addWidget(self.timeList)
+        layout.addWidget(timeCard)
         layout.addStretch()
         self.timer = QTimer(self, interval=1000, timeout=self.tick)
         self.timer.start()
 
 
     
-    def cardRow(self, cardType, cards: list[tuple[str, str, str, str]]) -> QHBoxLayout:
+    def cardRow(self, colorFamilies, cards: list[tuple[str, str, str, str]]) -> QHBoxLayout:
         row = QHBoxLayout()
 
         row.setSpacing(8)
-        for number, caption, status, color in cards:
-            row.addWidget(StatCard(number, caption, status, color, cardType))
+        cardIndex = 0
+        for number, caption, status, statusColor in cards:
+            row.addWidget(StatCard(number, caption, status, statusColor, colorFamilies[cardIndex]))
+            cardIndex = cardIndex + 1
         return row
 
     def tick(self) -> None:
@@ -321,7 +319,15 @@ class Dashboard(QWidget):
             self.passedAt.pop(window.app_name, None)
             self.lastApp = None
         rows = sorted(self.trackedTimes.items(), key=lambda kv: -kv[1])
-        self.timeList.setText("\n".join(f"{name} ({appKind}): {s // 60}m {s % 60}s" for (name, appKind), s in rows))
+        timeRows = []
+        for (name, rowKind), seconds in rows:
+            dotColor = KIND_COLORS[rowKind]
+            timeRows.append(
+                f"<tr><td width='18' style='color:{dotColor}; font-size:16px;'>●</td>"
+                f"<td width='100%' style='padding-left:4px;'><b>{name}</b> <span style='color:{COLORS['onSurfaceVariant']};'>{rowKind}</span></td>"
+                f"<td style='padding-left:16px;' align='right' nowrap>{seconds // 60}m {seconds % 60}s</td></tr>"
+            )
+        self.timeList.setText("<table width='100%' cellspacing='0' cellpadding='3'>" + "".join(timeRows) + "</table>")
 
     def showPause(self, window):
         self.pausedWindow = window

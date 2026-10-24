@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from focusguard.platform import get_backend
+from focusguard.ui.theme import applyTheme
 
 COUNTDOWN = 15
 
@@ -27,30 +28,42 @@ SHAKE = [12, -12, 9, -9, 5, -5, 0]
 
 STYLE = """
 QFrame#Box {
-    background-color: #1c1c1c;
-    border: 1px solid rgba(255, 255, 255, 100);
-    border-radius: 12px;
+    background-color: @surfaceContainerHigh;
+    border: none;
+    border-radius: 28px;
 }
-QLabel { color: white; font-size: 17px; }
-QLabel#Hint { color: rgba(255, 255, 255, 150); font-size: 13px; }
+QLabel { color: @onSurface; font-size: 22px; font-weight: 600; }
+QLabel#Hint { color: @onSurfaceVariant; font-size: 14px; font-weight: 400; }
 QPushButton {
-    color: white;
+    color: @onSecondaryContainer;
     font-size: 14px;
+    font-weight: 500;
     text-align: left;
-    padding: 8px 12px;
-    background-color: #262626;
-    border: 1px solid rgba(255, 255, 255, 60);
-    border-radius: 8px;
+    padding: 10px 16px;
+    background-color: @secondaryContainer;
+    border: none;
+    border-radius: 16px;
 }
-QPushButton:hover { background-color: #333333; }
-QPushButton:disabled { color: rgba(255, 255, 255, 80); }
+QPushButton:hover { background-color: @primaryContainer; color: @onPrimaryContainer; }
+QPushButton#Emergency { background-color: @errorContainer; color: @onErrorContainer; }
+QPushButton#BackButton {
+    text-align: center;
+    background-color: @primary;
+    color: @onPrimary;
+    font-weight: 600;
+}
+QPushButton#BackButton:hover { background-color: #7965AF; color: @onPrimary; }
+QPushButton#OpenButton { text-align: center; background-color: @tertiaryContainer; color: @onTertiaryContainer; }
+QPushButton:disabled { background-color: @surfaceContainerHighest; color: @outline; }
 QLineEdit {
-    color: white;
+    color: @onSurface;
     font-size: 14px;
-    padding: 8px;
-    background-color: #262626;
-    border: 1px solid rgba(255, 255, 255, 60);
-    border-radius: 8px;
+    padding: 10px 14px;
+    background-color: @surfaceContainerHighest;
+    border: none;
+    border-bottom: 2px solid @primary;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
 }
 """
 
@@ -69,7 +82,7 @@ class PauseScreen(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont))
-        self.setStyleSheet(STYLE)
+        self.setStyleSheet(applyTheme(STYLE))
         self.setGeometry(QApplication.primaryScreen().geometry())
 
         self.title = QLabel("Why are you opening " + appName + "?")
@@ -80,7 +93,9 @@ class PauseScreen(QWidget):
         reasonLayout = QVBoxLayout(self.reasonButtons)
         reasonLayout.setContentsMargins(0, 0, 0, 0)
         for reason in REASONS:
-            button = QPushButton(reason)
+            button = QPushButton(reason, cursor=Qt.CursorShape.PointingHandCursor)
+            if reason == "Emergency":
+                button.setObjectName("Emergency")
             button.clicked.connect(lambda checked=False, r=reason: self.pickReason(r))
             reasonLayout.addWidget(button)
 
@@ -89,12 +104,12 @@ class PauseScreen(QWidget):
         self.otherBox.returnPressed.connect(self.otherTyped)
         self.otherBox.hide()
 
-        self.openButton = QPushButton("Open anyway")
+        self.openButton = QPushButton("Open anyway", objectName="OpenButton")
         self.openButton.clicked.connect(self.openAnyway)
         self.openButton.setEnabled(False)
         self.openButton.hide()
 
-        backButton = QPushButton("Back to work")
+        backButton = QPushButton("Back to work", objectName="BackButton", cursor=Qt.CursorShape.PointingHandCursor)
         backButton.clicked.connect(self.backToWork)
 
         bottomRow = QHBoxLayout()
@@ -102,9 +117,10 @@ class PauseScreen(QWidget):
         bottomRow.addWidget(self.openButton)
 
         self.box = QFrame(self, objectName="Box")
-        self.box.setFixedWidth(300)
+        self.box.setFixedWidth(340)
         boxLayout = QVBoxLayout(self.box)
-        boxLayout.setContentsMargins(16, 16, 16, 16)
+        boxLayout.setContentsMargins(24, 24, 24, 24)
+        boxLayout.setSpacing(12)
         boxLayout.addWidget(self.title)
         boxLayout.addWidget(self.hint)
         boxLayout.addWidget(self.reasonButtons)
@@ -146,7 +162,7 @@ class PauseScreen(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 90))
+        painter.fillRect(self.rect(), QColor(29, 27, 32, 140))  # M3 scrim
 
     def mousePressEvent(self, event):
         if not self.box.geometry().contains(event.position().toPoint()):
