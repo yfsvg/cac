@@ -1,3 +1,5 @@
+import time
+
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QFontDatabase, QPainter
 from PySide6.QtWidgets import (
@@ -369,3 +371,83 @@ class CheckInScreen(QWidget):
 
     def closeEvent(self, event):
         event.ignore()
+
+
+# ---- break badge -----------------------------------------------------------------------------
+# Tiny "Break time!" card in the top right corner with a bar that drains as the break runs out.
+# Click-through and never takes focus, so it doesn't interrupt whatever you're doing.
+
+BADGE_STYLE = """
+QFrame#Badge {
+    background-color: @surfaceContainerHigh;
+    border: 1px solid @outlineVariant;
+    border-radius: 16px;
+}
+QLabel { color: @onSurface; font-size: 13px; font-weight: 600; }
+QProgressBar {
+    background-color: @surfaceContainerHighest;
+    border: none;
+    border-radius: 3px;
+}
+QProgressBar::chunk { background-color: @primary; border-radius: 3px; }
+"""
+
+BADGE_MARGIN = 16
+
+
+class BreakBadge(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.WindowDoesNotAcceptFocus
+            | Qt.WindowType.WindowTransparentForInput
+            | Qt.WindowType.Window
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        self.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont))
+
+        card = QFrame(self, objectName="Badge")
+        cardLayout = QVBoxLayout(card)
+        cardLayout.setContentsMargins(14, 10, 14, 12)
+        cardLayout.setSpacing(6)
+        cardLayout.addWidget(QLabel("Break time!"))
+        self.progressBar = QProgressBar()
+        self.progressBar.setTextVisible(False)
+        self.progressBar.setFixedHeight(6)
+        cardLayout.addWidget(self.progressBar)
+
+        outerLayout = QVBoxLayout(self)
+        outerLayout.setContentsMargins(0, 0, 0, 0)
+        outerLayout.addWidget(card)
+        self.setFixedWidth(160)
+
+        self.endTime = 0
+        self.breakSeconds = 0
+        self.ticker = QTimer(self, interval=1000, timeout=self.updateBar)
+
+    def startBreak(self, breakSeconds):
+        # restyle every time so it matches the current light/dark theme
+        self.setStyleSheet(applyTheme(BADGE_STYLE))
+        self.breakSeconds = breakSeconds
+        self.endTime = time.time() + breakSeconds
+        self.progressBar.setRange(0, breakSeconds * 1000)
+        self.updateBar()
+        self.adjustSize()
+        screen = QApplication.primaryScreen().availableGeometry()
+        self.move(screen.right() - self.width() - BADGE_MARGIN, screen.top() + BADGE_MARGIN)
+        self.show()
+        self.ticker.start()
+
+    def updateBar(self):
+        # milliseconds so the bar drains smoothly instead of jumping a second early
+        millisecondsLeft = int((self.endTime - time.time()) * 1000)
+        if millisecondsLeft < 0:
+            millisecondsLeft = 0
+        self.progressBar.setValue(millisecondsLeft)
+
+    def stopBreak(self):
+        self.ticker.stop()
+        self.hide()

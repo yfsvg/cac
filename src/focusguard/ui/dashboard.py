@@ -37,7 +37,7 @@ from focusguard.core.classifier import classifyTypeOfApp, isIgnoredApp, isUnprod
 from focusguard.core.enforcement import Enforcer
 from focusguard.storage import memory, streak, time_tracking
 from focusguard.ui.settings_window import SettingsPage
-from focusguard.ui.pause_screen import BREAK_SECONDS, CheckInScreen, PauseScreen
+from focusguard.ui.pause_screen import BREAK_SECONDS, BreakBadge, CheckInScreen, PauseScreen
 from focusguard.ui.theme import applyTheme, choiceFor, getColors, getTheme, resolveTheme, setTheme, systemTheme
 from focusguard.platform import get_backend
 
@@ -396,6 +396,7 @@ class Dashboard(QWidget):
         self.breakSite = None
         self.timesAsked = 0
         self.breakTimer = QTimer(self, singleShot=True, interval=BREAK_SECONDS * 1000, timeout=self.showCheckIn)
+        self.breakBadge = BreakBadge()
         self.lastApp = None
         self.emergencyApp = None
         self.passedAt = {}
@@ -610,8 +611,10 @@ class Dashboard(QWidget):
             self.breakSite = self.pausedSite
             self.timesAsked = 0
             self.breakTimer.start()
+            self.breakBadge.startBreak(BREAK_SECONDS)
 
     def showCheckIn(self):
+        self.breakBadge.stopBreak()
         self.checkInScreen = CheckInScreen(self.breakName, self.timesAsked, self.checkInDone)
         self.checkInScreen.popUp()
 
@@ -636,6 +639,7 @@ class Dashboard(QWidget):
             # continuing never costs anything, just ask again in another 5 minutes
             self.timesAsked = self.timesAsked + 1
             self.breakTimer.start()
+            self.breakBadge.startBreak(BREAK_SECONDS)
 
 
 
