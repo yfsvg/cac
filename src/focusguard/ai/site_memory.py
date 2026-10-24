@@ -51,3 +51,11 @@ def siteCategory(site: str | None) -> str | None:
     if site in allSites:
         return allSites[site]
     return None
+
+
+def rememberedSitesList() -> list:
+    allSites = loadSiteMemory()
+    sitesList = []
+    for site in sorted(allSites):
+        sitesList.append((site, allSites[site]))
+    return sitesList

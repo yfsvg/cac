@@ -11,6 +11,7 @@
 import os
 import threading
 import time
+from datetime import datetime
 
 from PySide6.QtCore import QEasingCurve, QPointF, QPropertyAnimation, QRectF, Qt, QTimer, QVariantAnimation
 from PySide6.QtWidgets import (
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -33,11 +35,12 @@ from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPainter, QPai
 from focusguard.ai import vision
 from focusguard.ai.site_memory import siteCategory
 from focusguard.core.classifier import classifyTypeOfApp, isIgnoredApp, isUnproductiveSite, siteRoot
-from focusguard.core import enforcement
+from focusguard.core import enforcement, keep_alive, session
 from focusguard.core.enforcement import Enforcer
 from focusguard.storage import memory, streak, time_tracking
 from focusguard.ui.settings_window import SettingsPage
 from focusguard.ui.pause_screen import BreakBadge, CheckInScreen, PauseScreen
+from focusguard.ui.session_screen import SessionBadge, SessionPrompt, TimesUpToast
 from focusguard.ui.theme import applyTheme, choiceFor, getColors, getTheme, resolveTheme, setTheme, systemTheme
 from focusguard.platform import get_backend
 
@@ -382,7 +385,7 @@ class Dashboard(QWidget):
         layout.addLayout(self.cardRow(["blue", "orange", "secondary"], [
             ("90", "% time focused", "Looking good!", GOOD),
             ("7", "Warnings", "Doing OK", OK),
-            ("0", "Bail-outs used", "Perfect!", PERFECT),
+            (str(session.bailOutsUsedThisWeek()), "Bail-outs used", "Perfect!", PERFECT),
         ]))
         layout.addWidget(Dropdown("Show more stats"))
         layout.addSpacing(8)
@@ -441,6 +444,13 @@ class Dashboard(QWidget):
         self.saveTimer.start()
         QApplication.instance().aboutToQuit.connect(self.saveTimes)
         self.showTimes()
+
+        self.sessionPrompt = None
+        self.timesUpToast = None
+        self.scheduleDoneFor = ""
+        self.sessionBadge = SessionBadge(self.askBailOut)
+        self.sessionTimer = QTimer(self, interval=1000, timeout=self.sessionTick)
+        QTimer.singleShot(0, self.startOrResumeSession)
 
 
     def cardRow(self, colorFamilies, cards: list[tuple[str, str, str, str]]) -> QHBoxLayout:
@@ -642,7 +652,8 @@ class Dashboard(QWidget):
         self.pausedWindow = window
         self.pausedName = appName
         self.pausedSite = site
-        self.pauseScreen = PauseScreen(appName, self.backend.get_window_rect(window), self.pauseDone)
+        superFocus = memory.load().get("superFocus", False)
+        self.pauseScreen = PauseScreen(appName, self.backend.get_window_rect(window), self.pauseDone, superFocus)
         self.pauseScreen.popUp()
 
     def pauseDone(self, choice):
@@ -675,11 +686,92 @@ class Dashboard(QWidget):
 
 
 
+    def startOrResumeSession(self):
+        if session.sessionSecondsLeft() > 0:
+            self.sessionBadge.showSession(session.sessionSecondsLeft())
+            self.sessionTimer.start()
+            return
+        self.sessionPrompt = SessionPrompt(self.sessionChosen)
+        self.sessionPrompt.popUp()
+
+    def sessionChosen(self, minutes):
+        self.sessionPrompt = None
+        session.startSession(minutes)
+        self.sessionBadge.totalSeconds = minutes * 60
+        self.sessionBadge.showSession(session.sessionSecondsLeft())
+        self.sessionTimer.start()
+
+    def sessionTick(self):
+        if self.timesUpToast is not None:
+            return
+        self.checkSchedule()
+        secondsLeft = session.sessionSecondsLeft()
+        if secondsLeft > 0:
+            self.sessionBadge.updateTime(secondsLeft)
+            return
+        self.sessionBadge.hide()
+        self.timesUpToast = TimesUpToast(self.timesUpDone)
+        self.timesUpToast.popUp()
+
+    def timesUpDone(self, choice):
+        self.timesUpToast = None
+        if choice == "close":
+            self.quitFocusGuard()
+            return
+        session.extendSession(session.CONTINUE_MINUTES)
+        self.sessionBadge.totalSeconds = session.CONTINUE_MINUTES * 60
+        self.sessionBadge.showSession(session.sessionSecondsLeft())
+
+    def checkSchedule(self):
+        schedule = memory.load().get("studySchedule", {})
+        now = datetime.now()
+        if now.weekday() not in schedule.get("days", []):
+            return
+        startText = schedule.get("start", "")
+        endText = schedule.get("end", "")
+        nowText = now.strftime("%H:%M")
+        if not (startText <= nowText < endText):
+            return
+        blockName = now.strftime("%Y-%m-%d") + " " + startText
+        if self.scheduleDoneFor == blockName:
+            return
+        self.scheduleDoneFor = blockName
+        endHour, endMinute = endText.split(":")
+        endTime = now.replace(hour=int(endHour), minute=int(endMinute), second=0, microsecond=0)
+        if session.extendSessionUntil(endTime.timestamp()):
+            self.sessionBadge.totalSeconds = session.sessionSecondsLeft()
+            self.sessionBadge.showSession(session.sessionSecondsLeft())
+            self.enforcer.sendNotification("Study time until " + endTime.strftime("%I:%M %p").lstrip("0") + ", your session now runs until then.")
+
+    def askBailOut(self):
+        bailOutsLeft = session.bailOutsLeftThisWeek()
+        if bailOutsLeft == 0:
+            QMessageBox.information(self, "FocusGuard", "You don't have any bail-outs left this week.")
+            return
+        answer = QMessageBox.question(
+            self,
+            "FocusGuard",
+            "Use a bail-out to end your session early? You have " + str(bailOutsLeft) + " left this week. FocusGuard will close.",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        session.useBailOut()
+        self.quitFocusGuard()
+
+    def quitFocusGuard(self):
+        keep_alive.stopHelper()
+        session.endSession()
+        self.saveTimes()
+        QApplication.quit()
+
     def startBreakPeriod(self):
         enforcement.useBreak()
         breakSeconds = enforcement.getBreakMinutes() * 60
         self.breakTimer.setInterval(breakSeconds * 1000)
         self.breakTimer.start()
+        self.breakBadge.topOffset = 0
+        if self.sessionBadge.isVisible():
+            self.breakBadge.topOffset = self.sessionBadge.height() + 8
         self.breakBadge.startBreak(breakSeconds)
 
     def showCheckIn(self):
