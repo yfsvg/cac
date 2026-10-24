@@ -363,9 +363,6 @@ class CheckInScreen(QWidget):
         event.ignore()
 
 
-# ---- break badge -----------------------------------------------------------------------------
-# Tiny "Break time!" card in the top right corner with a bar that drains as the break runs out.
-# Never takes focus, so it doesn't interrupt whatever you're doing. The x in the corner ends the break early.
 
 BADGE_STYLE = """
 QFrame#Badge {
@@ -438,7 +435,6 @@ class BreakBadge(QWidget):
         self.ticker = QTimer(self, interval=1000, timeout=self.updateBar)
 
     def startBreak(self, breakSeconds):
-        # restyle every time so it matches the current light/dark theme
         self.setStyleSheet(applyTheme(BADGE_STYLE))
         self.breakSeconds = breakSeconds
         self.endTime = time.time() + breakSeconds
@@ -451,7 +447,6 @@ class BreakBadge(QWidget):
         self.ticker.start()
 
     def updateBar(self):
-        # milliseconds so the bar drains smoothly instead of jumping a second early
         millisecondsLeft = int((self.endTime - time.time()) * 1000)
         if millisecondsLeft < 0:
             millisecondsLeft = 0

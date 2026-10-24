@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+import os
 import time
 
 from focusguard.ai import site_memory, vision
@@ -309,18 +310,18 @@ class SettingsPage(QWidget):
         layout.addLayout(parentRow)
         layout.addSpacing(8)
 
-        # debug tools for testing, these skip parental controls so take them out before release
-        layout.addWidget(label("Debug", "Section"))
-        layout.addWidget(label("Testing tools. These skip parental controls.", "Streak"))
-        debugRow = QHBoxLayout()
-        resetTimersButton = QPushButton("Reset lock timers", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
-        resetTimersButton.clicked.connect(self.resetLockTimers)
-        clearMemoryButton = QPushButton("Clear all memory", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
-        clearMemoryButton.clicked.connect(self.clearAllMemory)
-        debugRow.addWidget(resetTimersButton)
-        debugRow.addWidget(clearMemoryButton)
-        debugRow.addStretch()
-        layout.addLayout(debugRow)
+        if os.environ.get("FOCUSGUARD_DEBUG") == "1":
+            layout.addWidget(label("Debug", "Section"))
+            layout.addWidget(label("Testing tools. These skip parental controls.", "Streak"))
+            debugRow = QHBoxLayout()
+            resetTimersButton = QPushButton("Reset lock timers", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
+            resetTimersButton.clicked.connect(self.resetLockTimers)
+            clearMemoryButton = QPushButton("Clear all memory", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
+            clearMemoryButton.clicked.connect(self.clearAllMemory)
+            debugRow.addWidget(resetTimersButton)
+            debugRow.addWidget(clearMemoryButton)
+            debugRow.addStretch()
+            layout.addLayout(debugRow)
         layout.addStretch()
 
         self.updateParentSection()
