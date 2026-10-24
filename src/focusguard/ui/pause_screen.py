@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 from focusguard.platform import get_backend
 from focusguard.ui.theme import applyTheme
 
-COUNTDOWN = 3 # probably turn this up later, 5 is just for testing
+COUNTDOWN = 15
 
 REASONS = [
     "Taking a short break",
@@ -181,7 +181,7 @@ class PauseScreen(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(29, 27, 32, 140))  # M3 scrim
+        painter.fillRect(self.rect(), QColor(29, 27, 32, 140))
 
     def mousePressEvent(self, event):
         if not self.box.geometry().contains(event.position().toPoint()):
@@ -261,32 +261,17 @@ class PauseScreen(QWidget):
         event.ignore()
 
 
-
-
-
-
-
-
-
-
-
-
-# Check-in code every five minutes (change as break_seconds)
-# if you come back and get to work is what youll grow el tree, but no hurt if you cont
-
 BREAK_SECONDS = 300
 
 TREE_REMINDER = "Saying continue won't harm your tree!"
 
-# a different gentle message each time it asks
 CHECK_IN_MESSAGES = [
-    "How you feeling now? It's alright if you're still stressed, don't worry! Take your time."
-    "Are you feeling better? If not, don't worry. Studies show that forcing yourself to work while you're down doesn't actually make you more productive, so take your time!"
     "Your 5 minute break is up. Are you feeling alright and ready to get back to work, or still feeling down?",
-    "Hey, just checking in again. How are you feeling? Ready to jump back in, or need a little longer? Deadass no pressure.",
+    "How you feeling now? It's alright if you're still stressed, don't worry! Take your time.",
+    "Are you feeling better? If not, don't worry. Studies show that forcing yourself to work while you're down doesn't actually make you more productive, so take your time!",
+    "Hey, just checking in again. How are you feeling? Ready to jump back in, or need a little longer? No pressure.",
     "No rush. Feeling any better, or do you want another 5 minutes? It's totally natural if you feel like you need more time, and it's good for your mind to relax.",
     "It's okay if you need more time. Ready to give work another go, or still not feeling it? Either way it's ok.",
-
 ]
 
 
@@ -295,7 +280,7 @@ class CheckInScreen(QWidget):
         super().__init__()
         self.whenDone = whenDone
 
-        self.setWindowFlags( Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Window )
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Window)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont))
         
@@ -310,14 +295,10 @@ class CheckInScreen(QWidget):
         treeReminder = QLabel(TREE_REMINDER, objectName="Hint")
         treeReminder.setWordWrap(True)
 
-# display options
         readyButton = QPushButton("I'm ready, back to work", objectName="BackButton", cursor=Qt.CursorShape.PointingHandCursor)
         readyButton.clicked.connect(self.bounceBack)
         continueButton = QPushButton("Still feeling down, continue break", objectName="OpenButton", cursor=Qt.CursorShape.PointingHandCursor)
         continueButton.clicked.connect(self.continueBreak)
-
-
-
 
 
         self.box = QFrame(self, objectName="Box")
@@ -343,8 +324,7 @@ class CheckInScreen(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(29, 27, 32, 140))  # M3 scrim
-
+        painter.fillRect(self.rect(), QColor(29, 27, 32, 140))
 
 
     def popUp(self):
@@ -355,7 +335,6 @@ class CheckInScreen(QWidget):
             pass
         self.raise_()
         self.activateWindow()
-
 
 
     def bounceBack(self):
