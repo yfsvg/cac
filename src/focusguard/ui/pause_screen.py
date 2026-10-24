@@ -80,7 +80,7 @@ QLineEdit {
 
 class PauseScreen(QWidget):
 
-    def __init__(self, appName, appRect, whenDone):
+    def __init__(self, appName, appRect, whenDone, superFocus=False):
         super().__init__()
         self.whenDone = whenDone
         self.secondsLeft = COUNTDOWN
@@ -109,7 +109,11 @@ class PauseScreen(QWidget):
             if reason == "Emergency":
                 button.setObjectName("Emergency")
             button.clicked.connect(lambda checked=False, r=reason: self.pickReason(r))
+            if superFocus and reason != "Emergency":
+                button.hide()
             reasonLayout.addWidget(button)
+        if superFocus:
+            self.hint.setText("Super Focus Mode is on, no breaks right now.")
 
         self.otherBox = QLineEdit()
         self.otherBox.setPlaceholderText("Tell us in a few words, then press Enter")
@@ -434,6 +438,7 @@ class BreakBadge(QWidget):
 
         self.endTime = 0
         self.breakSeconds = 0
+        self.topOffset = 0
         self.ticker = QTimer(self, interval=1000, timeout=self.updateBar)
 
     def startBreak(self, breakSeconds):
@@ -445,7 +450,7 @@ class BreakBadge(QWidget):
         self.updateBar()
         self.adjustSize()
         screen = QApplication.primaryScreen().availableGeometry()
-        self.move(screen.right() - self.width() - BADGE_MARGIN, screen.top() + BADGE_MARGIN)
+        self.move(screen.right() - self.width() - BADGE_MARGIN, screen.top() + BADGE_MARGIN + self.topOffset)
         self.show()
         self.ticker.start()
 

@@ -11,7 +11,7 @@
 import os
 import threading
 import time
-from datetime import date
+from datetime import date, datetime
 
 from PySide6.QtCore import QEasingCurve, QPointF, QPropertyAnimation, QRectF, Qt, QTimer, QVariantAnimation
 from PySide6.QtWidgets import (
@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -34,11 +35,12 @@ from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPainter, QPai
 from focusguard.ai import vision
 from focusguard.ai.site_memory import siteCategory
 from focusguard.core.classifier import classifyTypeOfApp, isIgnoredApp, isUnproductiveSite, siteRoot
-from focusguard.core import enforcement
+from focusguard.core import enforcement, keep_alive, session, setting_changes
 from focusguard.core.enforcement import Enforcer
 from focusguard.storage import memory, time_tracking
 from focusguard.ui.settings_window import SettingsPage
 from focusguard.ui.pause_screen import BreakBadge, CheckInScreen, PauseScreen
+from focusguard.ui.session_screen import SessionCard, SessionPrompt, TimesUpToast
 from focusguard.ui.theme import applyTheme, choiceFor, getColors, getTheme, resolveTheme, setTheme, systemTheme
 from focusguard.platform import get_backend
 
@@ -92,6 +94,22 @@ STYLE = """
     QFrame#StatCard { border-radius: 24px; }
 
     QFrame#TimeCard { background-color: @surfaceContainerLow; border-radius: 24px; }
+    QLabel#SplitTitle { color: @onSurface; font-size: 15px; font-weight: 600; }
+    QLabel#SplitLegend { color: @onSurface; font-size: 13px; }
+    QFrame#SessionCard { background-color: @secondaryContainer; border-radius: 20px; }
+    QLabel#SessionTime { color: @onSecondaryContainer; font-size: 15px; font-weight: 600; }
+    QPushButton#BailOutButton {
+        color: @onSecondaryContainer;
+        font-size: 13px;
+        font-weight: 600;
+        background-color: @surfaceContainerHighest;
+        border: none;
+        border-radius: 12px;
+        padding: 4px 12px;
+    }
+    QPushButton#BailOutButton:hover { background-color: @errorContainer; color: @onErrorContainer; }
+    QProgressBar#SessionBar { background-color: @surfaceContainerHighest; border: none; border-radius: 3px; }
+    QProgressBar#SessionBar::chunk { background-color: @primary; border-radius: 3px; }
 
     QPushButton#DropdownHeader {
         color: @onSurface;
@@ -118,9 +136,6 @@ STYLE = """
 KIND_COLORS = {"browser": "blue", "unproductive": "error", "neutral": "secondary"}
 
 
-
-
-# Small widgets, labels + cards + dropdowns
 
 def label(text: str, name: str, align: Qt.AlignmentFlag = Qt.AlignmentFlag.AlignLeft) -> QLabel:
     newLabel = QLabel(text, objectName=name, alignment=align)
@@ -211,6 +226,48 @@ def numberText(value):
 
 # Chevron header that opens/closes a paragraph underneath. No real content yet
 
+def isSiteName(name):
+    return "." in name and " " not in name
+
+
+def durationText(seconds):
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    if hours > 0:
+        return str(hours) + "h " + str(minutes) + "m"
+    return str(minutes) + "m " + str(seconds % 60) + "s"
+
+
+class SplitBar(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setFixedHeight(14)
+        self.productiveSeconds = 0
+        self.unproductiveSeconds = 0
+
+    def setTimes(self, productiveSeconds: int, unproductiveSeconds: int) -> None:
+        self.productiveSeconds = productiveSeconds
+        self.unproductiveSeconds = unproductiveSeconds
+        self.update()
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        colors = getColors()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        barShape = QPainterPath()
+        barShape.addRoundedRect(QRectF(self.rect()), 7, 7)
+        painter.setClipPath(barShape)
+        painter.fillRect(self.rect(), QColor(colors["surfaceContainerHighest"]))
+        totalSeconds = self.productiveSeconds + self.unproductiveSeconds
+        if totalSeconds == 0:
+            return
+        productiveWidth = int(self.width() * self.productiveSeconds / totalSeconds)
+        painter.fillRect(0, 0, productiveWidth, self.height(), QColor(colors["green"]))
+        painter.fillRect(productiveWidth, 0, self.width() - productiveWidth, self.height(), QColor(colors["error"]))
+        if 0 < productiveWidth < self.width():
+            painter.fillRect(productiveWidth - 1, 0, 2, self.height(), QColor(colors["surfaceContainerLow"]))
+
+
 class Dropdown(QWidget):
     def __init__(self, title: str) -> None:
         super().__init__()
@@ -239,9 +296,6 @@ class Dropdown(QWidget):
         self.header.setText(f" {chevron}   {self.title}")
 
 
-
-
-# Icons, drawn by hand so they follow the theme colours
 
 def drawSun(painter: QPainter, color: QColor) -> None:
     painter.setPen(Qt.PenStyle.NoPen)
@@ -279,9 +333,6 @@ def drawCog(painter: QPainter, color: QColor) -> None:
 
 
 
-
-# Top row buttons, settings cog + sun/moon theme toggle
-
 class SettingsButton(QPushButton):
     def __init__(self) -> None:
         super().__init__(objectName="ThemeButton", cursor=Qt.CursorShape.PointingHandCursor)
@@ -301,7 +352,6 @@ class ThemeToggle(QPushButton):
         self.setFixedSize(32, 32)
         self.usingDarkTheme = usingDarkTheme
 
-        # 0 -> 1 while the icon spins over to the new one
         self.spinProgress = 1.0
         self.spinAnimation = QVariantAnimation(self, startValue=0.0, endValue=1.0, duration=450)
         self.spinAnimation.setEasingCurve(QEasingCurve.Type.OutBack)
@@ -325,7 +375,6 @@ class ThemeToggle(QPushButton):
         painter.translate(self.width() / 2, self.height() / 2)
         iconColor = QColor(getColors()["onSurface"])
 
-        # Old icon spins out while the new one spins in
         if self.spinProgress < 1:
             self.drawIcon(painter, not self.usingDarkTheme, iconColor, -120 * self.spinProgress, 1 - self.spinProgress)
         self.drawIcon(painter, self.usingDarkTheme, iconColor, 120 * (1 - self.spinProgress), self.spinProgress)
@@ -350,9 +399,6 @@ class ThemeToggle(QPushButton):
 
 
 
-
-# Main dashboard window
-
 class Dashboard(QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -362,7 +408,6 @@ class Dashboard(QWidget):
             Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-
 
 
 
@@ -391,8 +436,6 @@ class Dashboard(QWidget):
 
 
 
-
-        # Top row, all material you as disucssed in gc
         topRow = QHBoxLayout()
         topRow.setContentsMargins(20, 10, 20, 0)
         topRow.addWidget(label("Focusguard", "AppName"))
@@ -406,7 +449,6 @@ class Dashboard(QWidget):
         self.settingsButton.clicked.connect(self.openSettings)
         topRow.addWidget(self.settingsButton)
         mainLayout.addLayout(topRow)
-
 
 
 
@@ -427,8 +469,6 @@ class Dashboard(QWidget):
 
 
 
-
-        # Hero card, welcome msg + streak
         heroCard = QFrame(objectName="Hero")
         heroLayout = QVBoxLayout(heroCard)
         heroLayout.setContentsMargins(24, 20, 24, 22)
@@ -440,8 +480,6 @@ class Dashboard(QWidget):
 
 
 
-
-        # Stats, daily (larp)
         layout.addWidget(label("Today’s Stats", "Section"))
         layout.addLayout(self.cardRow(["primary", "green", "tertiary"], [
             ("–", "% time focused", "No data yet", NO_DATA),
@@ -452,7 +490,6 @@ class Dashboard(QWidget):
         layout.addWidget(Dropdown("Show more stats"))
         layout.addSpacing(8)
 
-        # Stats, weekly
         layout.addWidget(label("Weekly Stats", "Section"))
         layout.addLayout(self.cardRow(["blue", "orange", "secondary"], [
             ("–", "% time focused", "No data yet", NO_DATA),
@@ -465,26 +502,21 @@ class Dashboard(QWidget):
 
 
 
-
-        # Time tracking display, updates every heartbeat/change
         layout.addWidget(label("Time Tracked", "Section"))
         self.backend = get_backend()
         self.trackedTimes: dict[tuple[str, str], int] = time_tracking.loadToday()
         self.trackedDay = time_tracking.todayName()
         self.enforcer = Enforcer(self.backend)
 
-        # Pause screen
         self.pauseScreen = None
         self.pausedWindow = None
         self.pausedName = None
         self.pausedSite = None
 
-        # Browser site reading, only re-read the url when the tab changes
         self.lastBrowserWindow = None
         self.lastReadSite = None
         self.siteReadAt = 0
 
-        # Breaks + check ins
         self.checkInScreen = None
         self.breakWindow = None
         self.breakName = None
@@ -493,13 +525,11 @@ class Dashboard(QWidget):
         self.breakTimer = QTimer(self, singleShot=True, timeout=self.showCheckIn)
         self.breakBadge = BreakBadge(self.cancelBreak)
 
-        # Whatever app/site is in front right now
         self.currentWindow = None
         self.currentName = None
         self.currentSite = None
         self.currentKind = None
 
-        # Per app memory for this session
         self.lastApp = None
         self.emergencyApp = None
         self.passedAt = {}
@@ -510,16 +540,28 @@ class Dashboard(QWidget):
         timeCard = QFrame(objectName="TimeCard")
         timeCardLayout = QVBoxLayout(timeCard)
         timeCardLayout.setContentsMargins(20, 16, 20, 16)
+        timeCardLayout.setSpacing(6)
         self.timeList = QLabel("Nothing tracked yet", alignment=Qt.AlignmentFlag.AlignTop)
-        self.timeList.setTextFormat(Qt.TextFormat.RichText)
         timeCardLayout.addWidget(self.timeList)
+        self.splitTitle = label("Productive vs unproductive", "SplitTitle")
+        self.splitBar = SplitBar()
+        self.splitLegend = label("", "SplitLegend")
+        self.splitLegend.setTextFormat(Qt.TextFormat.RichText)
+        for splitPart in (self.splitTitle, self.splitBar, self.splitLegend):
+            splitPart.hide()
+            timeCardLayout.addWidget(splitPart)
+        timeCardLayout.addSpacing(4)
+        self.appsDropdown = Dropdown("Apps")
+        self.sitesDropdown = Dropdown("Websites")
+        for timeDropdown in (self.appsDropdown, self.sitesDropdown):
+            timeDropdown.body.setTextFormat(Qt.TextFormat.RichText)
+            timeDropdown.hide()
+            timeCardLayout.addWidget(timeDropdown)
         layout.addWidget(timeCard)
         layout.addStretch()
 
 
 
-
-        # Timers, check the front app every second and save times every 10
         self.tickTimer = QTimer(self, interval=1000, timeout=self.tick)
         self.tickTimer.start()
         self.saveTimer = QTimer(self, interval=10000, timeout=self.saveTimes)
@@ -527,6 +569,18 @@ class Dashboard(QWidget):
         QApplication.instance().aboutToQuit.connect(self.saveTimes)
         self.showTimes()
         self.refreshStats()
+
+        self.sessionPrompt = None
+        self.timesUpToast = None
+        self.scheduleDoneFor = ""
+        self.lastKind = None
+        self.sessionCard = SessionCard(self.askBailOut)
+        sessionRow = QHBoxLayout()
+        sessionRow.setContentsMargins(20, 8, 26, 0)
+        sessionRow.addWidget(self.sessionCard)
+        mainLayout.insertLayout(1, sessionRow)
+        self.sessionTimer = QTimer(self, interval=1000, timeout=self.sessionTick)
+        QTimer.singleShot(0, self.startOrResumeSession)
 
 
     def cardRow(self, colorFamilies, cards: list[tuple[str, str, str, str]]) -> QHBoxLayout:
@@ -543,10 +597,9 @@ class Dashboard(QWidget):
 
 
 
-
-    # Tracking, runs every second
-
     def tick(self) -> None:
+        for settingName in setting_changes.applyDueChanges():
+            self.enforcer.sendNotification("Your " + settingName + " change is on now.")
         window = self.backend.get_active_window()
         while len(vision.notices) > 0:
             self.enforcer.sendNotification(vision.notices.pop(0))
@@ -558,7 +611,6 @@ class Dashboard(QWidget):
         if self.checkInScreen is not None:
             return
 
-        # Figure out what's in front, browsers count as whatever site they're on
         appKind = classifyTypeOfApp(self.backend, window)
         appName = window.app_name
         site = None
@@ -570,7 +622,9 @@ class Dashboard(QWidget):
                 appKind = "unproductive"
 
         switchedApp = appName != self.lastApp
+        justSorted = appKind == "unproductive" and self.lastKind != "unproductive"
         self.lastApp = appName
+        self.lastKind = appKind
         if switchedApp:
             self.emergencyApp = None
         self.currentWindow = window
@@ -578,11 +632,8 @@ class Dashboard(QWidget):
         self.currentSite = site
         self.currentKind = appKind
 
-        # During a break every unproductive app is allowed, so no pause screen or closing
-        # Also NOTE get parth on it
         onBreakRightNow = self.breakName is not None
 
-        # Out of breaks for today, unproductive stuff just closes
         if appKind == "unproductive" and not onBreakRightNow:
             if enforcement.breaksLeftToday() == 0:
                 self.enforcer.closeForToday(window, site)
@@ -590,8 +641,7 @@ class Dashboard(QWidget):
                 self.lastBrowserWindow = None
                 return
 
-        # Just opened something unproductive, ask why first
-        if appKind == "unproductive" and switchedApp and not onBreakRightNow:
+        if appKind == "unproductive" and (switchedApp or justSorted) and not onBreakRightNow:
             secondsSincePassed = time.time() - self.passedAt.get(appName, 0)
             if secondsSincePassed > 600:
                 self.showPause(window, appName, site)
@@ -599,14 +649,9 @@ class Dashboard(QWidget):
         if appName == self.emergencyApp:
             return
 
-        # Add a second to the time list
         timeKey = (appName, appKind)
-        if site is not None and appKind == "unproductive":
-            timeKey = ("Browser unproductive", "unproductive")
-        elif appKind == "browser":
-            timeKey = ("Browser productive", "browser")
-            if site is not None:
-                self.checkUnknownSite(window, site)
+        if appKind == "browser" and site is not None:
+            self.checkUnknownSite(window, site)
         self.trackedTimes[timeKey] = self.trackedTimes.get(timeKey, 0) + 1
         self.usedSeconds[appName] = self.usedSeconds.get(appName, 0) + 1
 
@@ -624,23 +669,24 @@ class Dashboard(QWidget):
         if self.unknownSeconds[site] < 60:
             return
 
-        # If youve on an unknown site for a minute,  ask the AI about it in the background
         self.askedSites.append(site)
         threading.Thread(target=vision.classifySite, args=(self.backend, window, site), daemon=True).start()
 
     def browserSite(self, window):
         browserWindow = (window.window_handle, window.title)
-        needsTitleRecheck = window.title == "" and time.time() - self.siteReadAt > 10
-        if browserWindow != self.lastBrowserWindow or needsTitleRecheck:
+        retrySeconds = 10
+        if self.lastReadSite is None:
+            retrySeconds = 2
+        needsRecheck = window.title == "" or self.lastReadSite is None
+        if needsRecheck and time.time() - self.siteReadAt < retrySeconds:
+            needsRecheck = False
+        if browserWindow != self.lastBrowserWindow or needsRecheck:
             self.lastBrowserWindow = browserWindow
             self.lastReadSite = siteRoot(self.backend.get_browser_url(window))
             self.siteReadAt = time.time()
         return self.lastReadSite
 
 
-
-
-    # Saving + showing tracked times
 
     def saveTimes(self) -> None:
         time_tracking.saveDay(self.trackedDay, self.trackedTimes)
@@ -653,6 +699,9 @@ class Dashboard(QWidget):
     def memoryCleared(self) -> None:
         self.trackedTimes = {}
         self.timeList.setText("Nothing tracked yet")
+        self.timeList.show()
+        for timePart in (self.splitTitle, self.splitBar, self.splitLegend, self.appsDropdown, self.sitesDropdown):
+            timePart.hide()
         self.refreshStats()
 
 
@@ -684,28 +733,65 @@ class Dashboard(QWidget):
         cards[2].setValues(numberText(averageBreaks), reboundText, reboundColor)
 
     def showTimes(self) -> None:
-        if not self.trackedTimes:
+        appRows = []
+        siteRows = []
+        productiveSeconds = 0
+        unproductiveSeconds = 0
+        for (name, rowKind), seconds in self.trackedTimes.items():
+            if name.startswith("Browser "):
+                continue
+            if rowKind == "unproductive":
+                unproductiveSeconds = unproductiveSeconds + seconds
+            else:
+                productiveSeconds = productiveSeconds + seconds
+            if isSiteName(name):
+                siteKind = "productive"
+                if rowKind == "unproductive":
+                    siteKind = "unproductive"
+                siteRows.append((name, siteKind, rowKind, seconds))
+            else:
+                appRows.append((name, rowKind, rowKind, seconds))
+        if productiveSeconds + unproductiveSeconds == 0:
             return
+        self.timeList.hide()
+        self.splitBar.setTimes(productiveSeconds, unproductiveSeconds)
         colors = getColors()
-        sortedTimes = sorted(self.trackedTimes.items(), key=lambda timeEntry: -timeEntry[1])
+        totalSeconds = productiveSeconds + unproductiveSeconds
+        productivePercent = round(100 * productiveSeconds / totalSeconds)
+        self.splitLegend.setText(
+            "<span style='color:" + colors["green"] + ";'>●</span> Productive <b>" + durationText(productiveSeconds) + "</b>"
+            + "&nbsp;&nbsp;&nbsp;<span style='color:" + colors["error"] + ";'>●</span> Unproductive <b>" + durationText(unproductiveSeconds) + "</b>"
+            + "&nbsp;&nbsp;&nbsp;<span style='color:" + colors["onSurfaceVariant"] + ";'>" + str(productivePercent) + "% productive</span>"
+        )
+        for splitPart in (self.splitTitle, self.splitBar, self.splitLegend):
+            splitPart.show()
+        self.fillTimeDropdown(self.appsDropdown, "Apps", appRows)
+        self.fillTimeDropdown(self.sitesDropdown, "Websites", siteRows)
 
+    def fillTimeDropdown(self, timeDropdown, title, rows):
+        totalSeconds = 0
+        for row in rows:
+            totalSeconds = totalSeconds + row[3]
+        timeDropdown.title = title + "   " + durationText(totalSeconds)
+        timeDropdown.updateHeader()
+        timeDropdown.setVisible(len(rows) > 0)
+        colors = getColors()
+        sortedRows = sorted(rows, key=lambda row: -row[3])
         timeRows = []
-        for (name, rowKind), seconds in sortedTimes:
-            dotColor = colors[KIND_COLORS[rowKind]]
+        for name, kindText, colorKind, seconds in sortedRows:
+            dotColor = colors[KIND_COLORS[colorKind]]
             timeRows.append(
-                f"<tr><td width='18' style='color:{dotColor}; font-size:16px;'>●</td>"
-                f"<td width='100%' style='padding-left:4px;'><b>{name}</b> <span style='color:{colors['onSurfaceVariant']};'>{rowKind}</span></td>"
-                f"<td style='padding-left:16px;' align='right' nowrap>{seconds // 60}m {seconds % 60}s</td></tr>"
+                f"<tr><td width='18' style='color:{dotColor}; font-size:14px;'>●</td>"
+                f"<td width='100%' style='padding-left:4px; color:{colors['onSurface']};'><b>{name}</b> <span style='color:{colors['onSurfaceVariant']};'>{kindText}</span></td>"
+                f"<td style='padding-left:16px; color:{colors['onSurface']};' align='right' nowrap>{durationText(seconds)}</td></tr>"
             )
-        self.timeList.setText("<table width='100%' cellspacing='0' cellpadding='3'>" + "".join(timeRows) + "</table>")
+        timeDropdown.body.setText("<table width='100%' cellspacing='0' cellpadding='3'>" + "".join(timeRows) + "</table>")
 
 
 
-
-    # Settings page
 
     def openSettings(self) -> None:
-        self.settingsPage = SettingsPage(STYLE, self.closeSettings, self.memoryCleared)
+        self.settingsPage = SettingsPage(STYLE, self.closeSettings, self.memoryCleared, self.quitFocusGuard)
         self.pages.addWidget(self.settingsPage)
         self.pages.setCurrentWidget(self.settingsPage)
 
@@ -716,9 +802,6 @@ class Dashboard(QWidget):
         self.settingsPage = None
 
 
-
-
-    # Theme switching, light / dark / follow system
 
     def toggleTheme(self) -> None:
         newTheme = "dark"
@@ -739,7 +822,6 @@ class Dashboard(QWidget):
         if themeName == getTheme():
             return
 
-        # Screenshot the old look first so it can fade out on top of the new one
         oldLook = None
         if self.isVisible():
             oldLook = self.grab()
@@ -773,14 +855,12 @@ class Dashboard(QWidget):
 
 
 
-
-    # Pause screen, pops up when you open something unproductive
-
     def showPause(self, window, appName, site):
         self.pausedWindow = window
         self.pausedName = appName
         self.pausedSite = site
-        self.pauseScreen = PauseScreen(appName, self.backend.get_window_rect(window), self.pauseDone)
+        superFocus = memory.load().get("superFocus", False)
+        self.pauseScreen = PauseScreen(appName, self.backend.get_window_rect(window), self.pauseDone, superFocus)
         self.pauseScreen.popUp()
 
     def pauseDone(self, choice):
@@ -813,8 +893,85 @@ class Dashboard(QWidget):
 
 
 
+    def startOrResumeSession(self):
+        if not session.resumeAllowed:
+            session.endSession()
+        if session.sessionSecondsLeft() > 0:
+            self.sessionCard.showSession(session.sessionSecondsLeft())
+            self.sessionTimer.start()
+            return
+        self.sessionPrompt = SessionPrompt(self.sessionChosen)
+        self.sessionPrompt.popUp()
 
-    # Breaks, starting + checking in
+    def sessionChosen(self, minutes):
+        self.sessionPrompt = None
+        session.startSession(minutes)
+        self.sessionCard.totalSeconds = int(minutes * 60)
+        self.sessionCard.showSession(session.sessionSecondsLeft())
+        self.sessionTimer.start()
+
+    def sessionTick(self):
+        if self.timesUpToast is not None:
+            return
+        self.checkSchedule()
+        secondsLeft = session.sessionSecondsLeft()
+        if secondsLeft > 0:
+            self.sessionCard.updateTime(secondsLeft)
+            return
+        self.sessionCard.hide()
+        self.timesUpToast = TimesUpToast(self.timesUpDone)
+        self.timesUpToast.popUp()
+
+    def timesUpDone(self, choice):
+        self.timesUpToast = None
+        if choice == "close":
+            self.quitFocusGuard()
+            return
+        session.extendSession(session.CONTINUE_MINUTES)
+        self.sessionCard.totalSeconds = session.CONTINUE_MINUTES * 60
+        self.sessionCard.showSession(session.sessionSecondsLeft())
+
+    def checkSchedule(self):
+        schedule = memory.load().get("studySchedule", {})
+        now = datetime.now()
+        if now.weekday() not in schedule.get("days", []):
+            return
+        startText = schedule.get("start", "")
+        endText = schedule.get("end", "")
+        nowText = now.strftime("%H:%M")
+        if not (startText <= nowText < endText):
+            return
+        blockName = now.strftime("%Y-%m-%d") + " " + startText
+        if self.scheduleDoneFor == blockName:
+            return
+        self.scheduleDoneFor = blockName
+        endHour, endMinute = endText.split(":")
+        endTime = now.replace(hour=int(endHour), minute=int(endMinute), second=0, microsecond=0)
+        if session.extendSessionUntil(endTime.timestamp()):
+            self.sessionCard.totalSeconds = session.sessionSecondsLeft()
+            self.sessionCard.showSession(session.sessionSecondsLeft())
+            self.enforcer.sendNotification("Study time until " + endTime.strftime("%I:%M %p").lstrip("0") + ", your session now runs until then.")
+
+    def askBailOut(self):
+        bailOutsLeft = session.bailOutsLeftThisWeek()
+        if bailOutsLeft == 0:
+            QMessageBox.information(self, "FocusGuard", "You don't have any bail-outs left this week.")
+            return
+        answer = QMessageBox.question(
+            self,
+            "FocusGuard",
+            "Use a bail-out to end your session early? You have " + str(bailOutsLeft) + " left this week. FocusGuard will close.",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        session.useBailOut()
+        self.quitFocusGuard()
+
+    def quitFocusGuard(self):
+        keep_alive.stopHelper()
+        session.endSession()
+        self.saveTimes()
+        QApplication.quit()
 
     def startBreakPeriod(self):
         enforcement.useBreak()
@@ -832,7 +989,6 @@ class Dashboard(QWidget):
             self.endBreak()
             return
 
-        # Check in about whatever unproductive app you're on now, not just the one the break started on
         self.breakWindow = self.currentWindow
         self.breakName = self.currentName
         self.breakSite = self.currentSite
@@ -844,7 +1000,6 @@ class Dashboard(QWidget):
         self.breakName = None
         self.breakSite = None
 
-        # Once a break is over, every unproductive app needs a new pause before it opens again
         self.passedAt.clear()
 
     def checkInDone(self, choice):
@@ -867,11 +1022,7 @@ class Dashboard(QWidget):
 
 
 
-
-    # Breaks, ending early from the x on the badge
-
     def cancelBreak(self):
-        # Ending a break early counts as bouncing back, same as "I'm ready" on the check in
         self.breakTimer.stop()
         if self.currentKind == "unproductive":
             self.breakWindow = self.currentWindow

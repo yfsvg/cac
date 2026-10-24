@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import logging
+import os
 import subprocess
 import time
 import winreg
@@ -75,6 +76,7 @@ VK_W = 0x57
 KEYEVENTF_KEYUP = 0x0002
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 ERROR_INSUFFICIENT_BUFFER = 122
+SW_SHOWNORMAL = 1
 
 WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 
@@ -107,6 +109,11 @@ kernel32.OpenProcess.restype = wintypes.HANDLE
 kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
 kernel32.GetApplicationUserModelId.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.UINT), wintypes.LPWSTR]
 kernel32.GetApplicationUserModelId.restype = wintypes.LONG
+shell32.IsUserAnAdmin.restype = wintypes.BOOL
+shell32.ShellExecuteW.argtypes = [
+    wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.LPCWSTR, ctypes.c_int,
+]
+shell32.ShellExecuteW.restype = ctypes.c_ssize_t
 
 # The *LongPtr variants only exist in 64-bit user32.
 _GetWindowLong = getattr(user32, "GetWindowLongPtrW", user32.GetWindowLongW)
@@ -281,17 +288,26 @@ class WindowsBackend(PlatformBackend):
         except ImportError:
             uia = PermissionState.DENIED
         return {
-            # Not needed to close the user's own apps; only for tamper resistance later.
-            "administrator": PermissionState.GRANTED if shell32.IsUserAnAdmin() else PermissionState.DENIED,
+            "administrator": PermissionState.GRANTED if self.is_admin() else PermissionState.DENIED,
             "ui_automation": uia,
             "accessibility": PermissionState.NOT_REQUIRED,
             "screen_recording": PermissionState.NOT_REQUIRED,
         }
 
     def request_permissions(self) -> None:
-        # Windows has no per-app consent prompts for anything we use. Elevation can't be granted
-        # to a running process; it would need a relaunch through the UAC "runas" verb.
+        # Windows has no per-app consent prompts for anything we use. Admin rights come from
+        # run_as_admin at startup, since they can't be added to a process that's already running.
         pass
+
+    def is_admin(self) -> bool:
+        return bool(shell32.IsUserAnAdmin())
+
+    def run_as_admin(self, command: list[str]) -> bool:
+        # The "runas" verb shows the UAC prompt. 32 or below means it failed or the user said no.
+        result = shell32.ShellExecuteW(
+            None, "runas", command[0], subprocess.list2cmdline(command[1:]), os.getcwd(), SW_SHOWNORMAL
+        )
+        return result > 32
 
 
 # ---- helpers ---------------------------------------------------------------------------------

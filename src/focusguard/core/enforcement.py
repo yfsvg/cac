@@ -27,13 +27,6 @@ def getBreakMinutes() -> int:
     return int(memory.load().get("breakMinutes", DEFAULT_BREAK_MINUTES))
 
 
-def saveBreakSettings(maxBreaks: int, breakMinutes: int) -> None:
-    savedMemory = memory.load()
-    savedMemory["maxBreaks"] = maxBreaks
-    savedMemory["breakMinutes"] = breakMinutes
-    memory.save(savedMemory)
-
-
 def breaksUsedToday() -> int:
     breaksUsed = memory.load().get("breaksUsed", {})
     if breaksUsed.get("day") != date.today().isoformat():
