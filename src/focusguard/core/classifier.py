@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 from urllib.parse import urlsplit
 
+from focusguard.core.ignored_apps import IGNORED_APPS
 from focusguard.core.unproductive_apps import UNPRODUCTIVE_APPS
 from focusguard.core.unproductive_sites import UNPRODUCTIVE_SITES
 
@@ -48,6 +49,11 @@ def isUnproductiveSite(site: str | None) -> bool:
 
 
 
+
+
+def isIgnoredApp(window) -> bool:
+    """taskbar, start menu, snipping tool, focusguard itself etc. see ignored_apps.py"""
+    return window.app_id.lower() in IGNORED_APPS
 
 
 def possibleNames(window) -> list[str]:
