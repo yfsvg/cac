@@ -389,7 +389,6 @@ class Dashboard(QWidget):
         self.lastBrowserWindow = None
         self.lastSite = None
         self.siteReadAt = 0
-        # bounce-back: after a break starts, check in every 5 minutes until you're ready
         self.checkInScreen = None
         self.breakWindow = None
         self.breakName = None
@@ -473,7 +472,6 @@ class Dashboard(QWidget):
                 self.checkUnknownSite(window, site)
         self.trackedTimes[key] = self.trackedTimes.get(key, 0) + 1
         self.usedSeconds[appName] = self.usedSeconds.get(appName, 0) + 1
-        # the app or site you're on a break with doesn't get auto-closed, the check-in handles it instead
         onBreak = appName == self.breakName
         if not onBreak and self.enforcer.checkApp(window, appKind, self.usedSeconds[appName], site):
             self.usedSeconds[appName] = 0
@@ -615,8 +613,16 @@ class Dashboard(QWidget):
 
     def showCheckIn(self):
         self.breakBadge.stopBreak()
+        if self.lastApp != self.breakName:
+            self.endBreak()
+            return
         self.checkInScreen = CheckInScreen(self.breakName, self.timesAsked, self.checkInDone)
         self.checkInScreen.popUp()
+
+    def endBreak(self):
+        self.breakWindow = None
+        self.breakName = None
+        self.breakSite = None
 
     def checkInDone(self, choice):
         self.checkInScreen = None
@@ -626,17 +632,15 @@ class Dashboard(QWidget):
                 self.backend.close_app(window.pid)
             else:
                 self.backend.close_tab(window)
+            self.passedAt.pop(self.breakName, None)
+            self.usedSeconds[self.breakName] = 0
             self.lastApp = None
             self.lastBrowserWindow = None
-            self.breakWindow = None
-            self.breakName = None
-            self.breakSite = None
-            # tree isn't built yet, it'll grow from this count
+            self.endBreak()
             savedMemory = memory.load()
             savedMemory["bounceBacks"] = savedMemory.get("bounceBacks", 0) + 1
             memory.save(savedMemory)
         else:
-            # continuing never costs anything, just ask again in another 5 minutes
             self.timesAsked = self.timesAsked + 1
             self.breakTimer.start()
             self.breakBadge.startBreak(BREAK_SECONDS)
