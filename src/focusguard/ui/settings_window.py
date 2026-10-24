@@ -1,4 +1,4 @@
-from PySide6.QtCore import QPointF, QSize, Qt, QTime
+from PySide6.QtCore import QPointF, QSize, Qt, QTime, QTimer
 from PySide6.QtGui import QColor, QFontDatabase, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -16,12 +16,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-import os
-import time
-
 from focusguard.ai import site_memory, vision
-from focusguard.core import enforcement, session
-from focusguard.storage import memory, time_tracking
+from focusguard.core import enforcement, session, setting_changes
+from focusguard.core.debug_mode import isDebugMode
+from focusguard.core.setting_changes import frozenSecondsLeft, markChanged
+from focusguard.storage import memory, parent_pin, time_tracking
 from focusguard.ui.theme import applyTheme, getColors
 
 SETTINGS_STYLE = """
@@ -134,27 +133,6 @@ def makeBackArrow():
     return QIcon(arrow)
 
 
-FREEZE_SECONDS = 3 * 24 * 60 * 60
-
-
-def markChanged(settingName):
-    savedMemory = memory.load()
-    changedAt = savedMemory.get("changedAt", {})
-    changedAt[settingName] = time.time()
-    savedMemory["changedAt"] = changedAt
-    memory.save(savedMemory)
-
-
-def frozenSecondsLeft(settingName):
-    changedAt = memory.load().get("changedAt", {})
-    if settingName not in changedAt:
-        return 0
-    secondsLeft = changedAt[settingName] + FREEZE_SECONDS - time.time()
-    if secondsLeft < 0:
-        return 0
-    return int(secondsLeft)
-
-
 def frozenText(secondsLeft):
     daysLeft = secondsLeft // 86400
     hoursLeft = (secondsLeft % 86400) // 3600
@@ -164,19 +142,16 @@ def frozenText(secondsLeft):
     return "locked for " + str(hoursLeft) + "h " + str(minutesLeft) + "m"
 
 
+def waitText(secondsLeft):
+    minutesLeft = secondsLeft // 60
+    if minutesLeft >= 10:
+        return str(minutesLeft) + "m"
+    return str(minutesLeft) + "m " + str(secondsLeft % 60) + "s"
+
+
 DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 SETTING_NAMES = ["Absolute Time Limits", "Schedule Time Limits", "AI Categorizations", "Super Focus Mode", "Bail-Outs"]
-
-
-def getPin():
-    return memory.load().get("parentPin", "")
-
-
-def savePin(newPin):
-    savedMemory = memory.load()
-    savedMemory["parentPin"] = newPin
-    memory.save(savedMemory)
 
 
 def getLockedSettings():
@@ -260,9 +235,9 @@ class PinDialog(QDialog):
             elif typedPin != self.confirmBox.text():
                 self.showError("The PINs didn't match")
             else:
-                savePin(typedPin)
+                parent_pin.savePin(typedPin)
                 self.accept()
-        elif typedPin == getPin():
+        elif parent_pin.pinMatches(typedPin):
             self.accept()
         else:
             self.pinBox.clear()
@@ -270,7 +245,7 @@ class PinDialog(QDialog):
 
 
 def askForPin(parent, mainStyle):
-    if getPin() == "":
+    if not parent_pin.hasPin():
         return True
     return PinDialog(parent, mainStyle, False).exec() == QDialog.DialogCode.Accepted
 
@@ -283,6 +258,7 @@ class SettingsPage(QWidget):
         self.mainStyle = mainStyle
         self.onMemoryCleared = onMemoryCleared
         self.onForceQuit = onForceQuit
+        self.pendingRows = {}
         self.setStyleSheet(applyTheme(SETTINGS_STYLE))
 
         scroll = QScrollArea(widgetResizable=True)
@@ -314,6 +290,7 @@ class SettingsPage(QWidget):
         layout.addSpacing(4)
 
         layout.addWidget(label("App Config", "Section"))
+        layout.addWidget(label("Changes start 1 hour after you save them, so they're never made on impulse.", "Streak"))
         for settingName in SETTING_NAMES:
             dropdown = Dropdown(settingName)
             dropdown.header.clicked.disconnect()
@@ -356,24 +333,17 @@ class SettingsPage(QWidget):
         layout.addLayout(parentRow)
         layout.addSpacing(8)
 
-        layout.addWidget(label("Testing", "Section"))
-        layout.addWidget(label("Only for the testing phase. Completely closes FocusGuard right away.", "Streak"))
-        forceQuitRow = QHBoxLayout()
-        forceQuitButton = QPushButton("Force quit", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
-        forceQuitButton.clicked.connect(self.forceQuit)
-        forceQuitRow.addWidget(forceQuitButton)
-        forceQuitRow.addStretch()
-        layout.addLayout(forceQuitRow)
-        layout.addSpacing(8)
-
-        if os.environ.get("FOCUSGUARD_DEBUG") == "1":
+        if isDebugMode():
             layout.addWidget(label("Debug", "Section"))
             layout.addWidget(label("Testing tools. These skip parental controls.", "Streak"))
             debugRow = QHBoxLayout()
+            forceQuitButton = QPushButton("Force quit", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
+            forceQuitButton.clicked.connect(self.forceQuit)
             resetTimersButton = QPushButton("Reset lock timers", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
             resetTimersButton.clicked.connect(self.resetLockTimers)
             clearMemoryButton = QPushButton("Clear all memory", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
             clearMemoryButton.clicked.connect(self.clearAllMemory)
+            debugRow.addWidget(forceQuitButton)
             debugRow.addWidget(resetTimersButton)
             debugRow.addWidget(clearMemoryButton)
             debugRow.addStretch()
@@ -381,9 +351,11 @@ class SettingsPage(QWidget):
         layout.addStretch()
 
         self.updateParentSection()
+        self.countdownTimer = QTimer(self, interval=1000, timeout=self.updateCountdowns)
+        self.countdownTimer.start()
 
     def updateParentSection(self):
-        isSetUp = getPin() != ""
+        isSetUp = parent_pin.hasPin()
         lockedSettings = getLockedSettings()
         self.setupButton.setVisible(not isSetUp)
         self.changePinButton.setVisible(isSetUp)
@@ -423,6 +395,47 @@ class SettingsPage(QWidget):
         saveLockedSettings(lockedSettings)
         self.updateParentSection()
 
+    def canEdit(self, settingName):
+        return frozenSecondsLeft(settingName) == 0 and not setting_changes.isPending(settingName)
+
+    def makePendingRow(self, settingName):
+        from focusguard.ui.dashboard import label
+
+        pendingRow = QWidget()
+        rowLayout = QHBoxLayout(pendingRow)
+        rowLayout.setContentsMargins(0, 0, 0, 0)
+        pendingText = label("", "SliderHint")
+        rowLayout.addWidget(pendingText, 1)
+        cancelButton = QPushButton("Cancel change", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
+        cancelButton.clicked.connect(lambda checked=False: self.cancelChange(settingName))
+        rowLayout.addWidget(cancelButton, alignment=Qt.AlignmentFlag.AlignVCenter)
+        if isDebugMode():
+            applyButton = QPushButton("Apply now", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
+            applyButton.clicked.connect(lambda checked=False: self.applyChangeNow(settingName))
+            rowLayout.addWidget(applyButton, alignment=Qt.AlignmentFlag.AlignVCenter)
+        self.pendingRows[settingName] = (pendingRow, pendingText)
+        return pendingRow
+
+    def updatePendingRow(self, settingName):
+        pendingRow, pendingText = self.pendingRows[settingName]
+        pendingRow.setVisible(setting_changes.isPending(settingName))
+        secondsLeft = setting_changes.pendingSecondsLeft(settingName)
+        pendingText.setText("Saved. Your change starts in " + waitText(secondsLeft) + ".")
+
+    def cancelChange(self, settingName):
+        setting_changes.cancelChange(settingName)
+        self.refreshEverything()
+
+    def applyChangeNow(self, settingName):
+        setting_changes.applyNow(settingName)
+        self.refreshEverything()
+
+    def updateCountdowns(self):
+        self.updateBreakLabels()
+        self.updateSchedule()
+        self.updateSuperFocus()
+        self.updateBailOuts()
+
     def makeBreakLimits(self):
         from focusguard.ui.dashboard import label
 
@@ -434,13 +447,11 @@ class SettingsPage(QWidget):
         self.breakCountLabel = label("", "SliderLabel")
         self.breakCountSlider = QSlider(Qt.Orientation.Horizontal)
         self.breakCountSlider.setRange(enforcement.MIN_BREAKS, enforcement.MAX_BREAKS)
-        self.breakCountSlider.setValue(enforcement.getMaxBreaks())
         self.breakCountSlider.valueChanged.connect(self.updateBreakLabels)
 
         self.breakLengthLabel = label("", "SliderLabel")
         self.breakLengthSlider = QSlider(Qt.Orientation.Horizontal)
         self.breakLengthSlider.setRange(enforcement.MIN_BREAK_MINUTES, enforcement.MAX_BREAK_MINUTES)
-        self.breakLengthSlider.setValue(enforcement.getBreakMinutes())
         self.breakLengthSlider.valueChanged.connect(self.updateBreakLabels)
 
         self.breakTotalLabel = label("", "SliderHint")
@@ -456,9 +467,15 @@ class SettingsPage(QWidget):
         breakLayout.addWidget(self.breakLengthLabel)
         breakLayout.addWidget(self.breakLengthSlider)
         breakLayout.addWidget(self.breakTotalLabel)
+        breakLayout.addWidget(self.makePendingRow("Absolute Time Limits"))
         breakLayout.addLayout(saveRow)
-        self.updateBreakLabels()
+        self.showBreakValues()
         return breakLimits
+
+    def showBreakValues(self):
+        self.breakCountSlider.setValue(setting_changes.upcomingValue("Absolute Time Limits", "maxBreaks", enforcement.getMaxBreaks()))
+        self.breakLengthSlider.setValue(setting_changes.upcomingValue("Absolute Time Limits", "breakMinutes", enforcement.getBreakMinutes()))
+        self.updateBreakLabels()
 
     def updateBreakLabels(self):
         breakCount = self.breakCountSlider.value()
@@ -471,17 +488,18 @@ class SettingsPage(QWidget):
             totalText = str(totalMinutes // 60) + "h " + str(totalMinutes % 60) + "m"
         hintText = "Up to " + totalText + " of breaks a day. After that, unproductive apps close for the rest of the day."
         secondsLeft = frozenSecondsLeft("Absolute Time Limits")
-        isFrozen = secondsLeft > 0
-        self.breakCountSlider.setEnabled(not isFrozen)
-        self.breakLengthSlider.setEnabled(not isFrozen)
-        self.saveBreaksButton.setEnabled(not isFrozen)
-        if isFrozen:
+        canEdit = self.canEdit("Absolute Time Limits")
+        self.breakCountSlider.setEnabled(canEdit)
+        self.breakLengthSlider.setEnabled(canEdit)
+        self.saveBreaksButton.setEnabled(canEdit)
+        if secondsLeft > 0:
             hintText = hintText + " (" + frozenText(secondsLeft) + ")"
         self.breakTotalLabel.setText(hintText)
+        self.updatePendingRow("Absolute Time Limits")
 
     def saveBreakLimits(self):
-        enforcement.saveBreakSettings(self.breakCountSlider.value(), self.breakLengthSlider.value())
-        markChanged("Absolute Time Limits")
+        newValues = {"maxBreaks": self.breakCountSlider.value(), "breakMinutes": self.breakLengthSlider.value()}
+        setting_changes.queueChange("Absolute Time Limits", newValues)
         self.updateBreakLabels()
 
     def forceQuit(self):
@@ -505,25 +523,23 @@ class SettingsPage(QWidget):
         from focusguard.ui.dashboard import label
 
         tab, tabLayout = self.makeTab()
-        schedule = memory.load().get("studySchedule", {})
         tabLayout.addWidget(label("Study days and hours. During them your focus session keeps running until the end time.", "SliderHint"))
         dayRow = QHBoxLayout()
         self.dayBoxes = []
         for dayNumber in range(7):
             dayBox = QPushButton(DAY_NAMES[dayNumber], objectName="DayChip", cursor=Qt.CursorShape.PointingHandCursor)
             dayBox.setCheckable(True)
-            dayBox.setChecked(dayNumber in schedule.get("days", []))
             self.dayBoxes.append(dayBox)
             dayRow.addWidget(dayBox)
         tabLayout.addLayout(dayRow)
         timeRow = QHBoxLayout()
-        self.startTimeBox = QTimeEdit(QTime.fromString(schedule.get("start", "16:00"), "HH:mm"))
+        self.startTimeBox = QTimeEdit()
         self.startTimeBox.setDisplayFormat("HH:mm")
         self.startTimeBox.setButtonSymbols(QTimeEdit.ButtonSymbols.NoButtons)
         self.startTimeBox.setFrame(False)
         self.startTimeBox.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.startTimeBox.setFixedSize(64, 32)
-        self.endTimeBox = QTimeEdit(QTime.fromString(schedule.get("end", "18:00"), "HH:mm"))
+        self.endTimeBox = QTimeEdit()
         self.endTimeBox.setDisplayFormat("HH:mm")
         self.endTimeBox.setButtonSymbols(QTimeEdit.ButtonSymbols.NoButtons)
         self.endTimeBox.setFrame(False)
@@ -538,11 +554,24 @@ class SettingsPage(QWidget):
         tabLayout.addLayout(timeRow)
         self.scheduleHint = label("", "SliderHint")
         tabLayout.addWidget(self.scheduleHint)
+        self.scheduleError = QLabel("", objectName="ErrorText")
+        self.scheduleError.hide()
+        tabLayout.addWidget(self.scheduleError)
+        tabLayout.addWidget(self.makePendingRow("Schedule Time Limits"))
         self.saveScheduleButton = QPushButton("Save", objectName="MainButton", cursor=Qt.CursorShape.PointingHandCursor)
         self.saveScheduleButton.clicked.connect(self.saveSchedule)
         tabLayout.addLayout(self.makeSaveRow(self.saveScheduleButton))
-        self.updateSchedule()
+        self.showScheduleValues()
         return tab
+
+    def showScheduleValues(self):
+        schedule = setting_changes.upcomingValue("Schedule Time Limits", "studySchedule", memory.load().get("studySchedule", {}))
+        for dayNumber in range(7):
+            self.dayBoxes[dayNumber].setChecked(dayNumber in schedule.get("days", []))
+        self.startTimeBox.setTime(QTime.fromString(schedule.get("start", "16:00"), "HH:mm"))
+        self.endTimeBox.setTime(QTime.fromString(schedule.get("end", "18:00"), "HH:mm"))
+        self.scheduleError.hide()
+        self.updateSchedule()
 
     def makeTimeChip(self, timeBox):
         timeChip = QFrame(objectName="TimeChip")
@@ -553,30 +582,33 @@ class SettingsPage(QWidget):
 
     def updateSchedule(self):
         secondsLeft = frozenSecondsLeft("Schedule Time Limits")
+        canEdit = self.canEdit("Schedule Time Limits")
         for dayBox in self.dayBoxes:
-            dayBox.setEnabled(secondsLeft == 0)
-        self.startTimeBox.setEnabled(secondsLeft == 0)
-        self.endTimeBox.setEnabled(secondsLeft == 0)
-        self.saveScheduleButton.setEnabled(secondsLeft == 0)
+            dayBox.setEnabled(canEdit)
+        self.startTimeBox.setEnabled(canEdit)
+        self.endTimeBox.setEnabled(canEdit)
+        self.saveScheduleButton.setEnabled(canEdit)
         hintText = ""
         if secondsLeft > 0:
             hintText = "Schedule " + frozenText(secondsLeft)
         self.scheduleHint.setText(hintText)
+        self.scheduleHint.setVisible(hintText != "")
+        self.updatePendingRow("Schedule Time Limits")
 
     def saveSchedule(self):
         startText = self.startTimeBox.time().toString("HH:mm")
         endText = self.endTimeBox.time().toString("HH:mm")
         if startText >= endText:
-            self.scheduleHint.setText("The end time has to be after the start time.")
+            self.scheduleError.setText("The end time has to be after the start time.")
+            self.scheduleError.show()
             return
+        self.scheduleError.hide()
         chosenDays = []
         for dayNumber in range(7):
             if self.dayBoxes[dayNumber].isChecked():
                 chosenDays.append(dayNumber)
-        savedMemory = memory.load()
-        savedMemory["studySchedule"] = {"days": chosenDays, "start": startText, "end": endText}
-        memory.save(savedMemory)
-        markChanged("Schedule Time Limits")
+        newSchedule = {"days": chosenDays, "start": startText, "end": endText}
+        setting_changes.queueChange("Schedule Time Limits", {"studySchedule": newSchedule})
         self.updateSchedule()
 
     def makeAiTab(self):
@@ -635,30 +667,33 @@ class SettingsPage(QWidget):
 
         tab, tabLayout = self.makeTab()
         self.superFocusBox = QCheckBox("Turn on Super Focus Mode", objectName="Switch")
-        self.superFocusBox.setChecked(memory.load().get("superFocus", False))
         tabLayout.addWidget(self.superFocusBox)
         self.superFocusHint = label("", "SliderHint")
         tabLayout.addWidget(self.superFocusHint)
+        tabLayout.addWidget(self.makePendingRow("Super Focus Mode"))
         self.saveSuperFocusButton = QPushButton("Save", objectName="MainButton", cursor=Qt.CursorShape.PointingHandCursor)
         self.saveSuperFocusButton.clicked.connect(self.saveSuperFocus)
         tabLayout.addLayout(self.makeSaveRow(self.saveSuperFocusButton))
-        self.updateSuperFocus()
+        self.showSuperFocusValue()
         return tab
+
+    def showSuperFocusValue(self):
+        self.superFocusBox.setChecked(setting_changes.upcomingValue("Super Focus Mode", "superFocus", memory.load().get("superFocus", False)))
+        self.updateSuperFocus()
 
     def updateSuperFocus(self):
         secondsLeft = frozenSecondsLeft("Super Focus Mode")
-        self.superFocusBox.setEnabled(secondsLeft == 0)
-        self.saveSuperFocusButton.setEnabled(secondsLeft == 0)
+        canEdit = self.canEdit("Super Focus Mode")
+        self.superFocusBox.setEnabled(canEdit)
+        self.saveSuperFocusButton.setEnabled(canEdit)
         hintText = "When it's on, there are no breaks during a focus session. Unproductive apps only offer Emergency or Back to work."
         if secondsLeft > 0:
             hintText = hintText + " (" + frozenText(secondsLeft) + ")"
         self.superFocusHint.setText(hintText)
+        self.updatePendingRow("Super Focus Mode")
 
     def saveSuperFocus(self):
-        savedMemory = memory.load()
-        savedMemory["superFocus"] = self.superFocusBox.isChecked()
-        memory.save(savedMemory)
-        markChanged("Super Focus Mode")
+        setting_changes.queueChange("Super Focus Mode", {"superFocus": self.superFocusBox.isChecked()})
         self.updateSuperFocus()
 
     def makeBailOuts(self):
@@ -669,32 +704,35 @@ class SettingsPage(QWidget):
         tabLayout.addWidget(self.bailOutLabel)
         self.bailOutSlider = QSlider(Qt.Orientation.Horizontal)
         self.bailOutSlider.setRange(0, session.MAX_BAIL_OUTS)
-        self.bailOutSlider.setValue(session.bailOutsPerWeek())
         self.bailOutSlider.valueChanged.connect(self.updateBailOuts)
         tabLayout.addWidget(self.bailOutSlider)
         self.bailOutHint = label("", "SliderHint")
         tabLayout.addWidget(self.bailOutHint)
+        tabLayout.addWidget(self.makePendingRow("Bail-Outs"))
         self.saveBailOutsButton = QPushButton("Save", objectName="MainButton", cursor=Qt.CursorShape.PointingHandCursor)
         self.saveBailOutsButton.clicked.connect(self.saveBailOuts)
         tabLayout.addLayout(self.makeSaveRow(self.saveBailOutsButton))
-        self.updateBailOuts()
+        self.showBailOutValue()
         return tab
+
+    def showBailOutValue(self):
+        self.bailOutSlider.setValue(setting_changes.upcomingValue("Bail-Outs", "bailOutsPerWeek", session.bailOutsPerWeek()))
+        self.updateBailOuts()
 
     def updateBailOuts(self):
         self.bailOutLabel.setText("Bail-outs per week: <b>" + str(self.bailOutSlider.value()) + "</b>")
         hintText = "A bail-out ends your focus session early from the x on the session badge. You have " + str(session.bailOutsLeftThisWeek()) + " left this week."
         secondsLeft = frozenSecondsLeft("Bail-Outs")
-        self.bailOutSlider.setEnabled(secondsLeft == 0)
-        self.saveBailOutsButton.setEnabled(secondsLeft == 0)
+        canEdit = self.canEdit("Bail-Outs")
+        self.bailOutSlider.setEnabled(canEdit)
+        self.saveBailOutsButton.setEnabled(canEdit)
         if secondsLeft > 0:
             hintText = hintText + " (" + frozenText(secondsLeft) + ")"
         self.bailOutHint.setText(hintText)
+        self.updatePendingRow("Bail-Outs")
 
     def saveBailOuts(self):
-        savedMemory = memory.load()
-        savedMemory["bailOutsPerWeek"] = self.bailOutSlider.value()
-        memory.save(savedMemory)
-        markChanged("Bail-Outs")
+        setting_changes.queueChange("Bail-Outs", {"bailOutsPerWeek": self.bailOutSlider.value()})
         self.updateBailOuts()
 
     def updateKeySection(self):
@@ -723,14 +761,11 @@ class SettingsPage(QWidget):
         self.updateKeySection()
 
     def refreshEverything(self):
-        self.breakCountSlider.setValue(enforcement.getMaxBreaks())
-        self.breakLengthSlider.setValue(enforcement.getBreakMinutes())
-        self.updateBreakLabels()
+        self.showBreakValues()
         self.updateKeySection()
-        self.updateSchedule()
-        self.updateSuperFocus()
-        self.bailOutSlider.setValue(session.bailOutsPerWeek())
-        self.updateBailOuts()
+        self.showScheduleValues()
+        self.showSuperFocusValue()
+        self.showBailOutValue()
         self.updateParentSection()
 
     def resetLockTimers(self):
@@ -766,6 +801,6 @@ class SettingsPage(QWidget):
 
     def turnOffParentalControls(self):
         if askForPin(self, self.mainStyle):
-            savePin("")
+            parent_pin.removePin()
             saveLockedSettings([])
             self.updateParentSection()

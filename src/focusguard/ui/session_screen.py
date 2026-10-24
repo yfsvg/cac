@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from focusguard.core import session
+from focusguard.core.debug_mode import isDebugMode
 from focusguard.platform import get_backend
 from focusguard.ui.pause_screen import BADGE_MARGIN, BADGE_STYLE, STYLE
 from focusguard.ui.theme import applyTheme
@@ -108,8 +109,6 @@ class SessionPrompt(QWidget):
 
         startButton = QPushButton("Start", objectName="BackButton", cursor=Qt.CursorShape.PointingHandCursor)
         startButton.clicked.connect(self.start)
-        testButton = QPushButton("15 sec (testing)", objectName="Preset", cursor=Qt.CursorShape.PointingHandCursor)
-        testButton.clicked.connect(self.startTest)
 
         self.box = QFrame(self, objectName="Box")
         self.box.setFixedWidth(420)
@@ -122,7 +121,10 @@ class SessionPrompt(QWidget):
         boxLayout.addWidget(self.slider)
         boxLayout.addWidget(self.choiceLabel)
         boxLayout.addWidget(startButton)
-        boxLayout.addWidget(testButton)
+        if isDebugMode():
+            testButton = QPushButton("15 sec (testing)", objectName="Preset", cursor=Qt.CursorShape.PointingHandCursor)
+            testButton.clicked.connect(self.startTest)
+            boxLayout.addWidget(testButton)
         self.updateChoice()
         self.box.adjustSize()
         screen = self.geometry()

@@ -35,7 +35,7 @@ from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPainter, QPai
 from focusguard.ai import vision
 from focusguard.ai.site_memory import siteCategory
 from focusguard.core.classifier import classifyTypeOfApp, isIgnoredApp, isUnproductiveSite, siteRoot
-from focusguard.core import enforcement, keep_alive, session
+from focusguard.core import enforcement, keep_alive, session, setting_changes
 from focusguard.core.enforcement import Enforcer
 from focusguard.storage import memory, streak, time_tracking
 from focusguard.ui.settings_window import SettingsPage
@@ -545,6 +545,8 @@ class Dashboard(QWidget):
 
 
     def tick(self) -> None:
+        for settingName in setting_changes.applyDueChanges():
+            self.enforcer.sendNotification("Your " + settingName + " change is on now.")
         window = self.backend.get_active_window()
         while len(vision.notices) > 0:
             self.enforcer.sendNotification(vision.notices.pop(0))
