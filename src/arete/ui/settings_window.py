@@ -422,18 +422,27 @@ class SettingsPage(QWidget):
         self.countdownTimer.start()
 
     def updateClimbBox(self):
-        totalText = format(climbing.climbState()["totalPercent"], ".1f")
+        state = climbing.climbState()
+        mountainName = mountains.MOUNTAINS[state["mountainNumber"]]["shortName"]
         self.climbBox.clear()
-        self.climbBox.setPlaceholderText("Climb % across all 3 mountains (0 - 300), now " + totalText)
+        self.climbBox.setPlaceholderText("Climb % on " + mountainName + " (0 - 100), now " + format(state["percent"], ".1f"))
 
     def setClimb(self):
         try:
-            totalPercent = float(self.climbBox.text().strip())
+            mountainPercent = float(self.climbBox.text().strip())
         except ValueError:
             return
-        bossesBeaten = 0
+        if mountainPercent < 0:
+            mountainPercent = 0
+        if mountainPercent > 100:
+            mountainPercent = 100
+
+        # % is on the mountain ur on now, so earlier mountains stay finished
+        mountainNumber = climbing.climbState()["mountainNumber"]
+        totalPercent = mountainNumber * 100 + mountainPercent
+        bossesBeaten = mountainNumber * len(mountains.BOSS_CHECKPOINTS)
         for bossPercent in mountains.bossPercents():
-            if bossPercent < totalPercent:
+            if bossPercent > mountainNumber * 100 and bossPercent < totalPercent:
                 bossesBeaten = bossesBeaten + 1
         climbing.setClimbPercent(totalPercent, bossesBeaten)
         self.updateClimbBox()
