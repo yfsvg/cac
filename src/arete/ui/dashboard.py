@@ -102,18 +102,18 @@ STYLE = """
 
 
     QPushButton#DropdownHeader {
-        color: @onPrimary;
+        color: @onSurface;
         font-size: 15px;
         font-weight: 600;
         text-align: left;
-        background-color: @primary;
+        background-color: @surfaceContainerHigh;
         border: none;
-        border-bottom: 4px solid @primaryShadow;
         border-radius: 16px;
-        padding: 12px 16px 10px 40px;
+        padding: 12px 16px 12px 40px;
     }
-    QPushButton#DropdownHeader:hover { background-color: @primaryHover; }
-    QPushButton#DropdownHeader:pressed { border-bottom: 1px solid @primaryShadow; padding-top: 15px; }
+    QPushButton#DropdownHeader:hover { background-color: @surfaceContainerHighest; }
+    QPushButton#DropdownHeader:pressed { background-color: @secondaryContainer; }
+    QLabel#CardTitle { color: @onSurface; font-size: 20px; font-weight: 700; padding-left: 4px; }
 
     QPushButton#ThemeButton {
         color: @onSurface;
@@ -234,7 +234,7 @@ class StatCard(QFrame):
 
         centerAlign = Qt.AlignmentFlag.AlignHCenter
         cardLayout = QVBoxLayout(self)
-        cardLayout.setContentsMargins(8, 14, 8, 14)
+        cardLayout.setContentsMargins(8, 24, 8, 14)
         cardLayout.setSpacing(0)
         self.numberLabel = label(number, "BigNumber", centerAlign)
         # the number its counting up to, can be different from whats on screen mid animation
@@ -268,9 +268,9 @@ class StatCard(QFrame):
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRoundedRect(QRectF(self.rect()).adjusted(1.5, 1.5, -1.5, -1.5), 23, 23)
         iconColor.setAlpha(int(150 + 100 * self.hoverAmount))
-        painter.translate(24, 24)
+        painter.translate(20, 20)
         painter.rotate(-15 * self.hoverAmount)
-        painter.scale(1 + 0.2 * self.hoverAmount, 1 + 0.2 * self.hoverAmount)
+        painter.scale(0.85 + 0.2 * self.hoverAmount, 0.85 + 0.2 * self.hoverAmount)
         drawStatIcon(painter, self.iconName, iconColor)
 
     def enterEvent(self, event) -> None:
@@ -604,7 +604,7 @@ class DropdownHeader(QPushButton):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.translate(24, self.height() / 2)
         painter.rotate(self.angle)
-        chevronPen = QPen(QColor(getColors()["onPrimary"]), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        chevronPen = QPen(QColor(getColors()["onSurface"]), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
         painter.setPen(chevronPen)
         painter.drawLine(QPointF(-2, -4), QPointF(2, 0))
         painter.drawLine(QPointF(2, 0), QPointF(-2, 4))
@@ -857,24 +857,24 @@ class Dashboard(QWidget):
         heroLayout.addWidget(label(memory.streakText(memory.markOpenedToday()), "Streak"))
         layout.addWidget(heroCard)
         self.showCurrentMountain()
-        self.sessionPanel = SessionPanel(self.sessionChosen, self.endPressed)
-        layout.addWidget(self.sessionPanel)
         self.bossCard = BossCard()
         layout.addWidget(self.bossCard)
         self.climbCard = ClimbCard(self.openMountain)
         self.climbCard.refresh()
         layout.addWidget(self.climbCard)
+        self.sessionPanel = SessionPanel(self.sessionChosen, self.endPressed)
+        layout.addWidget(self.sessionPanel)
         self.entranceWidgets = [heroCard, self.climbCard]
         layout.addSpacing(8)
 
 
 
-        layout.addWidget(label("Today’s Stats", "Section"))
         todayCard, todayLayout = self.sectionCard()
+        todayLayout.addWidget(label("Today’s Stats", "CardTitle"))
         todayLayout.addLayout(self.cardRow(["primary", "green", "tertiary"], [
-            ("–", "% time focused", "No data yet", NO_DATA),
-            ("–", "Hours spent productive", "No data yet", NO_DATA),
-            ("–", "Average rebounding speed", "No data yet", NO_DATA),
+            ("–", "Time focused", "No data yet", NO_DATA),
+            ("–", "Productive hours", "No data yet", NO_DATA),
+            ("–", "Rebound speed", "No data yet", NO_DATA),
         ]))
         self.todayCards = self.statCards[-3:]
         self.todayList = TimeList("Nothing tracked yet")
@@ -882,22 +882,19 @@ class Dashboard(QWidget):
         layout.addWidget(todayCard)
         layout.addSpacing(8)
 
-        layout.addWidget(label("Weekly Stats", "Section"))
         weekCard, weekLayout = self.sectionCard()
+        weekLayout.addWidget(label("Weekly Stats", "CardTitle"))
         weekLayout.addLayout(self.cardRow(["blue", "orange", "secondary"], [
-            ("–", "% time focused", "No data yet", NO_DATA),
-            ("–", "Hours spent productive", "No data yet", NO_DATA),
-            ("–", "Average rebounding speed", "No data yet", NO_DATA),
+            ("–", "Time focused", "No data yet", NO_DATA),
+            ("–", "Productive hours", "No data yet", NO_DATA),
+            ("–", "Rebound speed", "No data yet", NO_DATA),
         ]))
         self.weekCards = self.statCards[-3:]
         self.weekList = TimeList("Nothing tracked yet")
         weekLayout.addWidget(Dropdown("Show more stats", self.weekList))
-        layout.addWidget(weekCard)
-        layout.addSpacing(8)
 
 
 
-        layout.addWidget(label("Time Tracked", "Section"))
         self.backend = get_backend()
         self.trackedTimes: dict[tuple[str, str], int] = time_tracking.loadToday()
         self.trackedDay = time_tracking.todayName()
@@ -936,6 +933,7 @@ class Dashboard(QWidget):
         timeCardLayout = QVBoxLayout(timeCard)
         timeCardLayout.setContentsMargins(20, 16, 20, 16)
         timeCardLayout.setSpacing(6)
+        timeCardLayout.addWidget(label("Today’s Time Tracked", "CardTitle"))
         self.timeList = QLabel("Nothing tracked yet", alignment=Qt.AlignmentFlag.AlignTop)
         timeCardLayout.addWidget(self.timeList)
         self.splitTitle = label("Productive vs unproductive", "SplitTitle")
@@ -952,6 +950,8 @@ class Dashboard(QWidget):
             timeDropdown.hide()
             timeCardLayout.addWidget(timeDropdown)
         layout.addWidget(timeCard)
+        layout.addSpacing(8)
+        layout.addWidget(weekCard)
         layout.addStretch()
 
 
@@ -1252,6 +1252,7 @@ class Dashboard(QWidget):
         self.pages.addWidget(self.settingsPage)
         self.pages.setCurrentWidget(self.settingsPage)
         animations.fadeIn(self.settingsPage, 260)
+        self.placeSessionCard()
 
     def closeSettings(self) -> None:
         self.pages.setCurrentIndex(0)
@@ -1259,6 +1260,7 @@ class Dashboard(QWidget):
         self.pages.removeWidget(self.settingsPage)
         self.settingsPage.deleteLater()
         self.settingsPage = None
+        self.placeSessionCard()
 
 
 
@@ -1268,6 +1270,7 @@ class Dashboard(QWidget):
         self.mountainPage = MapHome(self.closeMountain)
         self.pages.addWidget(self.mountainPage)
         self.fadeToPage(self.mountainPage)
+        self.placeSessionCard()
 
     def closeMountain(self) -> None:
         self.fadeToPage(self.pages.widget(0))
@@ -1275,6 +1278,11 @@ class Dashboard(QWidget):
         self.mountainPage.deleteLater()
         self.mountainPage = None
         self.climbCard.refresh()
+        self.placeSessionCard()
+
+    def placeSessionCard(self) -> None:
+        onHome = self.pages.currentWidget() is self.pages.widget(0)
+        self.sessionCard.setVisible(self.inSession and not onHome)
 
     def showCurrentMountain(self) -> None:
         mountainName = mountains.MOUNTAINS[climbing.climbState()["mountainNumber"]]["name"]
@@ -1326,6 +1334,7 @@ class Dashboard(QWidget):
             self.sessionCard.showFree(0)
             self.sessionPanel.updateFree(0)
         self.sessionPanel.showRunning(self.sessionTimed)
+        self.placeSessionCard()
 
     def checkSchedule(self):
         schedule = policy.activeSchedule()
