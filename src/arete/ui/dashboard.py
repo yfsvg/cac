@@ -138,7 +138,6 @@ DOT_NAMES = {
 }
 
 MAX_NAME_LENGTH = 30
-STAT_ICONS = ["target", "clock", "bounce"]
 
 
 # small widgets, labels + stat cards
@@ -243,8 +242,7 @@ class StatCard(QFrame):
         cardLayout.addWidget(label(caption, "Caption", centerAlign))
         cardLayout.addStretch()
 
-        self.iconName = ""
-        self.iconColor = onContainerColor
+        self.glowColor = onContainerColor
         self.hoverAmount = 0
 
         self.statusChip = QLabel(status, objectName="Chip")
@@ -260,18 +258,12 @@ class StatCard(QFrame):
         super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        iconColor = QColor(applyTheme(self.iconColor))
         if self.hoverAmount > 0:
-            glowColor = QColor(iconColor)
+            glowColor = QColor(applyTheme(self.glowColor))
             glowColor.setAlpha(int(90 * self.hoverAmount))
             painter.setPen(QPen(glowColor, 2))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRoundedRect(QRectF(self.rect()).adjusted(1.5, 1.5, -1.5, -1.5), 23, 23)
-        iconColor.setAlpha(int(150 + 100 * self.hoverAmount))
-        painter.translate(20, 20)
-        painter.rotate(-15 * self.hoverAmount)
-        painter.scale(0.85 + 0.2 * self.hoverAmount, 0.85 + 0.2 * self.hoverAmount)
-        drawStatIcon(painter, self.iconName, iconColor)
 
     def enterEvent(self, event) -> None:
         animations.animateValue(self.hoverAmount, 1, self.setHover, 220)
@@ -361,27 +353,6 @@ class HeroCard(QFrame):
         snowCap.closeSubpath()
         painter.setBrush(snowColor)
         painter.drawPath(snowCap)
-
-
-def drawStatIcon(painter: QPainter, iconName: str, color: QColor) -> None:
-    painter.setPen(QPen(color, 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-    painter.setBrush(Qt.BrushStyle.NoBrush)
-    if iconName == "target":
-        painter.drawEllipse(QPointF(0, 0), 8, 8)
-        painter.drawEllipse(QPointF(0, 0), 4, 4)
-        painter.setBrush(color)
-        painter.drawEllipse(QPointF(0, 0), 1.2, 1.2)
-    elif iconName == "clock":
-        painter.drawEllipse(QPointF(0, 0), 8, 8)
-        painter.drawLine(QPointF(0, 0), QPointF(0, -5))
-        painter.drawLine(QPointF(0, 0), QPointF(3.5, 2))
-    elif iconName == "bounce":
-        bounce = QPainterPath(QPointF(-8, -6))
-        bounce.quadTo(QPointF(-4, 10), QPointF(0, 2))
-        bounce.quadTo(QPointF(4, -8), QPointF(8, -4))
-        painter.drawPath(bounce)
-        painter.drawLine(QPointF(8, -4), QPointF(4, -6))
-        painter.drawLine(QPointF(8, -4), QPointF(7, 0))
 
 
 def focusedStatus(percent):
@@ -995,7 +966,6 @@ class Dashboard(QWidget):
         cardIndex = 0
         for number, caption, status, statusColor in cards:
             statCard = StatCard(number, caption, status, statusColor, colorFamilies[cardIndex])
-            statCard.iconName = STAT_ICONS[cardIndex]
             self.statCards.append(statCard)
             cardRowLayout.addWidget(statCard)
             cardIndex = cardIndex + 1

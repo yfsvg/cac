@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
 )
 
 from arete.core import session
-from arete.core.debug_mode import isDebugMode
 from arete.ui import animations
 from arete.ui.pause_screen import BADGE_MARGIN, BADGE_STYLE
 from arete.ui.theme import applyTheme
@@ -89,7 +88,6 @@ QProgressBar#PanelBar::chunk { background-color: @primary; border-radius: 4px; }
 """
 
 LENGTHS = [("No timer", None), ("30 min", 30), ("1 hour", 60), ("2 hours", 120), ("3 hours", 180)]
-TEST_SECONDS = 15
 TOAST_SECONDS = 12
 
 
@@ -127,10 +125,7 @@ class SessionPanel(QFrame):
         chipLayout.setContentsMargins(0, 0, 0, 0)
         chipLayout.setSpacing(6)
         self.chips = []
-        lengths = list(LENGTHS)
-        if isDebugMode():
-            lengths.append(("15 sec", TEST_SECONDS / 60))
-        for chipName, chipMinutes in lengths:
+        for chipName, chipMinutes in LENGTHS:
             chip = QPushButton(chipName, objectName="LengthChip", cursor=Qt.CursorShape.PointingHandCursor)
             chip.setCheckable(True)
             chip.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
