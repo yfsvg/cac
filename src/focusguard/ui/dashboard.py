@@ -1,6 +1,6 @@
 # Using QWidget to make the window. For mac this appears in the top corner
 # Dashboard is split into four segments:
-# 1. Everest climb + welcome msg
+# 1. Welcome msg, then the climb card
 # 2. Daily stats
 # 3. Weekly stats
 # 4. Settings and config (read figma doc for more)
@@ -8,13 +8,13 @@
 # BEFORE MAKING EDITS READ GDOC SECTION "Dashboard priorities"
 
 
+import math
 import os
 import threading
 import time
 from datetime import date, timedelta
-from pathlib import Path
 
-from PySide6.QtCore import QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRectF, Qt, QTimer, QVariantAnimation
+from PySide6.QtCore import QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, Qt, QTimer, QVariantAnimation
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -30,7 +30,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPainter, QPainterPath, QPaintEvent, QPen, QPixmap, QTransform
 
 from focusguard.ai import vision
@@ -39,10 +38,11 @@ from focusguard.core.classifier import classifyTypeOfApp, isIgnoredApp, isUnprod
 from focusguard.core import enforcement, keep_alive, setting_changes
 from focusguard.core.enforcement import Enforcer
 from focusguard.storage import memory, time_tracking
-from focusguard.ui import animations
+from focusguard.ui import animations, backdrop
+from focusguard.ui.climb_view import CLIMB_STYLE, MOUNTAINS, ClimbCard, MapHome, chosenMountain
 from focusguard.ui.settings_window import SettingsPage
 from focusguard.ui.pause_screen import BreakBadge, CheckInScreen, PauseScreen
-from focusguard.ui.theme import applyTheme, setClimbAccent, choiceFor, getColors, getTheme, resolveTheme, setTheme, systemTheme
+from focusguard.ui.theme import applyTheme, choiceFor, getColors, getTheme, resolveTheme, setTheme, systemTheme
 from focusguard.platform import get_backend
 
 
@@ -54,7 +54,7 @@ NO_DATA = "@onSurfaceVariant"
 
 STYLE = """
     QWidget#Dashboard {
-        background-color: @surface;
+        background-color: transparent;
         border-radius: 28px;
         border: 1px solid @outlineVariant;
     }
@@ -66,13 +66,12 @@ STYLE = """
     QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { height: 0; background: none; }
 
     QLabel { color: @onSurface; }
-    QLabel#AppName { color: @primary; font-size: 14px; font-weight: 700; padding: 5px 12px; }
-    QLabel#Hello { color: @onSurface; font-size: 32px; font-weight: 700; }
-    QLabel#ClimbMessage { color: @onSurface; font-size: 14px; }
-    QLabel#ClimbMeters { color: @primary; font-size: 13px; font-weight: 700; }
+    QLabel#AppName { color: @onSurface; font-size: 15px; font-weight: 800; }
+    QLabel#Hello { color: @onPrimaryContainer; font-size: 32px; font-weight: 700; }
+    QLabel#ClimbMessage { color: @onPrimaryContainer; font-size: 14px; }
 
-    QLabel#Section { color: @onSurface; font-size: 20px; font-weight: 700; padding: 4px 14px; }
-    QLabel#BigNumber { color: @primary; font-size: 44px; font-weight: 800; }
+    QLabel#Section { color: @onSurface; font-size: 22px; font-weight: 600; }
+    QLabel#BigNumber { font-size: 44px; font-weight: 800; }
     QLabel#Caption { font-size: 12px; }
 
     QLabel#Chip {
@@ -85,7 +84,10 @@ STYLE = """
 
     QLabel#EmptyText { font-size: 13px; color: @onSurfaceVariant; padding: 4px 0 4px 0; }
 
-    QFrame#Hero, QFrame#StatCard, QFrame#TimeCard { background: transparent; border: none; }
+    QFrame#Hero { background-color: @primaryContainer; border-radius: 28px; border: 1px solid @cardBorder; }
+    QFrame#StatCard { border-radius: 24px; border: 1px solid @cardBorder; }
+
+    QFrame#TimeCard { background-color: @surfaceContainerLow; border-radius: 24px; border: 1px solid @cardBorder; }
     QLabel#SplitTitle { color: @onSurface; font-size: 15px; font-weight: 600; }
 
     QLabel#RowName { color: @onSurface; font-size: 13px; font-weight: 600; }
@@ -101,22 +103,22 @@ STYLE = """
         color: @onSurface;
         font-size: 15px;
         text-align: left;
-        background: transparent;
-        border: none;
+        background-color: @surfaceContainer;
+        border: 1px solid @cardBorder;
         border-radius: 16px;
         padding: 12px 16px 12px 40px;
     }
-    QPushButton#DropdownHeader:hover { background-color: @frostHover; }
+    QPushButton#DropdownHeader:hover { background-color: @surfaceContainerHigh; }
 
     QPushButton#ThemeButton {
         color: @onSurface;
         font-size: 16px;
-        background-color: @frostTint;
-        border: 1px solid @frostBorder;
+        background-color: @surfaceContainerHigh;
+        border: none;
         border-radius: 16px;
     }
-    QPushButton#ThemeButton:hover { background-color: @frostBorder; }
-"""
+    QPushButton#ThemeButton:hover { background-color: @surfaceContainerHighest; }
+""" + CLIMB_STYLE
 
 DOT_NAMES = {
     "neutral": "DotNeutral",
@@ -126,66 +128,7 @@ DOT_NAMES = {
 }
 
 MAX_NAME_LENGTH = 30
-
-# everest mountain behind the whole dashboard
-CLIMB_BACKGROUND = Path(__file__).parent / "assets" / "everest_climb.svg"
-
-
-# Frosted glass, paints the blurred mountain behind a box + a white tint on top
-# so text stays readable over trees / clouds / snow
-
-def paintFrosted(widget, painter, radius) -> None:
-    painter.save()
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    boxPath = QPainterPath()
-    boxPath.addRoundedRect(QRectF(widget.rect()).adjusted(0.5, 0.5, -0.5, -0.5), radius, radius)
-
-    # blurred slice of the mountain thats right behind this box
-    dashboard = widget.window()
-    if hasattr(dashboard, "blurredPixmap"):
-        painter.setClipPath(boxPath)
-        boxOffset = widget.mapTo(dashboard, QPoint(0, 0))
-        painter.drawPixmap(-boxOffset.x(), -boxOffset.y(), dashboard.blurredPixmap())
-        painter.setClipping(False)
-
-    # tint + border on top so text stays readable
-    colors = getColors()
-    painter.fillPath(boxPath, QColor(colors["frostTint"]))
-    painter.setPen(QPen(QColor(colors["frostBorder"]), 1))
-    painter.drawPath(boxPath)
-    painter.restore()
-
-
-# glass box, kids draw on top like normal
-class FrostedFrame(QFrame):
-    def __init__(self, objectName: str = "", radius: int = 24) -> None:
-        super().__init__(objectName=objectName)
-        self.radius = radius
-
-    def paintEvent(self, event: QPaintEvent) -> None:
-        painter = QPainter(self)
-        paintFrosted(self, painter, self.radius)
-        painter.end()
-        super().paintEvent(event)
-
-
-class FrostedLabel(QLabel):
-    # little glass pill behind a label, for the section titles + app name
-    def __init__(self, text: str, objectName: str, radius: int = 14) -> None:
-        super().__init__(text, objectName=objectName)
-        self.radius = radius
-
-    def paintEvent(self, event: QPaintEvent) -> None:
-        painter = QPainter(self)
-        paintFrosted(self, painter, self.radius)
-        painter.end()
-        super().paintEvent(event)
-
-
-def sectionLabel(text: str) -> QLabel:
-    return FrostedLabel(text, "Section")
-
-
+STAT_ICONS = ["target", "clock", "bounce"]
 
 
 # small widgets, labels + stat cards
@@ -196,9 +139,9 @@ def label(text: str, name: str, align: Qt.AlignmentFlag = Qt.AlignmentFlag.Align
     return newLabel
 
 
-class AppNameLabel(FrostedLabel):
+class AppNameLabel(QLabel):
     def __init__(self) -> None:
-        super().__init__("Focusguard", "AppName")
+        super().__init__("Focusguard", objectName="AppName")
         self.clicks = 0
         self.lastClick = 0
         self.popup = None
@@ -223,9 +166,15 @@ class AppNameLabel(FrostedLabel):
         QTimer.singleShot(2000, self.popup.close)
 
 
-class StatCard(FrostedFrame):
-    def __init__(self, number: str, caption: str, status: str, statusColor: str) -> None:
-        super().__init__("StatCard", 24)
+class StatCard(QFrame):
+    def __init__(self, number: str, caption: str, status: str, statusColor: str, colorFamily: str) -> None:
+        super().__init__(objectName="StatCard")
+
+        # Each card is a tonal container, text uses the matching "on" colour
+        containerColor = "@" + colorFamily + "Container"
+        onContainerColor = "@on" + colorFamily[0].upper() + colorFamily[1:] + "Container"
+        self.cardStyle = f"QFrame#StatCard {{ background-color: {containerColor}; }} QLabel {{ color: {onContainerColor}; }}"
+        self.setStyleSheet(applyTheme(self.cardStyle))
         self.setFixedHeight(150)
 
         # Ignore caption width so all 3 cards split the row evenly
@@ -242,13 +191,48 @@ class StatCard(FrostedFrame):
         cardLayout.addWidget(label(caption, "Caption", centerAlign))
         cardLayout.addStretch()
 
+        self.iconName = ""
+        self.iconColor = onContainerColor
+        self.hoverAmount = 0
+
         self.statusChip = QLabel(status, objectName="Chip")
         self.chipStyle = f"color: {statusColor};"
         self.statusChip.setStyleSheet(applyTheme(self.chipStyle))
         cardLayout.addWidget(self.statusChip, alignment=centerAlign)
 
     def restyle(self) -> None:
+        self.setStyleSheet(applyTheme(self.cardStyle))
         self.statusChip.setStyleSheet(applyTheme(self.chipStyle))
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        iconColor = QColor(applyTheme(self.iconColor))
+        if self.hoverAmount > 0:
+            glowColor = QColor(iconColor)
+            glowColor.setAlpha(int(90 * self.hoverAmount))
+            painter.setPen(QPen(glowColor, 2))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(QRectF(self.rect()).adjusted(1.5, 1.5, -1.5, -1.5), 23, 23)
+        iconColor.setAlpha(int(150 + 100 * self.hoverAmount))
+        painter.translate(24, 24)
+        painter.rotate(-15 * self.hoverAmount)
+        painter.scale(1 + 0.2 * self.hoverAmount, 1 + 0.2 * self.hoverAmount)
+        drawStatIcon(painter, self.iconName, iconColor)
+
+    def enterEvent(self, event) -> None:
+        animations.animateValue(self.hoverAmount, 1, self.setHover, 220)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        animations.animateValue(self.hoverAmount, 0, self.setHover, 260)
+        super().leaveEvent(event)
+
+    def setHover(self, amount) -> None:
+        self.hoverAmount = amount
+        self.update()
+
 
     def setValues(self, number: str, status: str, statusColor: str) -> None:
         self.numberTarget = number
@@ -264,6 +248,89 @@ class StatCard(FrostedFrame):
 
 
 # Stat card wording, always encouraging so it never feels like a punishment
+
+class HeroCard(QFrame):
+    def __init__(self) -> None:
+        super().__init__(objectName="Hero")
+        self.startTime = time.time()
+        self.bobTimer = QTimer(self, interval=50, timeout=self.update)
+
+    def showEvent(self, event) -> None:
+        self.bobTimer.start()
+        super().showEvent(event)
+
+    def hideEvent(self, event) -> None:
+        self.bobTimer.stop()
+        super().hideEvent(event)
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        heroShape = QPainterPath()
+        heroShape.addRoundedRect(QRectF(self.rect()), 28, 28)
+        painter.setClipPath(heroShape)
+        colors = getColors()
+        sunColor = QColor(colors["trail"])
+        sunColor.setAlpha(200)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(sunColor)
+        seconds = time.time() - self.startTime
+        sunBob = math.sin(seconds * 1.6) * 3
+        painter.drawEllipse(QPointF(self.width() - 70, 34 + sunBob), 16, 16)
+        cloudColor = QColor("white")
+        cloudColor.setAlpha(170)
+        painter.setBrush(cloudColor)
+        for cloudSpeed, cloudY, cloudSize, cloudStart in ((9, 22, 9, 0), (6, 52, 7, 170)):
+            cloudX = (cloudStart + seconds * cloudSpeed) % (self.width() + 120) - 60
+            cloudShape = QPainterPath()
+            cloudShape.addRoundedRect(QRectF(cloudX, cloudY, cloudSize * 3.4, cloudSize), cloudSize / 2, cloudSize / 2)
+            cloudPuff = QPainterPath()
+            cloudPuff.addEllipse(QPointF(cloudX + cloudSize * 1.3, cloudY + cloudSize * 0.1), cloudSize * 0.75, cloudSize * 0.75)
+            painter.drawPath(cloudShape.united(cloudPuff))
+        backColor = QColor(colors["primary"])
+        backColor.setAlpha(60)
+        frontColor = QColor(colors["primary"])
+        frontColor.setAlpha(110)
+        bottom = self.height()
+        for mountainColor, peaks in ((backColor, ((-150, 60), (-95, 30), (-40, 55))), (frontColor, ((-120, 75), (-60, 45), (0, 80)))):
+            ridge = QPainterPath(QPointF(self.width() - 200, bottom))
+            for peakX, peakY in peaks:
+                ridge.lineTo(QPointF(self.width() + peakX, peakY))
+            ridge.lineTo(QPointF(self.width(), bottom))
+            ridge.closeSubpath()
+            painter.setBrush(mountainColor)
+            painter.drawPath(ridge)
+        snowColor = QColor("white")
+        snowColor.setAlpha(150)
+        snowCap = QPainterPath(QPointF(self.width() - 60 - 11, 45 + 9))
+        snowCap.lineTo(QPointF(self.width() - 60, 45))
+        snowCap.lineTo(QPointF(self.width() - 60 + 12, 45 + 9))
+        snowCap.closeSubpath()
+        painter.setBrush(snowColor)
+        painter.drawPath(snowCap)
+
+
+def drawStatIcon(painter: QPainter, iconName: str, color: QColor) -> None:
+    painter.setPen(QPen(color, 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    if iconName == "target":
+        painter.drawEllipse(QPointF(0, 0), 8, 8)
+        painter.drawEllipse(QPointF(0, 0), 4, 4)
+        painter.setBrush(color)
+        painter.drawEllipse(QPointF(0, 0), 1.2, 1.2)
+    elif iconName == "clock":
+        painter.drawEllipse(QPointF(0, 0), 8, 8)
+        painter.drawLine(QPointF(0, 0), QPointF(0, -5))
+        painter.drawLine(QPointF(0, 0), QPointF(3.5, 2))
+    elif iconName == "bounce":
+        bounce = QPainterPath(QPointF(-8, -6))
+        bounce.quadTo(QPointF(-4, 10), QPointF(0, 2))
+        bounce.quadTo(QPointF(4, -8), QPointF(8, -4))
+        painter.drawPath(bounce)
+        painter.drawLine(QPointF(8, -4), QPointF(4, -6))
+        painter.drawLine(QPointF(8, -4), QPointF(7, 0))
+
 
 def focusedStatus(percent):
     if percent is None:
@@ -467,19 +534,24 @@ class DropdownHeader(QPushButton):
     def __init__(self) -> None:
         super().__init__(objectName="DropdownHeader", cursor=Qt.CursorShape.PointingHandCursor)
         self.isOpen = False
+        self.angle = 0
 
     def setOpen(self, isOpen: bool) -> None:
         if isOpen != self.isOpen:
             self.isOpen = isOpen
-            self.update()
+            endAngle = 90 if isOpen else 0
+            animations.animateValue(self.angle, endAngle, self.setAngle, 220)
+
+    def setAngle(self, angle) -> None:
+        self.angle = angle
+        self.update()
 
     def paintEvent(self, event: QPaintEvent) -> None:
         super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.translate(24, self.height() / 2)
-        if self.isOpen:
-            painter.rotate(90)
+        painter.rotate(self.angle)
         chevronPen = QPen(QColor(getColors()["onSurface"]), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
         painter.setPen(chevronPen)
         painter.drawLine(QPointF(-2, -4), QPointF(2, 0))
@@ -505,14 +577,12 @@ class Dropdown(QWidget):
         dropdownLayout.addWidget(self.body)
         self.updateHeader()
 
-    def paintEvent(self, event: QPaintEvent) -> None:
-        painter = QPainter(self)
-        paintFrosted(self, painter, 16)
-        painter.end()
-
     def toggle(self) -> None:
         if self.body.isHidden():
             animations.expand(self.body)
+            if isinstance(self.body, TimeList):
+                shownRows = [timeRow for timeRow in self.body.timeRows if not timeRow.isHidden()]
+                animations.staggerIn(shownRows, 35, 260)
         else:
             animations.collapse(self.body)
         self.header.setOpen(self.body.isHidden())
@@ -563,23 +633,59 @@ def drawCog(painter: QPainter, color: QColor) -> None:
     painter.drawPath(cogShape.subtracted(cogHole))
 
 
+def drawMountain(painter: QPainter, color: QColor) -> None:
+    mountainShape = QPainterPath(QPointF(-8.5, 6))
+    mountainShape.lineTo(QPointF(-3, -2.5))
+    mountainShape.lineTo(QPointF(-0.5, 1))
+    mountainShape.lineTo(QPointF(3, -6))
+    mountainShape.lineTo(QPointF(8.5, 6))
+    mountainShape.closeSubpath()
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(color)
+    painter.drawPath(mountainShape)
 
 
 
 
-# Top row buttons, settings cog + sun/moon theme toggle
+
+
+# Top row buttons, mountain picker + settings cog + sun/moon theme toggle
 
 class SettingsButton(QPushButton):
     def __init__(self) -> None:
         super().__init__(objectName="ThemeButton", cursor=Qt.CursorShape.PointingHandCursor)
         self.setFixedSize(32, 32)
+        self.angle = 0
+        self.clicked.connect(self.spin)
+
+    def spin(self) -> None:
+        animations.animateValue(0, 180, self.setAngle, 600)
+
+    def setAngle(self, angle) -> None:
+        self.angle = angle
+        self.update()
 
     def paintEvent(self, event: QPaintEvent) -> None:
         super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.translate(self.width() / 2, self.height() / 2)
+        painter.rotate(self.angle)
         drawCog(painter, QColor(getColors()["onSurface"]))
+
+
+class MountainButton(QPushButton):
+    def __init__(self) -> None:
+        super().__init__(objectName="ThemeButton", cursor=Qt.CursorShape.PointingHandCursor)
+        self.setFixedSize(32, 32)
+        self.setToolTip("Switch mountain")
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.translate(self.width() / 2, self.height() / 2)
+        drawMountain(painter, QColor(getColors()["onSurface"]))
 
 
 class ThemeToggle(QPushButton):
@@ -673,14 +779,18 @@ class Dashboard(QWidget):
         self.setStyleSheet(applyTheme(STYLE)) # blurless now
 
         mainLayout = QVBoxLayout(self)
-        mainLayout.setContentsMargins(10, 10, 10, 10)
+        mainLayout.setContentsMargins(10, 4, 10, 10)
 
 
 
         topRow = QHBoxLayout()
-        topRow.setContentsMargins(20, 10, 20, 0)
+        topRow.setContentsMargins(20, 6, 20, 0)
         topRow.addWidget(AppNameLabel())
         topRow.addStretch()
+
+        self.mountainButton = MountainButton()
+        self.mountainButton.clicked.connect(self.switchMountain)
+        topRow.addWidget(self.mountainButton)
 
         self.themeButton = ThemeToggle(getTheme() == "dark")
         self.themeButton.clicked.connect(self.toggleTheme)
@@ -699,12 +809,11 @@ class Dashboard(QWidget):
 
         scrollContent = QWidget(objectName="Content")
         scrollArea.setWidget(scrollContent)
-        # glass boxes show the mountain behind them, so they have to repaint when u scroll
-        scrollArea.verticalScrollBar().valueChanged.connect(scrollContent.update)
         self.pages = QStackedWidget()
         self.pages.addWidget(scrollArea)
         mainLayout.addWidget(self.pages)
         self.settingsPage = None
+        self.mountainPage = None
 
         layout = QVBoxLayout(scrollContent)
         layout.setContentsMargins(20, 10, 20, 20)
@@ -712,57 +821,53 @@ class Dashboard(QWidget):
 
 
 
-        # Everest background, refreshClimb decides where it scrolls to
-        self.climbBackground = QSvgRenderer(str(CLIMB_BACKGROUND))
-        self.backgroundOffset = memory.CLIMB_STAGES[0]["offset"]
-        self.backgroundCache = None
-        self.backgroundCacheKey = None
-        self.blurCache = None
-        self.blurCacheKey = None
-        self.accentStage = None
         self.cleanSeconds = 0
 
-        heroCard = FrostedFrame("Hero", 28)
+        heroCard = HeroCard()
         heroLayout = QVBoxLayout(heroCard)
         heroLayout.setContentsMargins(24, 20, 24, 22)
         heroLayout.setSpacing(6)
         heroLayout.addWidget(label("Hello, User", "Hello"))
         self.climbMessage = label("", "ClimbMessage")
         heroLayout.addWidget(self.climbMessage)
-        self.climbMetersText = label("", "ClimbMeters")
-        heroLayout.addWidget(self.climbMetersText)
         layout.addWidget(heroCard)
+        self.climbCard = ClimbCard(self.openMountain)
+        layout.addWidget(self.climbCard)
         self.refreshClimb()
-        self.entranceWidgets = [heroCard]
+        self.entranceWidgets = [heroCard, self.climbCard]
         layout.addSpacing(8)
 
 
 
-        layout.addWidget(sectionLabel("Today’s Stats"), alignment=Qt.AlignmentFlag.AlignLeft)
-        layout.addLayout(self.cardRow([
+        layout.addWidget(label("Today’s Stats", "Section"))
+        todayCard, todayLayout = self.sectionCard()
+        todayLayout.addLayout(self.cardRow(["primary", "green", "tertiary"], [
             ("–", "% time focused", "No data yet", NO_DATA),
             ("–", "Hours spent productive", "No data yet", NO_DATA),
             ("–", "Average rebounding speed", "No data yet", NO_DATA),
         ]))
         self.todayCards = self.statCards[-3:]
         self.todayList = TimeList("Nothing tracked yet")
-        layout.addWidget(Dropdown("Show more stats", self.todayList))
+        todayLayout.addWidget(Dropdown("Show more stats", self.todayList))
+        layout.addWidget(todayCard)
         layout.addSpacing(8)
 
-        layout.addWidget(sectionLabel("Weekly Stats"), alignment=Qt.AlignmentFlag.AlignLeft)
-        layout.addLayout(self.cardRow([
+        layout.addWidget(label("Weekly Stats", "Section"))
+        weekCard, weekLayout = self.sectionCard()
+        weekLayout.addLayout(self.cardRow(["blue", "orange", "secondary"], [
             ("–", "% time focused", "No data yet", NO_DATA),
             ("–", "Hours spent productive", "No data yet", NO_DATA),
             ("–", "Average rebounding speed", "No data yet", NO_DATA),
         ]))
         self.weekCards = self.statCards[-3:]
         self.weekList = TimeList("Nothing tracked yet")
-        layout.addWidget(Dropdown("Show more stats", self.weekList))
+        weekLayout.addWidget(Dropdown("Show more stats", self.weekList))
+        layout.addWidget(weekCard)
         layout.addSpacing(8)
 
 
 
-        layout.addWidget(sectionLabel("Time Tracked"), alignment=Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(label("Time Tracked", "Section"))
         self.backend = get_backend()
         self.trackedTimes: dict[tuple[str, str], int] = time_tracking.loadToday()
         self.trackedDay = time_tracking.todayName()
@@ -797,7 +902,7 @@ class Dashboard(QWidget):
         self.unknownSeconds = {}
         self.askedSites = []
 
-        timeCard = FrostedFrame("TimeCard", 24)
+        timeCard = QFrame(objectName="TimeCard")
         timeCardLayout = QVBoxLayout(timeCard)
         timeCardLayout.setContentsMargins(20, 16, 20, 16)
         timeCardLayout.setSpacing(6)
@@ -832,14 +937,24 @@ class Dashboard(QWidget):
         self.lastKind = None
 
 
-    def cardRow(self, cards: list[tuple[str, str, str, str]]) -> QHBoxLayout:
+    def sectionCard(self):
+        sectionFrame = QFrame(objectName="TimeCard")
+        sectionLayout = QVBoxLayout(sectionFrame)
+        sectionLayout.setContentsMargins(14, 14, 14, 14)
+        sectionLayout.setSpacing(10)
+        return sectionFrame, sectionLayout
+
+    def cardRow(self, colorFamilies, cards: list[tuple[str, str, str, str]]) -> QHBoxLayout:
         cardRowLayout = QHBoxLayout()
         cardRowLayout.setSpacing(8)
 
+        cardIndex = 0
         for number, caption, status, statusColor in cards:
-            statCard = StatCard(number, caption, status, statusColor)
+            statCard = StatCard(number, caption, status, statusColor, colorFamilies[cardIndex])
+            statCard.iconName = STAT_ICONS[cardIndex]
             self.statCards.append(statCard)
             cardRowLayout.addWidget(statCard)
+            cardIndex = cardIndex + 1
         return cardRowLayout
 
 
@@ -1085,6 +1200,7 @@ class Dashboard(QWidget):
 
 
     def playEntrance(self) -> None:
+        self.climbCard.refresh()
         animations.staggerIn(self.entranceWidgets + self.statCards)
         for statCard in self.statCards:
             animations.countUp(statCard.numberLabel, statCard.numberTarget, 700)
@@ -1105,6 +1221,41 @@ class Dashboard(QWidget):
         self.pages.removeWidget(self.settingsPage)
         self.settingsPage.deleteLater()
         self.settingsPage = None
+
+
+
+    # The climb, mountain page swaps in like settings does
+
+    def openMountain(self) -> None:
+        self.mountainPage = MapHome(self.closeMountain)
+        self.pages.addWidget(self.mountainPage)
+        self.fadeToPage(self.mountainPage)
+
+    def closeMountain(self) -> None:
+        self.fadeToPage(self.pages.widget(0))
+        self.pages.removeWidget(self.mountainPage)
+        self.mountainPage.deleteLater()
+        self.mountainPage = None
+        self.climbCard.refresh()
+
+    def fadeToPage(self, newPage) -> None:
+        oldLook = QLabel(self.pages)
+        oldLook.setPixmap(self.grab(QRect(self.pages.mapTo(self, QPoint(0, 0)), self.pages.size())))
+        oldLook.setGeometry(0, 0, self.pages.width(), self.pages.height())
+        oldLook.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        oldLook.show()
+        oldLook.raise_()
+        animations.fadeOutAndDelete(oldLook, 260)
+        self.pages.setCurrentWidget(newPage)
+
+    # mountains are just looks, the top right button cycles through them
+    def switchMountain(self) -> None:
+        savedMemory = memory.load()
+        savedMemory["mountainChoice"] = (chosenMountain() + 1) % len(MOUNTAINS)
+        memory.save(savedMemory)
+        self.climbCard.refresh()
+        if self.mountainPage is not None:
+            self.mountainPage.switchMountain(chosenMountain())
 
 
 
@@ -1307,110 +1458,39 @@ class Dashboard(QWidget):
 
 
 
-    # Everest climb, hero card text + where the background sits
+    # Climb, hero card text + the climb card / map page
 
     def refreshClimb(self) -> None:
-        meters = memory.climbMeters()
-        stage = memory.climbStage(meters)
-        goalName, metersLeft = memory.nextClimbGoal(meters)
-
-        # hero text, stage message + meters line
-        self.climbMessage.setText(stage["message"])
-
-        metersText = stage["name"] + "  ·  " + format(meters, ",") + " m climbed"
-        if metersLeft > 0:
-            metersText = metersText + "  ·  " + format(metersLeft, ",") + " m to " + goalName
-        else:
-            metersText = metersText + "  ·  you're at the top!"
-        self.climbMetersText.setText(metersText)
-
-        # new stage = jump the mountain to its spot
-        if stage["offset"] != self.backgroundOffset:
-            self.backgroundOffset = stage["offset"]
-            self.update()
-
-        # green at the bottom -> purple at the peak, only restyle when the stage actually changes
-        stageNumber = memory.CLIMB_STAGES.index(stage)
-        if stageNumber != self.accentStage:
-            self.accentStage = stageNumber
-            setClimbAccent(stageNumber / (len(memory.CLIMB_STAGES) - 1))
-            self.restyle()
+        self.climbMessage.setText(memory.climbStage(memory.climbMeters())["message"])
+        self.climbCard.refresh()
+        if self.mountainPage is not None:
+            self.mountainPage.refresh()
 
     def restyle(self) -> None:
-        # reapply colours after the theme or climb colour changes
+        # reapply colours after the theme changes
         self.setStyleSheet(applyTheme(STYLE))
         for statCard in self.statCards:
             statCard.restyle()
         self.update()
 
-    def backgroundPixmap(self) -> QPixmap:
-        # only re-render the svg when the size or stage changes, way too slow to do every paint
-        pixelRatio = self.devicePixelRatioF()
-        cacheKey = (self.width(), self.height(), self.backgroundOffset, pixelRatio)
-        if cacheKey == self.backgroundCacheKey:
-            return self.backgroundCache
-
-        # svg is scaled to the app width, then scrolled so the stages point is in the middle
-        svgSize = self.climbBackground.defaultSize()
-        backgroundScale = self.width() / svgSize.width()
-        backgroundHeight = svgSize.height() * backgroundScale
-        scrollY = self.backgroundOffset * backgroundScale - self.height() / 2
-        if scrollY > backgroundHeight - self.height():
-            scrollY = backgroundHeight - self.height()
-        if scrollY < 0:
-            scrollY = 0
-
-        backgroundImage = QPixmap(int(self.width() * pixelRatio), int(self.height() * pixelRatio))
-        backgroundImage.setDevicePixelRatio(pixelRatio)
-        backgroundImage.fill(Qt.GlobalColor.transparent)
-        imagePainter = QPainter(backgroundImage)
-        imagePainter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self.climbBackground.render(imagePainter, QRectF(0, -scrollY, self.width(), backgroundHeight))
-        imagePainter.end()
-
-        self.backgroundCache = backgroundImage
-        self.backgroundCacheKey = cacheKey
-        return backgroundImage
-
-    def blurredPixmap(self) -> QPixmap:
-        # blur = shrink the background way down then stretch it back up, cheap + looks like frosted glass
-        backgroundImage = self.backgroundPixmap()
-        if self.blurCacheKey == self.backgroundCacheKey:
-            return self.blurCache
-
-        fullImage = backgroundImage.toImage()
-        # 2 small shrinks look smoother than 1 big one
-        smallImage = fullImage.scaled(fullImage.width() // 4, fullImage.height() // 4, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
-        tinyImage = smallImage.scaled(smallImage.width() // 6, smallImage.height() // 6, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
-        smallImage = tinyImage.scaled(smallImage.width(), smallImage.height(), Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
-        fullImage = smallImage.scaled(fullImage.width(), fullImage.height(), Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
-
-
-        blurredImage = QPixmap.fromImage(fullImage)
-        blurredImage.setDevicePixelRatio(backgroundImage.devicePixelRatio())
-        self.blurCache = blurredImage
-        self.blurCacheKey = self.backgroundCacheKey
-        return blurredImage
 
 
 
-
-    # Drawing, lets the stylesheet paint the rounded background
+    # Drawing, sky picture first then the stylesheet paints the rounded border
 
     def paintEvent(self, event: QPaintEvent) -> None:
         styleOption = QStyleOption()
         styleOption.initFrom(self)
         painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        panelShape = QPainterPath()
+        panelShape.addRoundedRect(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), 28, 28)
+        painter.setClipPath(panelShape)
+        painter.drawPixmap(0, 0, backdrop.backdropPicture(self.width(), self.height(), getTheme() == "dark", self.devicePixelRatioF()))
+        painter.setClipping(False)
         self.style().drawPrimitive(
             QStyle.PrimitiveElement.PE_Widget, styleOption, painter, self
         )
-
-        # everest background on top, clipped just inside the rounded border so the border still shows
-        if self.climbBackground.isValid():
-            clipPath = QPainterPath()
-            clipPath.addRoundedRect(QRectF(self.rect()).adjusted(1, 1, -1, -1), 27, 27)
-            painter.setClipPath(clipPath)
-            painter.drawPixmap(0, 0, self.backgroundPixmap())
 
 
 if __name__ == "__main__":

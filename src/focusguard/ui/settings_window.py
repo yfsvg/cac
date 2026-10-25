@@ -22,6 +22,7 @@ from focusguard.core import enforcement, setting_changes
 from focusguard.core.debug_mode import isDebugMode
 from focusguard.core.setting_changes import frozenSecondsLeft, markChanged
 from focusguard.storage import memory, parent_pin, time_tracking
+from focusguard.ui import animations
 from focusguard.ui.theme import applyTheme, getColors
 
 # Settings page -- app config dropdowns, AI key, parental controls
@@ -44,18 +45,19 @@ SETTINGS_STYLE = """
         padding: 8px 16px;
         background-color: @primary;
         border: none;
+        border-bottom: 4px solid @primaryShadow;
         border-radius: 16px;
     }
+    QPushButton#MainButton:pressed { border-bottom: 1px solid @primaryShadow; padding-top: 11px; }
     QLineEdit {
         color: @onSurface;
         font-size: 15px;
         padding: 10px 14px;
-        background-color: @surfaceContainerHighest;
-        border: none;
-        border-bottom: 2px solid @primary;
-        border-top-left-radius: 8px;
-        border-top-right-radius: 8px;
+        background-color: @field;
+        border: 1.5px solid @fieldBorder;
+        border-radius: 12px;
     }
+    QLineEdit:focus { border: 1.5px solid @primary; }
     QLabel#ErrorText { color: @error; font-size: 13px; }
     QCheckBox { color: @onSurface; font-size: 14px; spacing: 10px; }
     QLabel#SliderLabel { color: @onSurface; font-size: 14px; }
@@ -100,7 +102,7 @@ SETTINGS_STYLE = """
     QPushButton#DayChip:checked { color: @onPrimary; background-color: @primary; }
     QPushButton#DayChip:disabled { color: @outline; }
     QPushButton#DayChip:checked:disabled { color: @onPrimary; background-color: @primary; }
-    QFrame#TimeChip { background-color: @surfaceContainerHighest; border-radius: 10px; }
+    QFrame#TimeChip { background-color: @field; border: 1.5px solid @fieldBorder; border-radius: 10px; }
     QTimeEdit { color: @onSurface; background-color: transparent; font-size: 14px; font-weight: 600; }
     QTimeEdit:disabled { color: @onSurface; }
     QLabel#ChipOn {
@@ -295,7 +297,7 @@ def askForPin(parent, mainStyle):
 class SettingsPage(QWidget):
     def __init__(self, mainStyle, goBack, onMemoryCleared=None, onForceQuit=None, onMetersChanged=None):
         super().__init__()
-        from focusguard.ui.dashboard import Dropdown, FrostedLabel, label, sectionLabel
+        from focusguard.ui.dashboard import Dropdown, label
 
         self.mainStyle = mainStyle
         self.onMetersChanged = onMetersChanged
@@ -308,8 +310,6 @@ class SettingsPage(QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         content = QWidget(objectName="Content")
         scroll.setWidget(content)
-        # glass boxes show the mountain behind them, so repaint on scroll
-        scroll.verticalScrollBar().valueChanged.connect(content.update)
 
         mainLayout = QVBoxLayout(self)
         mainLayout.setContentsMargins(0, 0, 0, 0)
@@ -330,7 +330,8 @@ class SettingsPage(QWidget):
         topRow.setSpacing(10)
         topRow.addWidget(backButton, alignment=Qt.AlignmentFlag.AlignVCenter)
 
-        settingsTitle = FrostedLabel("Settings", "AppName")
+        settingsTitle = label("Settings", "AppName")
+        settingsTitle.setWordWrap(False)
         topRow.addWidget(settingsTitle, alignment=Qt.AlignmentFlag.AlignVCenter)
         topRow.addStretch()
         layout.addLayout(topRow)
@@ -338,10 +339,9 @@ class SettingsPage(QWidget):
 
 
 
-        layout.addWidget(sectionLabel("App Config"), alignment=Qt.AlignmentFlag.AlignLeft)
-        configNote, configNoteLayout = self.makePanel()
-        configNoteLayout.addWidget(label("Changes start 1 hour after you save them, so they're never made on impulse.", "BodyText"))
-        layout.addWidget(configNote)
+        layout.addWidget(label("App Config", "Section"))
+        configCard, configLayout = self.makePanel()
+        configLayout.addWidget(label("Changes start 1 hour after you save them, so they're never made on impulse.", "BodyText"))
         for settingName in SETTING_NAMES:
             dropdown = Dropdown(settingName)
             dropdown.header.clicked.disconnect()
@@ -353,12 +353,13 @@ class SettingsPage(QWidget):
                 replaceBody(dropdown, self.makeSchedule())
             if settingName == "AI Categorizations":
                 replaceBody(dropdown, self.makeAiTab())
-            layout.addWidget(dropdown)
+            configLayout.addWidget(dropdown)
+        layout.addWidget(configCard)
         layout.addSpacing(8)
 
 
 
-        layout.addWidget(sectionLabel("Parental Controls"), alignment=Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(label("Parental Controls", "Section"))
         parentPanel, parentLayout = self.makePanel()
         self.parentText = label("", "BodyText")
         parentLayout.addWidget(self.parentText)
@@ -392,7 +393,7 @@ class SettingsPage(QWidget):
 
         # Debug tools for testing, these skip parental controls so take them out before release
         if isDebugMode():
-            layout.addWidget(sectionLabel("Debug"), alignment=Qt.AlignmentFlag.AlignLeft)
+            layout.addWidget(label("Debug", "Section"))
             debugPanel, debugLayout = self.makePanel()
             debugLayout.addWidget(label("Testing tools. These skip parental controls.", "BodyText"))
 
@@ -432,6 +433,10 @@ class SettingsPage(QWidget):
             layout.addWidget(debugPanel)
 
         layout.addStretch()
+        sectionCards = [configCard, parentPanel]
+        if isDebugMode():
+            sectionCards.append(debugPanel)
+        animations.staggerIn(sectionCards, 70, 320)
 
 
 
@@ -441,12 +446,10 @@ class SettingsPage(QWidget):
         self.countdownTimer.start()
 
     def makePanel(self):
-        # glass box for loose text + controls so they dont sit right on the mountain
-        from focusguard.ui.dashboard import FrostedFrame
-
-        panel = FrostedFrame("Panel", 20)
+        # card for each section, same look as the dashboard ones
+        panel = QFrame(objectName="TimeCard")
         panelLayout = QVBoxLayout(panel)
-        panelLayout.setContentsMargins(16, 14, 16, 14)
+        panelLayout.setContentsMargins(16, 14, 16, 16)
         panelLayout.setSpacing(10)
         return panel, panelLayout
 

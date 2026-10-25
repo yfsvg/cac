@@ -5,91 +5,96 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication
 
 COLORS = {
-    "primary": "#6750A4",
+    "primary": "#1E88E5",
     "onPrimary": "#FFFFFF",
-    "primaryContainer": "#EADDFF",
-    "onPrimaryContainer": "#21005D",
-    "secondary": "#625B71",
-    "secondaryContainer": "#E8DEF8",
-    "onSecondaryContainer": "#1D192B",
-    "tertiary": "#7D5260",
-    "tertiaryContainer": "#FFD8E4",
-    "onTertiaryContainer": "#31111D",
-    "error": "#B3261E",
-    "errorContainer": "#F9DEDC",
-    "onErrorContainer": "#410E0B",
+    "primaryContainer": "#D3EBFF",
+    "onPrimaryContainer": "#06345C",
+    "secondary": "#4E6577",
+    "secondaryContainer": "#E1F0FB",
+    "onSecondaryContainer": "#0E2A3D",
+    "tertiary": "#B98000",
+    "tertiaryContainer": "#FFEFC2",
+    "onTertiaryContainer": "#4A3300",
+    "error": "#D9434B",
+    "errorContainer": "#FFE1E0",
+    "onErrorContainer": "#5C0F13",
 
-    "greenContainer": "#C4EED0",
-    "onGreenContainer": "#072711",
-    "green": "#1E6B35",
-    "orangeContainer": "#FFDBC8",
-    "onOrangeContainer": "#331200",
-    "orange": "#9A4A12",
-    "blueContainer": "#D3E3FD",
-    "onBlueContainer": "#041E49",
-    "blue": "#1B5FC1",
+    "greenContainer": "#DDF3CF",
+    "onGreenContainer": "#173D08",
+    "green": "#3D8F1E",
+    "orangeContainer": "#FFE3CC",
+    "onOrangeContainer": "#4A2200",
+    "orange": "#B9580C",
+    "blueContainer": "#D6E8FB",
+    "onBlueContainer": "#062C55",
+    "blue": "#1B6FC1",
 
     # surfaces
-    "surface": "#FEF7FF",
-    "surfaceContainerLow": "#F7F2FA",
-    "surfaceContainer": "#F3EDF7",
-    "surfaceContainerHigh": "#ECE6F0",
-    "surfaceContainerHighest": "#E6E0E9",
-    "onSurface": "#1D1B20",
-    "onSurfaceVariant": "#49454F",
-    "outline": "#79747E",
-    "outlineVariant": "#CAC4D0",
+    "surface": "#EEF7FF",
+    "surfaceContainerLow": "#FFFFFF",
+    "surfaceContainer": "#F6FBFF",
+    "surfaceContainerHigh": "#E8F3FC",
+    "surfaceContainerHighest": "#D5E7F5",
+    "onSurface": "#10283A",
+    "onSurfaceVariant": "#47606F",
+    "outline": "#7D93A3",
+    "outlineVariant": "#C2D8E8",
     "scrim": "rgba(29, 27, 32, 140)",
     "chipBackground": "rgba(255, 255, 255, 170)",
-    # frosted glass boxes over the mountain, #AARRGGBB
-    "frostTint": "#B8FFFFFF",
-    "frostBorder": "#D9FFFFFF",
-    "frostHover": "#33FFFFFF",
-    "primaryHover": "#7965AF",
+    "primaryHover": "#42A0EE",
+    "primaryShadow": "#1565B0",
+    "trail": "#FFC23D",
+    "trailShadow": "#D99A0B",
+    "field": "#F4F9FF",
+    "fieldBorder": "#9FC2DD",
+    "cardBorder": "#A9C9E2",
 }
 
 
 # dark mode, same names
 DARK = {
-    "primary": "#D0BCFF",
-    "onPrimary": "#381E72",
-    "primaryContainer": "#4F378B",
-    "onPrimaryContainer": "#EADDFF",
-    "secondary": "#CCC2DC",
-    "secondaryContainer": "#4A4458",
-    "onSecondaryContainer": "#E8DEF8",
-    "tertiary": "#EFB8C8",
-    "tertiaryContainer": "#633B48",
-    "onTertiaryContainer": "#FFD8E4",
-    "error": "#F2B8B5",
-    "errorContainer": "#8C1D18",
-    "onErrorContainer": "#F9DEDC",
+    "primary": "#5FE0B8",
+    "onPrimary": "#04342C",
+    "primaryContainer": "#3B2E80",
+    "onPrimaryContainer": "#ECE6FF",
+    "secondary": "#B5A9E6",
+    "secondaryContainer": "#2E2560",
+    "onSecondaryContainer": "#E6E0FF",
+    "tertiary": "#FF8CC2",
+    "tertiaryContainer": "#5A2149",
+    "onTertiaryContainer": "#FFD9EA",
+    "error": "#FF8A8F",
+    "errorContainer": "#6B1F2A",
+    "onErrorContainer": "#FFDADC",
 
-    "greenContainer": "#1F5130",
-    "onGreenContainer": "#C4EED0",
-    "green": "#8FD8A3",
-    "orangeContainer": "#73350A",
-    "onOrangeContainer": "#FFDBC8",
-    "orange": "#FFB68B",
-    "blueContainer": "#0B4A9E",
-    "onBlueContainer": "#D3E3FD",
-    "blue": "#A8C7FA",
+    "greenContainer": "#1D4A3A",
+    "onGreenContainer": "#CFF7E4",
+    "green": "#6FE3B0",
+    "orangeContainer": "#5C3214",
+    "onOrangeContainer": "#FFE0C8",
+    "orange": "#FFB577",
+    "blueContainer": "#1C3C6E",
+    "onBlueContainer": "#D8E9FF",
+    "blue": "#8CC4FF",
 
-    "surface": "#2E2E2E",
-    "surfaceContainerLow": "#333333",
-    "surfaceContainer": "#383838",
-    "surfaceContainerHigh": "#404040",
-    "surfaceContainerHighest": "#4A4A4A",
-    "onSurface": "#E6E1E5",
-    "onSurfaceVariant": "#CAC4D0",
-    "outline": "#938F99",
-    "outlineVariant": "#4F4B55",
+    "surface": "#140F30",
+    "surfaceContainerLow": "#1E1844",
+    "surfaceContainer": "#251E50",
+    "surfaceContainerHigh": "#2D255D",
+    "surfaceContainerHighest": "#372E6B",
+    "onSurface": "#EEEAFF",
+    "onSurfaceVariant": "#B9B0DE",
+    "outline": "#8579B8",
+    "outlineVariant": "#3E3480",
     "scrim": "rgba(0, 0, 0, 160)",
     "chipBackground": "rgba(0, 0, 0, 90)",
-    "frostTint": "#A61C1C20",
-    "frostBorder": "#33FFFFFF",
-    "frostHover": "#1AFFFFFF",
-    "primaryHover": "#E0D2FF",
+    "primaryHover": "#85EBCB",
+    "primaryShadow": "#2FA98A",
+    "trail": "#5FE0B8",
+    "trailShadow": "#2FA98A",
+    "field": "#17123A",
+    "fieldBorder": "#5A4CA8",
+    "cardBorder": "#3E3480",
 }
 
 currentTheme = "light"
@@ -134,50 +139,6 @@ def choiceFor(themeName, systemThemeName):
 
 
 
-
-
-
-
-# climb colour, green at the bottom -> blue halfway -> purple at the peak
-# overwrites primary in both themes so buttons/sliders/numbers all follow how high u are
-
-CLIMB_COLORS = ["#2E9E5B", "#2F6FD6", "#7A4BD6"]
-
-
-def mixColor(firstColor, secondColor, amount):
-    mixedColor = "#"
-    for index in (1, 3, 5):
-        firstValue = int(firstColor[index:index + 2], 16)
-        secondValue = int(secondColor[index:index + 2], 16)
-        mixedColor = mixedColor + format(round(firstValue + (secondValue - firstValue) * amount), "02X")
-    return mixedColor
-
-
-def climbAccent(climbFraction):
-    if climbFraction < 0:
-        climbFraction = 0
-    if climbFraction > 1:
-        climbFraction = 1
-
-    # first half is green -> blue, second half is blue -> purple
-    if climbFraction <= 0.5:
-        return mixColor(CLIMB_COLORS[0], CLIMB_COLORS[1], climbFraction * 2)
-    return mixColor(CLIMB_COLORS[1], CLIMB_COLORS[2], (climbFraction - 0.5) * 2)
-
-
-def setClimbAccent(climbFraction):
-    accentColor = climbAccent(climbFraction)
-
-    # light mode
-    COLORS["primary"] = accentColor
-    COLORS["primaryHover"] = mixColor(accentColor, "#FFFFFF", 0.2)
-    COLORS["onPrimary"] = "#FFFFFF"
-
-    # dark mode needs a lighter version or blue/purple text vanishes on the dark glass
-    lightAccent = mixColor(accentColor, "#FFFFFF", 0.5)
-    DARK["primary"] = lightAccent
-    DARK["primaryHover"] = mixColor(accentColor, "#FFFFFF", 0.65)
-    DARK["onPrimary"] = "#16141C"
 
 
 

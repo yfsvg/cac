@@ -138,3 +138,16 @@ def collapse(body, duration=200):
 def finishCollapse(body):
     body.hide()
     body.setMaximumHeight(16777215)
+
+
+def fadeOutAndDelete(widget, duration=300):
+    effect = QGraphicsOpacityEffect(widget)
+    effect.setOpacity(1.0)
+    widget.setGraphicsEffect(effect)
+    animation = QPropertyAnimation(effect, b"opacity")
+    animation.setDuration(duration)
+    animation.setStartValue(1.0)
+    animation.setEndValue(0.0)
+    animation.setEasingCurve(QEasingCurve.Type.InOutQuad)
+    animation.finished.connect(widget.deleteLater)
+    keepAlive(animation)
