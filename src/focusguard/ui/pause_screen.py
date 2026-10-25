@@ -232,18 +232,26 @@ class PauseScreen(QWidget):
         self.progressBar.show()
         self.box.adjustSize()
         self.placeBox()
-        self.timer.start(1000)
-        self.fillStep = 0
-        self.fillTimer.start(100)
+        self.countdownStart = time.time()
+        self.timer.start(100)
+        self.fillTimer.start(30)
 
     def fillOpenButton(self):
-        self.fillStep = self.fillStep + 1
-        self.progressBar.setValue(self.fillStep)
-        if self.fillStep >= COUNTDOWN * 10:
+        secondsPassed = time.time() - self.countdownStart
+        fillStep = min(int(secondsPassed * 10), COUNTDOWN * 10)
+        self.progressBar.setValue(fillStep)
+        if fillStep >= COUNTDOWN * 10:
             self.fillTimer.stop()
 
     def countDown(self):
-        self.secondsLeft = self.secondsLeft - 1
+        secondsPassed = time.time() - self.countdownStart
+        secondsLeft = max(COUNTDOWN - int(secondsPassed), 0)
+        if secondsLeft == self.secondsLeft:
+            return
+        self.secondsLeft = secondsLeft
+        if self.secondsLeft <= 0:
+            self.progressBar.setValue(COUNTDOWN * 10)
+            self.fillTimer.stop()
         self.title.setText("Take a breath... " + str(self.secondsLeft) + " seconds")
         if self.secondsLeft <= 0:
             self.timer.stop()

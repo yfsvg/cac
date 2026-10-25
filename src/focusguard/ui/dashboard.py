@@ -739,7 +739,7 @@ class Dashboard(QWidget):
         self.currentSite = site
         self.currentKind = appKind
 
-        onBreakRightNow = self.breakName is not None
+        onBreakRightNow = self.breakName is not None or not enforcement.blockingOn
 
         if appKind == "unproductive" and not onBreakRightNow:
             if enforcement.breaksLeftToday() == 0:
