@@ -2,8 +2,8 @@ import math
 import time
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPixmap, QTransform
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPixmap, QRegion, QTransform
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
 from arete.core import climbing, mountains
 from arete.ui import animations, mountain_art
@@ -37,6 +37,18 @@ CLIMB_STYLE = """
         border-radius: 14px;
         padding: 6px 14px;
     }
+    QLabel#MapStage { color: @onSurface; font-size: 17px; font-weight: 800; }
+    QLabel#MapPercent {
+        color: @onPrimaryContainer;
+        background-color: @primaryContainer;
+        font-size: 13px;
+        font-weight: 700;
+        border-radius: 11px;
+        padding: 3px 10px;
+    }
+    QLabel#MapInfo { color: @onSurfaceVariant; font-size: 13px; }
+    QProgressBar#MapBar { background-color: @surfaceContainerHighest; border: none; border-radius: 4px; }
+    QProgressBar#MapBar::chunk { background-color: @trail; border-radius: 4px; }
     QPushButton#OpenMap:hover { background-color: @primaryHover; }
     QPushButton#OpenMap:pressed { border-bottom: 1px solid @primaryShadow; padding-top: 8px; }
 """
@@ -424,6 +436,29 @@ class MapHome(QWidget):
         tabRow.addStretch()
         pageLayout.addLayout(tabRow)
 
+        infoCard = QFrame(objectName="ClimbCard")
+        infoLayout = QVBoxLayout(infoCard)
+        infoLayout.setContentsMargins(16, 12, 16, 14)
+        infoLayout.setSpacing(6)
+        stageRow = QHBoxLayout()
+        self.stageLabel = QLabel("", objectName="MapStage")
+        stageRow.addWidget(self.stageLabel)
+        stageRow.addStretch()
+        self.percentLabel = QLabel("", objectName="MapPercent")
+        stageRow.addWidget(self.percentLabel)
+        infoLayout.addLayout(stageRow)
+        self.metersLabel = QLabel("", objectName="MapInfo")
+        infoLayout.addWidget(self.metersLabel)
+        self.progressBar = QProgressBar(objectName="MapBar")
+        self.progressBar.setTextVisible(False)
+        self.progressBar.setFixedHeight(8)
+        self.progressBar.setRange(0, 1000)
+        infoLayout.addWidget(self.progressBar)
+        self.goalLabel = QLabel("", objectName="MapInfo")
+        self.goalLabel.setWordWrap(True)
+        infoLayout.addWidget(self.goalLabel)
+        pageLayout.addWidget(infoCard)
+
         self.mapFrame = MapFrame(self.placeMap)
         pageLayout.addWidget(self.mapFrame, 1)
         self.scrollArea = QScrollArea(self.mapFrame, widgetResizable=True)
@@ -437,12 +472,52 @@ class MapHome(QWidget):
 
     def placeMap(self):
         self.scrollArea.setGeometry(0, 0, self.mapFrame.width(), self.mapFrame.height())
+        roundedShape = QPainterPath()
+        roundedShape.addRoundedRect(QRectF(self.mapFrame.rect()), 24, 24)
+        self.mapFrame.setMask(QRegion(roundedShape.toFillPolygon().toPolygon()))
         if self.needsFirstScroll and self.mapFrame.height() > 100:
             self.needsFirstScroll = False
             QTimer.singleShot(50, lambda: self.scrollToClimber(900))
 
     def refresh(self):
         self.mountainMap.refresh()
+        self.updateInfo()
+
+    def updateInfo(self):
+        state = climbing.climbState()
+        mountain = mountains.MOUNTAINS[self.viewedMountain]
+        bossesHere = state["bossesBeaten"] - self.viewedMountain * len(mountains.BOSS_CHECKPOINTS)
+        bossesHere = max(0, min(bossesHere, len(mountains.BOSS_CHECKPOINTS)))
+        bossText = "Bosses beaten " + str(bossesHere) + " of " + str(len(mountains.BOSS_CHECKPOINTS))
+        percent = state["percent"]
+        if self.viewedMountain < state["mountainNumber"]:
+            percent = 100
+        if self.viewedMountain > state["mountainNumber"]:
+            percent = 0
+        stageNumber = mountains.stageNumber(percent)
+        stageText = "Trailhead"
+        if stageNumber >= 0:
+            stageText = mountain["stages"][stageNumber][0]
+        heightText = format(int(mountain["heightMeters"] * percent / 100), ",") + " m of " + format(mountain["heightMeters"], ",") + " m"
+        self.stageLabel.setText(stageText)
+        self.percentLabel.setText(percentText(percent) + "%")
+        self.metersLabel.setText(heightText + "  ·  " + bossText)
+        self.progressBar.setValue(int(percent * 10))
+        if self.viewedMountain > state["mountainNumber"]:
+            self.percentLabel.setText("Locked")
+            self.goalLabel.setText("Reach the top of " + mountains.MOUNTAINS[self.viewedMountain - 1]["name"] + " and beat its boss to start this mountain.")
+        elif self.viewedMountain < state["mountainNumber"]:
+            self.goalLabel.setText("You climbed this whole mountain. Nice work.")
+        elif state["finished"]:
+            self.goalLabel.setText("You climbed all three mountains. Legendary.")
+        elif state["atBoss"]:
+            self.goalLabel.setText(bossName(state["bossesBeaten"]) + " is blocking the trail. Beat it after your next focus session.")
+        elif state["nextBoss"] is not None:
+            stageMessage = mountain["startMessage"]
+            if stageNumber >= 0:
+                stageMessage = mountain["stages"][stageNumber][1]
+            bossDistance = percentText(state["nextBoss"] - state["totalPercent"])
+            self.goalLabel.setText(bossDistance + "% to " + bossName(state["bossesBeaten"]) + ". " + stageMessage)
 
     def switchMountain(self, mountainNumber, animate=True):
         if animate and self.mapFrame.width() > 0:
@@ -455,6 +530,7 @@ class MapHome(QWidget):
         self.viewedMountain = mountainNumber
         self.mountainMap.showMountain(mountainNumber)
         self.titleLabel.setText(mountains.MOUNTAINS[mountainNumber]["name"])
+        self.updateInfo()
         state = climbing.climbState()
         for tabNumber in range(len(self.tabs)):
             tab = self.tabs[tabNumber]

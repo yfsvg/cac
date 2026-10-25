@@ -332,7 +332,8 @@ class SettingsPage(QWidget):
         layout.addSpacing(4)
 
         layout.addWidget(label("App Config", "Section"))
-        layout.addWidget(label("Changes start 1 hour after you save them, so they're never made on impulse.", "Streak"))
+        configCard, cardLayout = self.makeSectionCard()
+        cardLayout.addWidget(label("Changes start 1 hour after you save them, so they're never made on impulse.", "Streak"))
         for settingName in SETTING_NAMES:
             dropdown = Dropdown(settingName)
             dropdown.header.clicked.disconnect()
@@ -343,19 +344,21 @@ class SettingsPage(QWidget):
                 replaceBody(dropdown, self.makeSchedule())
             if settingName == "AI Categorizations":
                 replaceBody(dropdown, self.makeAiTab())
-            layout.addWidget(dropdown)
+            cardLayout.addWidget(dropdown)
+        layout.addWidget(configCard)
         layout.addSpacing(8)
 
         layout.addWidget(label("Parental Controls", "Section"))
+        parentCard, cardLayout = self.makeSectionCard()
         self.parentText = label("", "Streak")
-        layout.addWidget(self.parentText)
+        cardLayout.addWidget(self.parentText)
 
         self.lockBoxes = {}
         for settingName in SETTING_NAMES:
             lockBox = QCheckBox("Lock " + settingName)
             lockBox.clicked.connect(self.saveLocks)
             self.lockBoxes[settingName] = lockBox
-            layout.addWidget(lockBox)
+            cardLayout.addWidget(lockBox)
 
         parentRow = QHBoxLayout()
         self.setupButton = QPushButton("Set up parental controls", objectName="MainButton", cursor=Qt.CursorShape.PointingHandCursor)
@@ -368,13 +371,15 @@ class SettingsPage(QWidget):
         parentRow.addWidget(self.changePinButton)
         parentRow.addWidget(self.turnOffButton)
         parentRow.addStretch()
-        layout.addLayout(parentRow)
+        cardLayout.addLayout(parentRow)
+        layout.addWidget(parentCard)
         layout.addSpacing(8)
 
         # Debug tools for testing, these skip parental controls so take them out before release
         if isDebugMode():
             layout.addWidget(label("Debug", "Section"))
-            layout.addWidget(label("Testing tools. These skip parental controls.", "Streak"))
+            debugCard, cardLayout = self.makeSectionCard()
+            cardLayout.addWidget(label("Testing tools. These skip parental controls.", "Streak"))
             debugRow = QHBoxLayout()
             forceQuitButton = QPushButton("Force quit", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
             forceQuitButton.clicked.connect(self.forceQuit)
@@ -386,11 +391,11 @@ class SettingsPage(QWidget):
             debugRow.addWidget(resetTimersButton)
             debugRow.addWidget(clearMemoryButton)
             debugRow.addStretch()
-            layout.addLayout(debugRow)
+            cardLayout.addLayout(debugRow)
             blockingSwitch = QCheckBox("Blocking on", objectName="Switch", cursor=Qt.CursorShape.PointingHandCursor)
             blockingSwitch.setChecked(enforcement.blockingOn)
             blockingSwitch.toggled.connect(self.toggleBlocking)
-            layout.addWidget(blockingSwitch)
+            cardLayout.addWidget(blockingSwitch)
             climbRow = QHBoxLayout()
             self.climbBox = QLineEdit()
             self.climbBox.returnPressed.connect(self.setClimb)
@@ -401,7 +406,8 @@ class SettingsPage(QWidget):
             climbRow.addWidget(self.climbBox)
             climbRow.addWidget(setClimbButton)
             climbRow.addWidget(fightButton)
-            layout.addLayout(climbRow)
+            cardLayout.addLayout(climbRow)
+            layout.addWidget(debugCard)
             self.updateClimbBox()
         layout.addStretch()
 
@@ -431,6 +437,13 @@ class SettingsPage(QWidget):
     def fightBoss(self):
         if self.onFightBoss is not None:
             self.onFightBoss()
+
+    def makeSectionCard(self):
+        sectionCard = QFrame(objectName="TimeCard")
+        cardLayout = QVBoxLayout(sectionCard)
+        cardLayout.setContentsMargins(16, 14, 16, 16)
+        cardLayout.setSpacing(10)
+        return sectionCard, cardLayout
 
     def toggleBlocking(self, isOn):
         enforcement.blockingOn = isOn

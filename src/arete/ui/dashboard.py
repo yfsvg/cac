@@ -757,25 +757,29 @@ class Dashboard(QWidget):
 
 
         layout.addWidget(label("Today’s Stats", "Section"))
-        layout.addLayout(self.cardRow(["primary", "green", "tertiary"], [
+        todayCard, todayLayout = self.sectionCard()
+        todayLayout.addLayout(self.cardRow(["primary", "green", "tertiary"], [
             ("–", "% time focused", "No data yet", NO_DATA),
             ("–", "Hours spent productive", "No data yet", NO_DATA),
             ("–", "Average rebounding speed", "No data yet", NO_DATA),
         ]))
         self.todayCards = self.statCards[-3:]
         self.todayList = TimeList("Nothing tracked yet")
-        layout.addWidget(Dropdown("Show more stats", self.todayList))
+        todayLayout.addWidget(Dropdown("Show more stats", self.todayList))
+        layout.addWidget(todayCard)
         layout.addSpacing(8)
 
         layout.addWidget(label("Weekly Stats", "Section"))
-        layout.addLayout(self.cardRow(["blue", "orange", "secondary"], [
+        weekCard, weekLayout = self.sectionCard()
+        weekLayout.addLayout(self.cardRow(["blue", "orange", "secondary"], [
             ("–", "% time focused", "No data yet", NO_DATA),
             ("–", "Hours spent productive", "No data yet", NO_DATA),
             ("–", "Average rebounding speed", "No data yet", NO_DATA),
         ]))
         self.weekCards = self.statCards[-3:]
         self.weekList = TimeList("Nothing tracked yet")
-        layout.addWidget(Dropdown("Show more stats", self.weekList))
+        weekLayout.addWidget(Dropdown("Show more stats", self.weekList))
+        layout.addWidget(weekCard)
         layout.addSpacing(8)
 
 
@@ -857,6 +861,13 @@ class Dashboard(QWidget):
         self.productiveSeconds = 0
         QTimer.singleShot(0, self.startOrResumeSession)
 
+
+    def sectionCard(self):
+        sectionFrame = QFrame(objectName="TimeCard")
+        sectionLayout = QVBoxLayout(sectionFrame)
+        sectionLayout.setContentsMargins(14, 14, 14, 14)
+        sectionLayout.setSpacing(10)
+        return sectionFrame, sectionLayout
 
     def cardRow(self, colorFamilies, cards: list[tuple[str, str, str, str]]) -> QHBoxLayout:
         cardRowLayout = QHBoxLayout()
