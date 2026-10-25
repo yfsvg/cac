@@ -1,3 +1,5 @@
+# windows app names, cleaning exe descriptions up
+
 import sys
 
 import pytest

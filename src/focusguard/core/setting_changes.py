@@ -9,6 +9,11 @@ DELAY_SECONDS = 60 * 60
 FREEZE_SECONDS = 3 * 24 * 60 * 60
 
 
+
+
+
+# Freezing - how long till u can change it again
+
 def markChanged(settingName: str) -> None:
     savedMemory = memory.load()
     changedAt = savedMemory.get("changedAt", {})
@@ -26,6 +31,11 @@ def frozenSecondsLeft(settingName: str) -> int:
         return 0
     return int(secondsLeft)
 
+
+
+
+
+# Pending changes, saved now but applied an hour later
 
 def queueChange(settingName: str, newValues: dict) -> None:
     savedMemory = memory.load()
@@ -49,6 +59,7 @@ def pendingSecondsLeft(settingName: str) -> int:
     return int(secondsLeft)
 
 
+# what settings should show, pending value if theres one
 def upcomingValue(settingName: str, memoryKey: str, currentValue):
     pendingChange = memory.load().get("pendingChanges", {}).get(settingName)
     if pendingChange is None:
@@ -80,6 +91,7 @@ def applyNow(settingName: str) -> None:
     memory.save(savedMemory)
 
 
+# dashboard calls this, applies anything whose hour is up
 def applyDueChanges() -> list:
     savedMemory = memory.load()
     pendingChanges = savedMemory.get("pendingChanges", {})

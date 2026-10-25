@@ -105,7 +105,7 @@ _ANY_INPUT_EVENT = getattr(Quartz, "kCGAnyInputEventType", 0xFFFFFFFF)
 class MacOSBackend(PlatformBackend):
     BROWSER_IDS = frozenset(k.lower() for k in BROWSERS)
 
-    # ---- what is the user doing ------------------------------------------------------------
+    #what is the user doing
 
     def get_active_window(self) -> ActiveWindow | None:
         app = self._frontmost_app()

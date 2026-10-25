@@ -1,3 +1,5 @@
+# urls -> just the site, like youtube.com
+
 import pytest
 
 from focusguard.core.classifier import siteRoot

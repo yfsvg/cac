@@ -31,6 +31,11 @@ FILE = dataDirectory() / "memory.json"
 
 
 
+
+
+
+# Loading + saving, load always gives a dict even if file is missing/broken
+
 def load() -> dict:
     defaultMemory = {"first_time": True, "themeChoice": "system"}
     try:

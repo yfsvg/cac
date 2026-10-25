@@ -126,6 +126,8 @@ DOT_NAMES = {
 MAX_NAME_LENGTH = 30
 
 
+# small widgets, labels + stat cards
+
 def label(text: str, name: str, align: Qt.AlignmentFlag = Qt.AlignmentFlag.AlignLeft) -> QLabel:
     newLabel = QLabel(text, objectName=name, alignment=align)
     newLabel.setWordWrap(True)
@@ -213,6 +215,11 @@ def numberText(value):
     return str(value)
 
 
+
+
+
+# time tracked helpers, formatting names + times
+
 def isSiteName(name):
     return "." in name and " " not in name
 
@@ -241,6 +248,11 @@ def shownRows(rows, limit):
         returnVal.append((name, kindText, dotKind, durationText(seconds)))
     return returnVal
 
+
+
+
+
+# productive vs unproductive bar up top
 
 class SplitBar(QWidget):
     def __init__(self) -> None:
@@ -271,6 +283,11 @@ class SplitBar(QWidget):
         if 0 < productiveWidth < self.width():
             painter.fillRect(productiveWidth - 1, 0, 2, self.height(), QColor(colors["surfaceContainerLow"]))
 
+
+
+
+
+# one row, dot + name + time
 
 class TimeRow(QWidget):
     def __init__(self) -> None:
@@ -340,6 +357,11 @@ class TimeList(QWidget):
             timeRow.setRow(name, kindText, dotKind, timeText)
 
 
+
+
+
+# dropdowns w/ chevron, opens and closes whatevers under it
+
 class DropdownHeader(QPushButton):
     def __init__(self) -> None:
         super().__init__(objectName="DropdownHeader", cursor=Qt.CursorShape.PointingHandCursor)
@@ -392,6 +414,11 @@ class Dropdown(QWidget):
 
 
 
+
+
+
+# Icons, drawn by hand so they follow the theme colours
+
 def drawSun(painter: QPainter, color: QColor) -> None:
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(color)
@@ -427,6 +454,11 @@ def drawCog(painter: QPainter, color: QColor) -> None:
     painter.drawPath(cogShape.subtracted(cogHole))
 
 
+
+
+
+
+# Top row buttons, settings cog + sun/moon theme toggle
 
 class SettingsButton(QPushButton):
     def __init__(self) -> None:
@@ -493,6 +525,11 @@ class ThemeToggle(QPushButton):
         painter.restore()
 
 
+
+
+
+
+# Main dashboard window
 
 class Dashboard(QWidget):
     def __init__(self) -> None:
@@ -683,6 +720,11 @@ class Dashboard(QWidget):
 
 
 
+
+
+
+    # Tracking, runs every second
+
     def tick(self) -> None:
         for settingName in setting_changes.applyDueChanges():
             self.enforcer.sendNotification("Your " + settingName + " change is on now.")
@@ -774,6 +816,11 @@ class Dashboard(QWidget):
 
 
 
+
+
+
+    # Saving times every 10 sec + on quit
+
     def saveTimes(self) -> None:
         time_tracking.saveDay(self.trackedDay, self.trackedTimes)
         if time_tracking.todayName() != self.trackedDay:
@@ -812,6 +859,7 @@ class Dashboard(QWidget):
         self.setCardRow(self.weekCards, weekPercent, weekHours, weekRebound, 15)
         self.fillWeekList(today)
 
+    # weekly list, time per day for last 7 days
     def fillWeekList(self, today) -> None:
         allDays = time_tracking.loadAllDays()
         weekRows = []
@@ -847,6 +895,11 @@ class Dashboard(QWidget):
         cards[1].setValues(numberText(hours), hoursText, hoursColor)
         reboundText, reboundColor = reboundStatus(averageBreaks)
         cards[2].setValues(numberText(averageBreaks), reboundText, reboundColor)
+
+
+
+
+    # Time tracked display, split bar + apps/sites dropdowns
 
     def showTimes(self) -> None:
         appRows = []
@@ -895,6 +948,11 @@ class Dashboard(QWidget):
 
 
 
+
+
+
+    # Settings page
+
     def openSettings(self) -> None:
         self.settingsPage = SettingsPage(STYLE, self.closeSettings, self.memoryCleared, self.quitFocusGuard)
         self.pages.addWidget(self.settingsPage)
@@ -907,6 +965,11 @@ class Dashboard(QWidget):
         self.settingsPage = None
 
 
+
+
+
+
+    # Theme switching, light / dark / follow system
 
     def toggleTheme(self) -> None:
         newTheme = "dark"
@@ -959,6 +1022,11 @@ class Dashboard(QWidget):
 
 
 
+
+
+
+    # Pause screen, pops up when you open something unproductive
+
     def showPause(self, window, appName, site):
         self.pausedWindow = window
         self.pausedName = appName
@@ -996,10 +1064,20 @@ class Dashboard(QWidget):
 
 
 
+
+
+
+    # Quitting. kill keep alive helper first or it just reopens us
+
     def quitFocusGuard(self):
         keep_alive.stopHelper()
         self.saveTimes()
         QApplication.quit()
+
+
+
+
+    # Breaks, starting + checking in
 
     def startBreakPeriod(self):
         enforcement.useBreak()
@@ -1049,6 +1127,11 @@ class Dashboard(QWidget):
             self.startBreakPeriod()
 
 
+
+
+
+
+    # Breaks, ending early from the x on the badge
 
     def cancelBreak(self):
         self.breakTimer.stop()

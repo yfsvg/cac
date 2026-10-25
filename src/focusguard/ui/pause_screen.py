@@ -17,6 +17,8 @@ from PySide6.QtWidgets import (
 from focusguard.platform import get_backend
 from focusguard.ui.theme import applyTheme
 
+# Pause screen, pops up on unproductive stuff + makes u wait before opening
+
 COUNTDOWN = 15
 
 REASONS = [
@@ -27,6 +29,7 @@ REASONS = [
     "Emergency",
 ]
 
+# wiggle amounts when u click outside the box
 SHAKE = [12, -12, 9, -9, 5, -5, 0]
 
 STYLE = """
@@ -157,6 +160,7 @@ class PauseScreen(QWidget):
         self.shakeTimer = QTimer(self)
         self.shakeTimer.timeout.connect(self.shakeMove)
 
+    # centers box over the app u just opened, or the screen if we cant find it
     def placeBox(self):
         screen = self.geometry()
         appRect = self.appRect
@@ -205,6 +209,8 @@ class PauseScreen(QWidget):
         self.raise_()
         self.activateWindow()
 
+
+    # reasons + countdown, emergency skips wait, other needs u to type smth
     def pickReason(self, reason):
         if reason == "Emergency":
             self.finishWithChoice("emergency")
@@ -263,8 +269,14 @@ class PauseScreen(QWidget):
         event.ignore()
 
 
+
+
+
+# Check in popup when break runs out, ready to bounce back or nah
+
 TREE_REMINDER = "Saying continue won't harm your tree!"
 
+# diff message each time, loops back around
 CHECK_IN_MESSAGES = [
     "Your {minutes} minute break is up. Are you feeling alright and ready to get back to work, or still feeling down?",
     "How you feeling now? It's alright if you're still stressed, don't worry! Take your time.",
@@ -350,6 +362,7 @@ class CheckInScreen(QWidget):
         self.activateWindow()
 
 
+    # buttons just tell the dashboard what u picked
     def bounceBack(self):
         self.hide()
         self.whenDone("bounceBack")

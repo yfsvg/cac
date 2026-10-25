@@ -1,3 +1,5 @@
+# finder / taskbar etc should never get tracked or closed
+
 import pytest
 
 from focusguard.core.classifier import isIgnoredApp

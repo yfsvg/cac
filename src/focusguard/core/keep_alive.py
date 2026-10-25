@@ -15,9 +15,12 @@ from focusguard.storage.memory import dataDirectory
 
 log = logging.getLogger(__name__)
 
+# helper = little 2nd process that reopens us if we get killed
 helper = None
 helperTimer = None
 
+
+# launch commands, frozen = packaged app not python -m
 
 def isFrozen() -> bool:
     return getattr(sys, "frozen", False)
@@ -41,6 +44,7 @@ def helperCommand(appPid: int) -> list:
     return [pythonPath(), "-m", "focusguard.core.keep_alive", str(appPid)]
 
 
+# detached process so killing us doesnt kill it
 def startInBackground(command: list):
     if sys.platform == "win32":
         flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
@@ -53,6 +57,11 @@ def startInBackground(command: list):
         stderr=subprocess.DEVNULL,
     )
 
+
+
+
+
+# harder to close on impulse
 
 def stopCtrlC() -> None:
     if isDebugMode():
@@ -80,6 +89,11 @@ def makeSureIsAdmin() -> None:
     sys.exit(1)
 
 
+
+
+
+# Startup - relaunch w/o terminal, only one copy ever
+
 def startedFromTerminal() -> bool:
     if isFrozen():
         return False
@@ -101,6 +115,7 @@ def alreadyRunning() -> bool:
         otherPid = int(pidFile.read_text())
     except (OSError, ValueError):
         otherPid = 0
+    # already running if saved pid is alive and its not the keep alive helper
     if otherPid != 0 and otherPid != os.getpid() and psutil.pid_exists(otherPid):
         try:
             otherCommand = " ".join(psutil.Process(otherPid).cmdline()).lower()
@@ -112,6 +127,11 @@ def alreadyRunning() -> bool:
     pidFile.write_text(str(os.getpid()))
     return False
 
+
+
+
+
+# keep alive helper. we watch it, it watches us
 
 def startHelper() -> None:
     global helper, helperTimer
@@ -136,6 +156,7 @@ def stopHelper() -> None:
         helper.kill()
 
 
+# runs in the helper, reopens focusguard as soon as its gone
 def helperLoop(appPid: int) -> None:
     while True:
         time.sleep(2)

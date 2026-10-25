@@ -23,6 +23,8 @@ from focusguard.core.setting_changes import frozenSecondsLeft, markChanged
 from focusguard.storage import memory, parent_pin, time_tracking
 from focusguard.ui.theme import applyTheme, getColors
 
+# Settings page -- app config dropdowns, AI key, parental controls
+
 SETTINGS_STYLE = """
     QDialog#PinDialog { background-color: @surface; }
     QPushButton#PinButton {
@@ -133,6 +135,11 @@ def makeBackArrow():
     return QIcon(arrow)
 
 
+
+
+
+# seconds -> "2d 23h" etc
+
 def frozenText(secondsLeft):
     daysLeft = secondsLeft // 86400
     hoursLeft = (secondsLeft % 86400) // 3600
@@ -154,6 +161,11 @@ DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 SETTING_NAMES = ["Absolute Time Limits", "Schedule Time Limits", "AI Categorizations"]
 
 
+
+
+
+# Parental controls - which settings need the pin
+
 def getLockedSettings():
     return memory.load().get("lockedSettings", [])
 
@@ -173,6 +185,11 @@ def replaceBody(dropdown, newBody):
     newBody.hide()
     dropdown.layout().addWidget(newBody)
 
+
+
+
+
+# PIN popup, for making a new pin or unlocking a locked setting
 
 class PinDialog(QDialog):
     def __init__(self, parent, mainStyle, creating):
@@ -251,6 +268,11 @@ def askForPin(parent, mainStyle):
         return True
     return PinDialog(parent, mainStyle, False).exec() == QDialog.DialogCode.Accepted
 
+
+
+
+
+# settings page, swaps in where the dashboard normally is
 
 class SettingsPage(QWidget):
     def __init__(self, mainStyle, goBack, onMemoryCleared=None, onForceQuit=None):
@@ -394,6 +416,8 @@ class SettingsPage(QWidget):
         saveLockedSettings(lockedSettings)
         self.updateParentSection()
 
+
+    # pending changes, countdown till it kicks in + cancel button
     def canEdit(self, settingName):
         return frozenSecondsLeft(settingName) == 0 and not setting_changes.isPending(settingName)
 
@@ -505,6 +529,8 @@ class SettingsPage(QWidget):
         if self.onForceQuit is not None:
             self.onForceQuit()
 
+
+    # shared helpers for building each section
     def makeTab(self):
         tab = QWidget()
         tabLayout = QVBoxLayout(tab)
@@ -518,6 +544,8 @@ class SettingsPage(QWidget):
         saveRow.addWidget(saveButton)
         return saveRow
 
+
+    # schedule tab, study days + start/end
     def makeSchedule(self):
         from focusguard.ui.dashboard import label
 
@@ -610,6 +638,8 @@ class SettingsPage(QWidget):
         setting_changes.queueChange("Schedule Time Limits", {"studySchedule": newSchedule})
         self.updateSchedule()
 
+
+    # AI tab, gemini key + all the sites its sorted so far
     def makeAiTab(self):
         from focusguard.ui.dashboard import label
 
@@ -717,6 +747,8 @@ class SettingsPage(QWidget):
             self.onMemoryCleared()
         self.refreshEverything()
 
+
+    # parental control buttons, needs pin after setup
     def setUpParentalControls(self):
         PinDialog(self, self.mainStyle, True).exec()
         self.updateParentSection()

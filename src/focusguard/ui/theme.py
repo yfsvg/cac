@@ -44,6 +44,8 @@ COLORS = {
     "primaryHover": "#7965AF",
 }
 
+
+# dark mode, same names
 DARK = {
     "primary": "#D0BCFF",
     "onPrimary": "#381E72",
@@ -86,6 +88,11 @@ DARK = {
 currentTheme = "light"
 
 
+
+
+
+# current theme stuff, light/dark/system
+
 def setTheme(themeName):
     global currentTheme
     currentTheme = themeName
@@ -120,6 +127,11 @@ def choiceFor(themeName, systemThemeName):
 
 
 
+
+
+
+
+# swaps @colourName for the real colour
 
 def applyTheme(styleText):
     # parse longest names first
