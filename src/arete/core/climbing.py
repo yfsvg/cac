@@ -4,7 +4,9 @@ from arete.core import mountains
 from arete.storage import memory
 
 PERCENT_PER_HOUR = 1.0
-SHORTEST_SESSION_HOURS = 0.5
+SHORTEST_SESSION_MINUTES = 10
+BOUNCE_BACK_PERCENT = 0.25
+BOUNCE_BACK_DAILY_CAP = 1.0
 PENALTY_PERCENT = PERCENT_PER_HOUR / 3
 PENALTY_GAP_SECONDS = 60
 OLD_METERS_PER_PERCENT = 80
@@ -78,9 +80,9 @@ def changeClimb(amount, reason):
 
 
 def sessionAmount(minutes, productiveFraction):
+    if minutes < SHORTEST_SESSION_MINUTES:
+        return 0
     hours = minutes / 60
-    if hours < SHORTEST_SESSION_HOURS:
-        hours = SHORTEST_SESSION_HOURS
     if productiveFraction < 0:
         productiveFraction = 0
     if productiveFraction > 1:
@@ -100,6 +102,25 @@ def unproductivePenalty(appName):
     savedMemory["lastPenaltyAt"] = time.time()
     memory.save(savedMemory)
     return changeClimb(-PENALTY_PERCENT, "opening " + appName)
+
+
+def bounceBackEarned(breakPeriods):
+    if breakPeriods < 1:
+        breakPeriods = 1
+    savedMemory = loadClimb()
+    today = time.strftime("%Y-%m-%d")
+    bounceToday = savedMemory.get("bounceToday", {})
+    if bounceToday.get("day") != today:
+        bounceToday = {"day": today, "percent": 0}
+    amount = BOUNCE_BACK_PERCENT / breakPeriods
+    if bounceToday["percent"] + amount > BOUNCE_BACK_DAILY_CAP:
+        amount = BOUNCE_BACK_DAILY_CAP - bounceToday["percent"]
+    if amount <= 0:
+        return 0
+    bounceToday["percent"] = bounceToday["percent"] + amount
+    savedMemory["bounceToday"] = bounceToday
+    memory.save(savedMemory)
+    return changeClimb(amount, "bouncing back")
 
 
 def beatBoss():

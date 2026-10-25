@@ -1,5 +1,5 @@
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QFontDatabase, QPainter
+from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -7,30 +7,15 @@ from PySide6.QtWidgets import (
     QLabel,
     QProgressBar,
     QPushButton,
-    QSlider,
     QVBoxLayout,
     QWidget,
 )
 
 from arete.core import session
 from arete.core.debug_mode import isDebugMode
-from arete.platform import get_backend
 from arete.ui import animations
-from arete.ui.pause_screen import BADGE_MARGIN, BADGE_STYLE, STYLE
+from arete.ui.pause_screen import BADGE_MARGIN, BADGE_STYLE
 from arete.ui.theme import applyTheme
-
-PROMPT_STYLE = """
-QSlider::groove:horizontal { height: 6px; background: @surfaceContainerHighest; border-radius: 3px; }
-QSlider::sub-page:horizontal { background: @primary; border-radius: 3px; }
-QSlider::handle:horizontal {
-    background: @primary;
-    width: 18px;
-    height: 18px;
-    margin: -6px 0;
-    border-radius: 9px;
-}
-QPushButton#Preset { text-align: center; }
-"""
 
 TOAST_STYLE = """
 QPushButton#ToastButton {
@@ -55,7 +40,50 @@ QLabel#ToastHint { color: @onSurfaceVariant; font-size: 12px; font-weight: 400; 
 QLabel#ToastBig { color: @primary; font-size: 20px; font-weight: 800; }
 """
 
-PRESETS = [("30 min", 30), ("1 hour", 60), ("2 hours", 120), ("3 hours", 180)]
+PANEL_STYLE = """
+QFrame#SessionPanel { background-color: @surfaceContainerLow; border-radius: 24px; border: 1px solid @cardBorder; }
+QLabel#PanelTitle { color: @onSurface; font-size: 17px; font-weight: 800; }
+QLabel#PanelHint { color: @onSurfaceVariant; font-size: 13px; }
+QLabel#PanelClock { color: @primary; font-size: 30px; font-weight: 800; }
+QPushButton#LengthChip {
+    color: @onSurfaceVariant;
+    font-size: 13px;
+    font-weight: 600;
+    background-color: @surfaceContainerHigh;
+    border: 1px solid @cardBorder;
+    border-radius: 14px;
+    padding: 7px 10px;
+}
+QPushButton#LengthChip:hover { background-color: @surfaceContainerHighest; }
+QPushButton#LengthChip:checked { color: @onPrimary; background-color: @primary; border: 1px solid @primary; }
+QPushButton#PanelStart {
+    color: @onPrimary;
+    font-size: 14px;
+    font-weight: 700;
+    background-color: @primary;
+    border: none;
+    border-bottom: 4px solid @primaryShadow;
+    border-radius: 16px;
+    padding: 10px 16px 8px 16px;
+}
+QPushButton#PanelStart:hover { background-color: @primaryHover; }
+QPushButton#PanelStart:pressed { border-bottom: 1px solid @primaryShadow; padding-top: 13px; }
+QPushButton#PanelEnd {
+    color: @onSurface;
+    font-size: 14px;
+    font-weight: 700;
+    background-color: @surfaceContainerHigh;
+    border: 1px solid @cardBorder;
+    border-bottom: 4px solid @cardBorder;
+    border-radius: 16px;
+    padding: 10px 16px 8px 16px;
+}
+QPushButton#PanelEnd:hover { background-color: @errorContainer; color: @onErrorContainer; }
+QProgressBar#PanelBar { background-color: @surfaceContainerHighest; border: none; border-radius: 4px; }
+QProgressBar#PanelBar::chunk { background-color: @primary; border-radius: 4px; }
+"""
+
+LENGTHS = [("No timer", None), ("30 min", 30), ("1 hour", 60), ("2 hours", 120), ("3 hours", 180)]
 TEST_SECONDS = 15
 TOAST_SECONDS = 12
 
@@ -73,87 +101,98 @@ def minutesText(minutes):
     return hoursText + " " + str(extraMinutes) + " min"
 
 
-class SessionPrompt(QWidget):
-    def __init__(self, whenDone):
-        super().__init__()
-        self.whenDone = whenDone
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Window)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont))
-        self.setStyleSheet(applyTheme(STYLE + PROMPT_STYLE))
-        self.setGeometry(QApplication.primaryScreen().geometry())
+class SessionPanel(QFrame):
+    def __init__(self, whenStarted, whenEnded):
+        super().__init__(objectName="SessionPanel")
+        self.whenStarted = whenStarted
+        self.whenEnded = whenEnded
+        self.chosenMinutes = None
+        panelLayout = QVBoxLayout(self)
+        panelLayout.setContentsMargins(18, 16, 18, 16)
+        panelLayout.setSpacing(10)
 
-        title = QLabel("How long do you want to be productive for?")
-        title.setWordWrap(True)
-        hint = QLabel("The more of it you spend focused, the higher you climb.", objectName="Hint")
-        hint.setWordWrap(True)
+        self.titleLabel = QLabel("Start a focus session", objectName="PanelTitle")
+        panelLayout.addWidget(self.titleLabel)
+        self.hintLabel = QLabel("", objectName="PanelHint")
+        self.hintLabel.setWordWrap(True)
+        panelLayout.addWidget(self.hintLabel)
 
-        presetRow = QHBoxLayout()
-        for presetName, presetMinutes in PRESETS:
-            presetButton = QPushButton(presetName, objectName="Preset", cursor=Qt.CursorShape.PointingHandCursor)
-            presetButton.clicked.connect(lambda checked=False, m=presetMinutes: self.slider.setValue(m // 15))
-            presetRow.addWidget(presetButton)
-
-        self.slider = QSlider(Qt.Orientation.Horizontal)
-        self.slider.setRange(1, 32)
-        self.slider.setValue(4)
-        self.slider.valueChanged.connect(self.updateChoice)
-        self.choiceLabel = QLabel("", objectName="Hint")
-
-        startButton = QPushButton("Start", objectName="BackButton", cursor=Qt.CursorShape.PointingHandCursor)
-        startButton.clicked.connect(self.start)
-
-        self.box = QFrame(self, objectName="Box")
-        self.box.setFixedWidth(420)
-        boxLayout = QVBoxLayout(self.box)
-        boxLayout.setContentsMargins(24, 24, 24, 24)
-        boxLayout.setSpacing(12)
-        boxLayout.addWidget(title)
-        boxLayout.addWidget(hint)
-        boxLayout.addLayout(presetRow)
-        boxLayout.addWidget(self.slider)
-        boxLayout.addWidget(self.choiceLabel)
-        boxLayout.addWidget(startButton)
+        self.chipRow = QWidget()
+        chipLayout = QHBoxLayout(self.chipRow)
+        chipLayout.setContentsMargins(0, 0, 0, 0)
+        chipLayout.setSpacing(6)
+        self.chips = []
+        lengths = list(LENGTHS)
         if isDebugMode():
-            testButton = QPushButton("15 sec (testing)", objectName="Preset", cursor=Qt.CursorShape.PointingHandCursor)
-            testButton.clicked.connect(self.startTest)
-            boxLayout.addWidget(testButton)
-        self.updateChoice()
-        self.box.adjustSize()
-        screen = self.geometry()
-        self.box.move(screen.width() // 2 - self.box.width() // 2, screen.height() // 2 - self.box.height() // 2)
+            lengths.append(("15 sec", TEST_SECONDS / 60))
+        for chipName, chipMinutes in lengths:
+            chip = QPushButton(chipName, objectName="LengthChip", cursor=Qt.CursorShape.PointingHandCursor)
+            chip.setCheckable(True)
+            chip.clicked.connect(lambda checked=False, m=chipMinutes, c=chip: self.pickLength(m, c))
+            chipLayout.addWidget(chip)
+            self.chips.append(chip)
+        panelLayout.addWidget(self.chipRow)
 
-    def chosenMinutes(self):
-        return self.slider.value() * 15
+        self.clockLabel = QLabel("", objectName="PanelClock")
+        panelLayout.addWidget(self.clockLabel)
+        self.progressBar = QProgressBar(objectName="PanelBar")
+        self.progressBar.setTextVisible(False)
+        self.progressBar.setFixedHeight(8)
+        panelLayout.addWidget(self.progressBar)
 
-    def updateChoice(self):
-        self.choiceLabel.setText("Focus for " + minutesText(self.chosenMinutes()))
+        self.startButton = QPushButton("Start focusing", objectName="PanelStart", cursor=Qt.CursorShape.PointingHandCursor)
+        self.startButton.clicked.connect(self.startPressed)
+        panelLayout.addWidget(self.startButton)
+        self.endButton = QPushButton("End session", objectName="PanelEnd", cursor=Qt.CursorShape.PointingHandCursor)
+        self.endButton.clicked.connect(self.whenEnded)
+        panelLayout.addWidget(self.endButton)
 
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(29, 27, 32, 140))
+        self.pickLength(None, self.chips[0])
+        self.showIdle()
 
-    def popUp(self):
-        self.show()
-        try:
-            get_backend().float_above_everything(int(self.winId()))
-        except Exception:
-            pass
-        self.raise_()
-        self.activateWindow()
-        animations.fadeWindowIn(self)
-        animations.slideWidgetIn(self.box)
+    def pickLength(self, minutes, pickedChip):
+        self.chosenMinutes = minutes
+        for chip in self.chips:
+            chip.setChecked(chip is pickedChip)
+        if minutes is None:
+            self.hintLabel.setText("Focus as long as you want and end it yourself. You climb for the time you stay focused.")
+        else:
+            self.hintLabel.setText("Stay focused until the timer runs out. Closing Arete or giving up early fails the session.")
 
-    def start(self):
-        self.hide()
-        self.whenDone(self.chosenMinutes())
+    def startPressed(self):
+        self.whenStarted(self.chosenMinutes)
 
-    def startTest(self):
-        self.hide()
-        self.whenDone(TEST_SECONDS / 60)
+    def showIdle(self):
+        self.titleLabel.setText("Start a focus session")
+        self.hintLabel.show()
+        self.chipRow.show()
+        self.clockLabel.hide()
+        self.progressBar.hide()
+        self.startButton.show()
+        self.endButton.hide()
+        self.pickLength(self.chosenMinutes, self.chips[[chip.isChecked() for chip in self.chips].index(True)])
 
-    def closeEvent(self, event):
-        event.ignore()
+    def showRunning(self, timed):
+        self.hintLabel.hide()
+        self.chipRow.hide()
+        self.startButton.hide()
+        self.clockLabel.show()
+        self.progressBar.setVisible(timed)
+        self.endButton.show()
+        if timed:
+            self.titleLabel.setText("Focus session")
+            self.endButton.setText("Give up")
+        else:
+            self.titleLabel.setText("Focusing, no timer")
+            self.endButton.setText("End session")
+
+    def updateTimed(self, totalSeconds, secondsLeft):
+        self.clockLabel.setText(session.timeLeftText(secondsLeft))
+        self.progressBar.setRange(0, max(int(totalSeconds), 1))
+        self.progressBar.setValue(int(totalSeconds) - secondsLeft)
+
+    def updateFree(self, secondsPassed):
+        self.clockLabel.setText(session.timePassedText(secondsPassed))
 
 
 class SessionCard(QFrame):
@@ -174,6 +213,7 @@ class SessionCard(QFrame):
 
     def showSession(self, totalSeconds, secondsLeft):
         self.totalSeconds = max(int(totalSeconds), 1)
+        self.progressBar.show()
         self.updateTime(secondsLeft)
         self.show()
 
@@ -181,6 +221,14 @@ class SessionCard(QFrame):
         self.timeLabel.setText("Focus  " + session.timeLeftText(secondsLeft))
         self.progressBar.setRange(0, self.totalSeconds)
         self.progressBar.setValue(secondsLeft)
+
+    def showFree(self, secondsPassed):
+        self.progressBar.hide()
+        self.updateFree(secondsPassed)
+        self.show()
+
+    def updateFree(self, secondsPassed):
+        self.timeLabel.setText("Focusing  " + session.timePassedText(secondsPassed))
 
 
 class SessionDoneToast(QWidget):

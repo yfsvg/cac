@@ -788,7 +788,9 @@ class SettingsPage(QWidget):
         tab, tabLayout = self.makeTab()
         explanation = (
             "The AI only checks websites in your browser that aren't on Arete's built-in lists, "
-            "after you've been on them for 1 minute. Each answer is remembered, so a site is only checked once."
+            "after you've been on them for 1 minute. It only reads the site's public homepage (its description, "
+            "then a little of its text if needed), never your screen or the page you're on. "
+            "Each answer is remembered, so a site is only checked once."
         )
         tabLayout.addWidget(label(explanation, "SliderHint"))
         keyStatusRow = QHBoxLayout()

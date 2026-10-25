@@ -35,7 +35,7 @@ from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPainter, QPai
 from arete.ai import vision
 from arete.ai.site_memory import siteCategory
 from arete.core.classifier import classifyTypeOfApp, isIgnoredApp, isUnproductiveSite, siteRoot
-from arete.core import climbing, enforcement, keep_alive, session, setting_changes
+from arete.core import climbing, enforcement, keep_alive, mountains, session, setting_changes
 from arete.core.enforcement import Enforcer
 from arete.storage import memory, time_tracking
 from arete.ui import animations, backdrop
@@ -43,7 +43,7 @@ from arete.ui.boss_fight import BossFight
 from arete.ui.climb_view import CLIMB_STYLE, ClimbCard, MapHome, climbSummary
 from arete.ui.settings_window import SettingsPage
 from arete.ui.pause_screen import BreakBadge, CheckInScreen, PauseScreen
-from arete.ui.session_screen import SessionCard, SessionDoneToast, SessionPrompt
+from arete.ui.session_screen import PANEL_STYLE, SessionCard, SessionDoneToast, SessionPanel
 from arete.ui.theme import applyTheme, choiceFor, getColors, getTheme, resolveTheme, setTheme, systemTheme
 from arete.platform import get_backend
 
@@ -70,6 +70,7 @@ STYLE = """
     QLabel { color: @onSurface; }
     QLabel#AppName { color: @onSurface; font-size: 15px; font-weight: 800; }
     QLabel#Hello { color: @onPrimaryContainer; font-size: 32px; font-weight: 700; }
+    QLabel#CurrentMountain { color: @onPrimaryContainer; font-size: 14px; }
 
     QLabel#Section { color: @onSurface; font-size: 22px; font-weight: 600; }
     QLabel#BigNumber { font-size: 44px; font-weight: 800; }
@@ -101,15 +102,18 @@ STYLE = """
 
 
     QPushButton#DropdownHeader {
-        color: @onSurface;
+        color: @onPrimary;
         font-size: 15px;
+        font-weight: 600;
         text-align: left;
-        background-color: @surfaceContainer;
-        border: 1px solid @cardBorder;
+        background-color: @primary;
+        border: none;
+        border-bottom: 4px solid @primaryShadow;
         border-radius: 16px;
-        padding: 12px 16px 12px 40px;
+        padding: 12px 16px 10px 40px;
     }
-    QPushButton#DropdownHeader:hover { background-color: @surfaceContainerHigh; }
+    QPushButton#DropdownHeader:hover { background-color: @primaryHover; }
+    QPushButton#DropdownHeader:pressed { border-bottom: 1px solid @primaryShadow; padding-top: 15px; }
 
     QPushButton#ThemeButton {
         color: @onSurface;
@@ -124,7 +128,7 @@ STYLE = """
     QLabel#SessionTime { color: @onSurface; font-size: 12px; font-weight: 700; }
     QProgressBar#SessionBar { background-color: @surfaceContainerHighest; border: none; border-radius: 2px; }
     QProgressBar#SessionBar::chunk { background-color: @primary; border-radius: 2px; }
-""" + CLIMB_STYLE
+""" + CLIMB_STYLE + PANEL_STYLE
 
 DOT_NAMES = {
     "neutral": "DotNeutral",
@@ -558,7 +562,7 @@ class DropdownHeader(QPushButton):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.translate(24, self.height() / 2)
         painter.rotate(self.angle)
-        chevronPen = QPen(QColor(getColors()["onSurface"]), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        chevronPen = QPen(QColor(getColors()["onPrimary"]), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
         painter.setPen(chevronPen)
         painter.drawLine(QPointF(-2, -4), QPointF(2, 0))
         painter.drawLine(QPointF(2, 0), QPointF(-2, 4))
@@ -805,9 +809,14 @@ class Dashboard(QWidget):
         heroLayout = QVBoxLayout(heroCard)
         heroLayout.setContentsMargins(24, 20, 24, 22)
         heroLayout.setSpacing(6)
-        heroLayout.addWidget(label("Hello, User", "Hello"))
+        heroLayout.addWidget(label("Hello!", "Hello"))
+        self.currentMountain = label("", "CurrentMountain")
+        heroLayout.addWidget(self.currentMountain)
         heroLayout.addWidget(label(memory.streakText(memory.markOpenedToday()), "Streak"))
         layout.addWidget(heroCard)
+        self.showCurrentMountain()
+        self.sessionPanel = SessionPanel(self.sessionChosen, self.endPressed)
+        layout.addWidget(self.sessionPanel)
         self.climbCard = ClimbCard(self.openMountain)
         self.climbCard.refresh()
         layout.addWidget(self.climbCard)
@@ -913,13 +922,13 @@ class Dashboard(QWidget):
 
         self.lastKind = None
 
-        self.sessionPrompt = None
         self.sessionToast = None
         self.bossFight = None
         self.inSession = False
+        self.sessionTimed = False
         self.sessionSeconds = 0
         self.productiveSeconds = 0
-        QTimer.singleShot(0, self.startOrResumeSession)
+        QTimer.singleShot(0, self.checkLastSession)
 
 
     def sectionCard(self):
@@ -1023,7 +1032,7 @@ class Dashboard(QWidget):
             return
 
         self.askedSites.append(site)
-        threading.Thread(target=vision.classifySite, args=(self.backend, window, site), daemon=True).start()
+        threading.Thread(target=vision.classifySite, args=(site,), daemon=True).start()
 
     def browserSite(self, window):
         browserWindow = (window.window_handle, window.title)
@@ -1215,6 +1224,10 @@ class Dashboard(QWidget):
         self.mountainPage = None
         self.climbCard.refresh()
 
+    def showCurrentMountain(self) -> None:
+        mountainName = mountains.MOUNTAINS[climbing.climbState()["mountainNumber"]]["name"]
+        self.currentMountain.setText("Currently climbing: <b>" + mountainName + "</b>")
+
     def fadeToPage(self, newPage) -> None:
         oldLook = QLabel(self.pages)
         oldLook.setPixmap(self.grab(QRect(self.pages.mapTo(self, QPoint(0, 0)), self.pages.size())))
@@ -1227,41 +1240,33 @@ class Dashboard(QWidget):
 
     def climbChanged(self) -> None:
         self.climbCard.refresh()
+        self.showCurrentMountain()
         if self.mountainPage is not None:
             self.mountainPage.refresh()
 
 
 
-    # Focus sessions, pick a length at the start, climb when it ends
+    # Focus sessions, started from the home panel, closing Arete mid session fails it
 
-    def startOrResumeSession(self):
-        savedSession = session.currentSession()
-        if savedSession is not None and session.sessionSecondsLeft() > 0:
-            self.sessionSeconds = savedSession.get("seconds", 0)
-            self.productiveSeconds = savedSession.get("productiveSeconds", 0)
-            self.sessionCard.showSession(savedSession["minutes"] * 60, session.sessionSecondsLeft())
-            self.inSession = True
-            return
-        if savedSession is not None:
-            self.sessionSeconds = savedSession.get("seconds", 0)
-            self.productiveSeconds = savedSession.get("productiveSeconds", 0)
-            self.endSession()
-            return
-        self.askForSession()
-
-    def askForSession(self):
-        self.sessionPrompt = SessionPrompt(self.sessionChosen)
-        self.sessionPrompt.popUp()
+    def checkLastSession(self):
+        if session.failLastSession():
+            self.enforcer.sendNotification("Your last focus session ended when Arete closed, so it didn't count.")
 
     def sessionChosen(self, minutes):
-        if self.sessionPrompt is not None:
-            self.sessionPrompt.deleteLater()
-        self.sessionPrompt = None
+        if self.inSession:
+            return
         session.startSession(minutes)
         self.sessionSeconds = 0
         self.productiveSeconds = 0
-        self.sessionCard.showSession(minutes * 60, session.sessionSecondsLeft())
         self.inSession = True
+        self.sessionTimed = minutes is not None
+        if self.sessionTimed:
+            self.sessionCard.showSession(minutes * 60, session.sessionSecondsLeft())
+            self.sessionPanel.updateTimed(minutes * 60, session.sessionSecondsLeft())
+        else:
+            self.sessionCard.showFree(0)
+            self.sessionPanel.updateFree(0)
+        self.sessionPanel.showRunning(self.sessionTimed)
 
     def sessionTick(self):
         if not self.inSession or self.sessionToast is not None:
@@ -1270,26 +1275,49 @@ class Dashboard(QWidget):
         onBreak = self.breakName is not None or self.pauseScreen is not None
         if self.currentKind != "unproductive" and not onBreak:
             self.productiveSeconds = self.productiveSeconds + 1
+        if not self.sessionTimed:
+            self.sessionCard.updateFree(self.sessionSeconds)
+            self.sessionPanel.updateFree(self.sessionSeconds)
+            return
         secondsLeft = session.sessionSecondsLeft()
         if secondsLeft > 0:
             self.sessionCard.updateTime(secondsLeft)
+            self.sessionPanel.updateTimed(self.sessionCard.totalSeconds, secondsLeft)
             return
         self.endSession()
 
+    def endPressed(self):
+        if self.sessionTimed:
+            self.failSession()
+        else:
+            self.endSession()
+
+    def stopSession(self):
+        self.inSession = False
+        self.sessionCard.hide()
+        self.sessionPanel.showIdle()
+
+    def failSession(self):
+        session.failLastSession()
+        self.stopSession()
+        self.sessionToast = SessionDoneToast("Session failed", "You gave up before the timer ran out, so this one didn't count for the climb.", self.sessionToastDone)
+        self.sessionToast.popUp()
+        animations.shake(self.sessionToast)
+
     def endSession(self):
-        savedSession = session.currentSession()
-        minutes = 0
-        if savedSession is not None:
-            minutes = savedSession["minutes"]
+        minutes = self.sessionSeconds / 60
+        if self.sessionTimed:
+            minutes = self.sessionCard.totalSeconds / 60
         fraction = session.productiveFraction(self.sessionSeconds, self.productiveSeconds)
         earned = climbing.sessionEarned(minutes, fraction)
         session.endSession()
-        self.inSession = False
-        self.sessionCard.hide()
-        self.climbCard.refresh()
+        self.stopSession()
+        self.climbChanged()
         state = climbing.climbState()
         climbText = "+" + format(earned, ".2f").rstrip("0").rstrip(".") + "% on the climb"
         detailText = "You were focused " + str(int(round(fraction * 100))) + "% of the time. You're now " + climbSummary(state) + "."
+        if minutes < climbing.SHORTEST_SESSION_MINUTES:
+            detailText = "Sessions need to be at least " + str(climbing.SHORTEST_SESSION_MINUTES) + " minutes to count for the climb."
         if state["atBoss"]:
             detailText = detailText + " A boss is blocking the trail, time to fight it!"
         self.sessionToast = SessionDoneToast(climbText, detailText, self.sessionToastDone)
@@ -1429,6 +1457,8 @@ class Dashboard(QWidget):
 
     def quitArete(self):
         keep_alive.stopHelper()
+        if self.inSession:
+            session.failLastSession()
         self.saveTimes()
         QApplication.quit()
 
@@ -1504,6 +1534,8 @@ class Dashboard(QWidget):
 
     def recordBounceBack(self):
         self.recordRebound()
+        climbing.bounceBackEarned(self.timesAsked + 1)
+        self.climbChanged()
         savedMemory = memory.load()
         savedMemory["bounceBacks"] = savedMemory.get("bounceBacks", 0) + 1
         memory.save(savedMemory)
