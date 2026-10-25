@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSlider,
+    QStyleFactory,
     QTimeEdit,
     QVBoxLayout,
     QWidget,
@@ -98,8 +99,10 @@ SETTINGS_STYLE = """
     }
     QPushButton#DayChip:checked { color: @onPrimary; background-color: @primary; }
     QPushButton#DayChip:disabled { color: @outline; }
+    QPushButton#DayChip:checked:disabled { color: @onPrimary; background-color: @primary; }
     QFrame#TimeChip { background-color: @surfaceContainerHighest; border-radius: 10px; }
     QTimeEdit { color: @onSurface; background-color: transparent; font-size: 14px; font-weight: 600; }
+    QTimeEdit:disabled { color: @onSurface; }
     QLabel#ChipOn {
         color: @onGreenContainer;
         background-color: @greenContainer;
@@ -157,6 +160,18 @@ def waitText(secondsLeft):
 
 
 DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def scheduleText(schedule):
+    days = schedule["days"]
+    if len(days) == 7:
+        dayText = "Every day"
+    else:
+        dayNames = []
+        for dayNumber in days:
+            dayNames.append(DAY_NAMES[dayNumber])
+        dayText = ", ".join(dayNames)
+    return dayText + "  " + schedule["start"] + " to " + schedule["end"]
 
 SETTING_NAMES = ["Absolute Time Limits", "Schedule Time Limits", "AI Categorizations"]
 
@@ -557,7 +572,12 @@ class SettingsPage(QWidget):
         from focusguard.ui.dashboard import label
 
         tab, tabLayout = self.makeTab()
-        tabLayout.addWidget(label("Study days and hours.", "SliderHint"))
+        tabLayout.addWidget(label("Study days and hours. You can add more than one.", "SliderHint"))
+        self.scheduleListBox = QWidget()
+        self.scheduleListLayout = QVBoxLayout(self.scheduleListBox)
+        self.scheduleListLayout.setContentsMargins(0, 0, 0, 0)
+        self.scheduleListLayout.setSpacing(6)
+        tabLayout.addWidget(self.scheduleListBox)
         dayRow = QHBoxLayout()
         self.dayBoxes = []
         for dayNumber in range(7):
@@ -567,16 +587,22 @@ class SettingsPage(QWidget):
             dayRow.addWidget(dayBox)
         tabLayout.addLayout(dayRow)
         timeRow = QHBoxLayout()
+        self.timeBoxStyle = QStyleFactory.create("Fusion")
+        self.timeBoxStyle.setParent(self)
         self.startTimeBox = QTimeEdit()
         self.startTimeBox.setDisplayFormat("HH:mm")
         self.startTimeBox.setButtonSymbols(QTimeEdit.ButtonSymbols.NoButtons)
         self.startTimeBox.setFrame(False)
+        self.startTimeBox.setAttribute(Qt.WidgetAttribute.WA_MacShowFocusRect, False)
+        self.startTimeBox.setStyle(self.timeBoxStyle)
         self.startTimeBox.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.startTimeBox.setFixedSize(64, 32)
         self.endTimeBox = QTimeEdit()
         self.endTimeBox.setDisplayFormat("HH:mm")
         self.endTimeBox.setButtonSymbols(QTimeEdit.ButtonSymbols.NoButtons)
         self.endTimeBox.setFrame(False)
+        self.endTimeBox.setAttribute(Qt.WidgetAttribute.WA_MacShowFocusRect, False)
+        self.endTimeBox.setStyle(self.timeBoxStyle)
         self.endTimeBox.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.endTimeBox.setFixedSize(64, 32)
         timeRow.setSpacing(10)
@@ -585,6 +611,9 @@ class SettingsPage(QWidget):
         timeRow.addWidget(label("to", "SliderLabel"), alignment=Qt.AlignmentFlag.AlignVCenter)
         timeRow.addWidget(self.makeTimeChip(self.endTimeBox))
         timeRow.addStretch()
+        self.addScheduleButton = QPushButton("Add", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
+        self.addScheduleButton.clicked.connect(self.addSchedule)
+        timeRow.addWidget(self.addScheduleButton)
         tabLayout.addLayout(timeRow)
         self.scheduleHint = label("", "SliderHint")
         tabLayout.addWidget(self.scheduleHint)
@@ -599,13 +628,71 @@ class SettingsPage(QWidget):
         return tab
 
     def showScheduleValues(self):
-        schedule = setting_changes.upcomingValue("Schedule Time Limits", "studySchedule", memory.load().get("studySchedule", {}))
-        for dayNumber in range(7):
-            self.dayBoxes[dayNumber].setChecked(dayNumber in schedule.get("days", []))
-        self.startTimeBox.setTime(QTime.fromString(schedule.get("start", "16:00"), "HH:mm"))
-        self.endTimeBox.setTime(QTime.fromString(schedule.get("end", "18:00"), "HH:mm"))
+        savedMemory = memory.load()
+        schedules = savedMemory.get("studySchedules")
+        if schedules is None and savedMemory.get("studySchedule", {}).get("days"):
+            schedules = [savedMemory["studySchedule"]]
+        if schedules is None:
+            schedules = []
+        self.schedules = list(setting_changes.upcomingValue("Schedule Time Limits", "studySchedules", schedules))
+        for dayBox in self.dayBoxes:
+            dayBox.setChecked(False)
+        self.startTimeBox.setTime(QTime(16, 0))
+        self.endTimeBox.setTime(QTime(18, 0))
         self.scheduleError.hide()
+        self.showScheduleList()
         self.updateSchedule()
+
+    def showScheduleList(self):
+        from focusguard.ui.dashboard import label
+
+        while self.scheduleListLayout.count() > 0:
+            oldRow = self.scheduleListLayout.takeAt(0).widget()
+            oldRow.hide()
+            oldRow.deleteLater()
+        self.removeButtons = []
+        if len(self.schedules) == 0:
+            self.scheduleListLayout.addWidget(label("No study times yet.", "SliderLabel"))
+        for index in range(len(self.schedules)):
+            schedule = self.schedules[index]
+            row = QFrame(objectName="TimeChip")
+            rowLayout = QHBoxLayout(row)
+            rowLayout.setContentsMargins(12, 6, 6, 6)
+            rowText = label(scheduleText(schedule), "SliderLabel")
+            rowText.setWordWrap(False)
+            rowLayout.addWidget(rowText)
+            rowLayout.addStretch()
+            removeButton = QPushButton("Remove", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
+            removeButton.setEnabled(self.canEdit("Schedule Time Limits"))
+            self.removeButtons.append(removeButton)
+            removeButton.clicked.connect(lambda checked=False, i=index: self.removeSchedule(i))
+            rowLayout.addWidget(removeButton)
+            self.scheduleListLayout.addWidget(row)
+
+    def addSchedule(self):
+        startText = self.startTimeBox.time().toString("HH:mm")
+        endText = self.endTimeBox.time().toString("HH:mm")
+        chosenDays = []
+        for dayNumber in range(7):
+            if self.dayBoxes[dayNumber].isChecked():
+                chosenDays.append(dayNumber)
+        if len(chosenDays) == 0:
+            self.scheduleError.setText("Pick at least one day.")
+            self.scheduleError.show()
+            return
+        if startText >= endText:
+            self.scheduleError.setText("The end time has to be after the start time.")
+            self.scheduleError.show()
+            return
+        self.scheduleError.hide()
+        self.schedules.append({"days": chosenDays, "start": startText, "end": endText})
+        for dayBox in self.dayBoxes:
+            dayBox.setChecked(False)
+        self.showScheduleList()
+
+    def removeSchedule(self, index):
+        self.schedules.pop(index)
+        self.showScheduleList()
 
     def makeTimeChip(self, timeBox):
         timeChip = QFrame(objectName="TimeChip")
@@ -621,6 +708,7 @@ class SettingsPage(QWidget):
             dayBox.setEnabled(canEdit)
         self.startTimeBox.setEnabled(canEdit)
         self.endTimeBox.setEnabled(canEdit)
+        self.addScheduleButton.setEnabled(canEdit)
         self.saveScheduleButton.setEnabled(canEdit)
         hintText = ""
         if secondsLeft > 0:
@@ -628,21 +716,12 @@ class SettingsPage(QWidget):
         self.scheduleHint.setText(hintText)
         self.scheduleHint.setVisible(hintText != "")
         self.updatePendingRow("Schedule Time Limits")
+        for removeButton in self.removeButtons:
+            removeButton.setEnabled(canEdit)
 
     def saveSchedule(self):
-        startText = self.startTimeBox.time().toString("HH:mm")
-        endText = self.endTimeBox.time().toString("HH:mm")
-        if startText >= endText:
-            self.scheduleError.setText("The end time has to be after the start time.")
-            self.scheduleError.show()
-            return
         self.scheduleError.hide()
-        chosenDays = []
-        for dayNumber in range(7):
-            if self.dayBoxes[dayNumber].isChecked():
-                chosenDays.append(dayNumber)
-        newSchedule = {"days": chosenDays, "start": startText, "end": endText}
-        setting_changes.queueChange("Schedule Time Limits", {"studySchedule": newSchedule})
+        setting_changes.queueChange("Schedule Time Limits", {"studySchedules": self.schedules})
         self.updateSchedule()
 
 
