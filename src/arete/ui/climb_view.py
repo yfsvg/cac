@@ -324,7 +324,7 @@ class MountainMap(QWidget):
                 isNextBoss = bossNumber == self.state["bossesBeaten"]
                 if not underClimber:
                     self.drawBoss(painter, nodePoint, bossNumber < self.state["bossesBeaten"], colors, seconds, isNextBoss, bossNumber)
-                self.drawLabel(painter, stageText + "  ·  " + bossName(bossNumber), nodePoint, BOSS_RADIUS + 10)
+                self.drawLabel(painter, stageText + "  ·  " + bossName(bossNumber), nodePoint, BOSS_RADIUS + 22)
             else:
                 if reached and not underClimber:
                     self.drawDoneNode(painter, nodePoint, colors)
@@ -386,10 +386,16 @@ class MountainMap(QWidget):
             return
         textWidth = painter.fontMetrics().horizontalAdvance(text) + 20
         pillHeight = 24
+        rightRect = QRectF(point.x() + gap, point.y() - pillHeight / 2, textWidth, pillHeight)
+        leftRect = QRectF(point.x() - gap - textWidth, point.y() - pillHeight / 2, textWidth, pillHeight)
+        rightFits = rightRect.right() <= self.width() - 6
+        leftFits = leftRect.left() >= 6
         if point.x() < self.width() / 2:
-            pillRect = QRectF(point.x() + gap, point.y() - pillHeight / 2, textWidth, pillHeight)
+            pillRect = rightRect if rightFits or not leftFits else leftRect
         else:
-            pillRect = QRectF(point.x() - gap - textWidth, point.y() - pillHeight / 2, textWidth, pillHeight)
+            pillRect = leftRect if leftFits or not rightFits else rightRect
+        if not rightFits and not leftFits:
+            pillRect = QRectF(point.x() - textWidth / 2, point.y() - gap - pillHeight - 2, textWidth, pillHeight)
         if pillRect.left() < 6:
             pillRect.moveLeft(6)
         if pillRect.right() > self.width() - 6:
