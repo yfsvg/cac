@@ -17,16 +17,21 @@ log = logging.getLogger(__name__)
 
 
 def main() -> None:
+    # keep alive helper is just us w/ --keep-alive, it watches focusguard
     if len(sys.argv) > 2 and sys.argv[1] == "--keep-alive":
         keep_alive.helperLoop(int(sys.argv[2]))
         return
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+
+    # startup checks, admin + no terminal + only one copy
     keep_alive.makeSureIsAdmin()
     keep_alive.stopCtrlC()
     keep_alive.runWithoutTerminal()
     if keep_alive.alreadyRunning():
         return
     parent_pin.upgradeOldPin()
+
+    # qt app, stays alive w/ no windows since tray icon is the way in
     app = QApplication(sys.argv)
     app.setApplicationName("FocusGuard")
     app.setQuitOnLastWindowClosed(False)
@@ -35,6 +40,7 @@ def main() -> None:
     backend = get_backend()
     backend.hide_from_taskbar()
 
+    # warn once at startup instead of silently failing every check
     missingPermissions = []
     for permissionName, permissionState in backend.check_permissions().items():
         if permissionState is PermissionState.DENIED:

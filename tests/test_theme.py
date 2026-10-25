@@ -1,3 +1,5 @@
+# light / dark / system
+
 import pytest
 
 from focusguard.ui.theme import choiceFor, resolveTheme
@@ -16,6 +18,7 @@ def test_resolve_theme(choice, system, expected):
     assert resolveTheme(choice, system) == expected
 
 
+# picking same theme as system = back to following system
 @pytest.mark.parametrize(
     ("picked", "system", "expected"),
     [

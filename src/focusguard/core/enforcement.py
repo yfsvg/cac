@@ -14,6 +14,8 @@ MIN_BREAK_MINUTES = 3
 MAX_BREAK_MINUTES = 15
 DEFAULT_BREAK_MINUTES = 5
 
+blockingOn = True
+
 
 
 
@@ -73,11 +75,14 @@ class Enforcer:
         appName = window.app_name
         if siteName is not None:
             appName = siteName
+        # warn once, 30 sec before closing
         if secondsUsed >= WARNING:
             if appName not in self.alreadyWarned:
                 self.alreadyWarned.append(appName)
                 self.sendNotification("Hey, you've been on " + appName + " for a little while. It'll close in " + str(LIMIT - secondsUsed) + " seconds, no stress, your work will be right where you left it.")
 
+
+        # times up, close app (or just the tab if its a site)
         if secondsUsed < LIMIT:
             return False
 

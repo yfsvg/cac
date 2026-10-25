@@ -11,6 +11,7 @@
             "module": "focusguard",
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
+            "preLaunchTask": "setup focusguard",
 
 
             "python": "${workspaceFolder}/.venv/bin/python",

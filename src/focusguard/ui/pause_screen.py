@@ -1,7 +1,7 @@
 import time
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QFontDatabase, QPainter
+from PySide6.QtGui import QColor, QCursor, QFontDatabase, QPainter
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -18,6 +18,8 @@ from focusguard.platform import get_backend
 from focusguard.ui import animations
 from focusguard.ui.theme import applyTheme
 
+# Pause screen, pops up on unproductive stuff + makes u wait before opening
+
 COUNTDOWN = 15
 
 REASONS = [
@@ -28,6 +30,7 @@ REASONS = [
     "Emergency",
 ]
 
+# wiggle amounts when u click outside the box
 SHAKE = [12, -12, 9, -9, 5, -5, 0]
 
 STYLE = """
@@ -158,6 +161,7 @@ class PauseScreen(QWidget):
         self.shakeTimer = QTimer(self)
         self.shakeTimer.timeout.connect(self.shakeMove)
 
+    # centers box over the app u just opened, or the screen if we cant find it
     def placeBox(self):
         screen = self.geometry()
         appRect = self.appRect
@@ -208,6 +212,8 @@ class PauseScreen(QWidget):
         self.raise_()
         self.activateWindow()
 
+
+    # reasons + countdown, emergency skips wait, other needs u to type smth
     def pickReason(self, reason):
         if reason == "Emergency":
             self.finishWithChoice("emergency")
@@ -232,18 +238,26 @@ class PauseScreen(QWidget):
         self.progressBar.show()
         self.box.adjustSize()
         self.placeBox()
-        self.timer.start(1000)
-        self.fillStep = 0
-        self.fillTimer.start(100)
+        self.countdownStart = time.time()
+        self.timer.start(100)
+        self.fillTimer.start(30)
 
     def fillOpenButton(self):
-        self.fillStep = self.fillStep + 1
-        self.progressBar.setValue(self.fillStep)
-        if self.fillStep >= COUNTDOWN * 10:
+        secondsPassed = time.time() - self.countdownStart
+        fillStep = min(int(secondsPassed * 10), COUNTDOWN * 10)
+        self.progressBar.setValue(fillStep)
+        if fillStep >= COUNTDOWN * 10:
             self.fillTimer.stop()
 
     def countDown(self):
-        self.secondsLeft = self.secondsLeft - 1
+        secondsPassed = time.time() - self.countdownStart
+        secondsLeft = max(COUNTDOWN - int(secondsPassed), 0)
+        if secondsLeft == self.secondsLeft:
+            return
+        self.secondsLeft = secondsLeft
+        if self.secondsLeft <= 0:
+            self.progressBar.setValue(COUNTDOWN * 10)
+            self.fillTimer.stop()
         self.title.setText("Take a breath... " + str(self.secondsLeft) + " seconds")
         if self.secondsLeft <= 0:
             self.timer.stop()
@@ -266,8 +280,14 @@ class PauseScreen(QWidget):
         event.ignore()
 
 
+
+
+
+# Check in popup when break runs out, ready to bounce back or nah
+
 TREE_REMINDER = "Saying continue won't harm your tree!"
 
+# diff message each time, loops back around
 CHECK_IN_MESSAGES = [
     "Your {minutes} minute break is up. Are you feeling alright and ready to get back to work, or still feeling down?",
     "How you feeling now? It's alright if you're still stressed, don't worry! Take your time.",
@@ -355,6 +375,7 @@ class CheckInScreen(QWidget):
         self.activateWindow()
 
 
+    # buttons just tell the dashboard what u picked
     def bounceBack(self):
         self.hide()
         self.whenDone("bounceBack")
@@ -421,11 +442,11 @@ class BreakBadge(QWidget):
         topRow.setContentsMargins(0, 0, 0, 0)
         topRow.addWidget(QLabel("Break time!"))
         topRow.addStretch()
-        cancelButton = QPushButton("✕", objectName="CancelBreak", cursor=Qt.CursorShape.PointingHandCursor)
-        cancelButton.setFixedSize(20, 20)
-        cancelButton.setToolTip("End break early")
-        cancelButton.clicked.connect(self.cancelBreak)
-        topRow.addWidget(cancelButton)
+        self.cancelButton = QPushButton("✕", objectName="CancelBreak", cursor=Qt.CursorShape.PointingHandCursor)
+        self.cancelButton.setFixedSize(20, 20)
+        self.cancelButton.setToolTip("End break early")
+        self.cancelButton.clicked.connect(self.cancelBreak)
+        topRow.addWidget(self.cancelButton)
         cardLayout.addLayout(topRow)
         self.progressBar = QProgressBar()
         self.progressBar.setTextVisible(False)
@@ -441,6 +462,8 @@ class BreakBadge(QWidget):
         self.breakSeconds = 0
         self.topOffset = 0
         self.ticker = QTimer(self, interval=1000, timeout=self.updateBar)
+        self.isFaded = False
+        self.fadeTimer = QTimer(self, interval=50, timeout=self.checkCursor)
 
     def startBreak(self, breakSeconds):
         # Restyle every time so it matches the current light/dark theme
@@ -455,6 +478,22 @@ class BreakBadge(QWidget):
         animations.slideWindowIn(self, 40, 320)
         self.show()
         self.ticker.start()
+        self.fadeTimer.start()
+
+    def checkCursor(self):
+        cursor = QCursor.pos()
+        nearBadge = self.frameGeometry().adjusted(-40, -40, 40, 40).contains(cursor)
+        buttonTopLeft = self.cancelButton.mapToGlobal(self.cancelButton.rect().topLeft())
+        buttonArea = self.cancelButton.rect().translated(buttonTopLeft).adjusted(-6, -6, 6, 6)
+        shouldFade = nearBadge and not buttonArea.contains(cursor)
+        if shouldFade:
+            self.setWindowOpacity(max(self.windowOpacity() - 0.2, 0.0))
+        else:
+            self.setWindowOpacity(min(self.windowOpacity() + 0.2, 1.0))
+        if shouldFade != self.isFaded:
+            self.isFaded = shouldFade
+            self.setWindowFlag(Qt.WindowType.WindowTransparentForInput, shouldFade)
+            self.show()
 
     def updateBar(self):
         # Milliseconds so the bar drains smoothly instead of jumping a second early
@@ -465,6 +504,7 @@ class BreakBadge(QWidget):
 
     def stopBreak(self):
         self.ticker.stop()
+        self.fadeTimer.stop()
         self.hide()
 
     def cancelBreak(self):

@@ -5,9 +5,15 @@ import os
 from focusguard.core.unproductive_sites import PRODUCTIVE_SITES, UNPRODUCTIVE_SITES
 from focusguard.storage.memory import dataDirectory
 
+# every site the AI sorted, {"site.com": "productive"}, only ask once per site
 FILE = dataDirectory() / "sites.json"
 rememberedSites = None
 
+
+
+
+
+# matches subdomains too so m.youtube.com = youtube.com
 
 def siteIsInList(site: str, siteList) -> bool:
     siteParts = site.split(".")
@@ -16,6 +22,11 @@ def siteIsInList(site: str, siteList) -> bool:
             return True
     return False
 
+
+
+
+
+# remembered sites, load once then keep in memory
 
 def loadSiteMemory() -> dict:
     global rememberedSites
@@ -39,6 +50,11 @@ def saveSiteCategory(site: str, category: str) -> None:
     tempFile.write_text(json.dumps(allSites, indent=2))
     os.replace(tempFile, FILE)
 
+
+
+
+
+# built in lists beat whatever the AI said
 
 def siteCategory(site: str | None) -> str | None:
     if not site:

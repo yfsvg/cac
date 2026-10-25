@@ -11,6 +11,7 @@ from focusguard.ai.site_memory import saveSiteCategory
 from focusguard.storage import memory
 from focusguard.storage.memory import dataDirectory
 
+# cheapest gemini model, 40 checks a day max so no surprise bill
 MODEL = "gemini-flash-lite-latest"
 AI_CHECKS_PER_DAY = 40
 SCREENSHOT_SIZE = 1024
@@ -24,8 +25,14 @@ QUESTION = (
     "Answer with exactly one word: productive, unproductive, or unsure."
 )
 
+# notifications for the dashboard to show, AI is on a background thread
 notices = []
 
+
+
+
+
+# api key gets its own file so clear memory doesnt nuke it
 
 def getApiKey() -> str:
     try:
@@ -38,6 +45,11 @@ def saveApiKey(apiKey: str) -> None:
     KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
     KEY_FILE.write_text(apiKey.strip())
 
+
+
+
+
+# daily AI check limit
 
 def aiChecksToday() -> int:
     aiChecks = memory.load().get("aiChecks", {})
@@ -52,6 +64,11 @@ def countAiCheck() -> None:
     memory.save(savedMemory)
 
 
+
+
+
+# shrink screenshot + jpg it so its cheap to send
+
 def shrinkScreenshot(screenshot: bytes) -> bytes:
     image = QImage.fromData(screenshot)
     if image.isNull():
@@ -65,6 +82,11 @@ def shrinkScreenshot(screenshot: bytes) -> bytes:
     imageBuffer.close()
     return bytes(imageBytes.data())
 
+
+
+
+
+# asks gemini, gives back productive / unproductive / unsure or None if it couldnt
 
 def askGemini(site: str, pageTitle: str, screenshot: bytes | None = None) -> str | None:
     apiKey = getApiKey()
@@ -94,6 +116,11 @@ def askGemini(site: str, pageTitle: str, screenshot: bytes | None = None) -> str
             return category
     return None
 
+
+
+
+
+# New site -- ask w/ just the title first, only screenshot if AI is unsure
 
 def classifySite(backend, window, site: str) -> None:
     category = askGemini(site, window.title)

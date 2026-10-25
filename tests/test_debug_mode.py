@@ -1,3 +1,5 @@
+# debug mode on from --debug or FOCUSGUARD_DEBUG
+
 import sys
 
 import pytest

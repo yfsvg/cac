@@ -1,3 +1,5 @@
+# parent pin, only the salted hash gets saved + old plain text ones get upgraded
+
 import json
 
 import pytest
@@ -10,6 +12,8 @@ def tempMemory(tmp_path, monkeypatch):
     monkeypatch.setattr(memory, "FILE", tmp_path / "memory.json")
 
 
+
+# saving + checking
 def test_pin_is_never_saved_in_plain_text():
     parent_pin.savePin("4821")
     savedText = memory.FILE.read_text()
@@ -34,6 +38,7 @@ def test_same_pin_gets_a_different_salt_each_time():
     assert firstHash["hash"] != secondHash["hash"]
 
 
+# upgrading old versions
 def test_old_plain_text_pin_is_upgraded():
     memory.save({"parentPin": "1234"})
     assert parent_pin.hasPin()

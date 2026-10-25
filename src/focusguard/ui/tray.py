@@ -12,6 +12,7 @@ class Tray(QSystemTrayIcon):
 
         super().__init__(QApplication.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon))
         self.dashboard = Dashboard()
+        # enforcer warnings show up as tray notifs
         self.dashboard.enforcer.notify = self.showMessage
         self.activated.connect(self.openDashboard)
         self.show()

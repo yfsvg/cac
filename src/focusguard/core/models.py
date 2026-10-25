@@ -33,6 +33,7 @@ class RunningApp:
     exe_path: str | None = None
 
 
+# what check_permissions gives back per permission
 class PermissionState(str, Enum):
     GRANTED = "granted"
     DENIED = "denied"

@@ -35,6 +35,11 @@ def siteRoot(url: str | None) -> str | None:
     return hostName
 
 
+
+
+
+# quick checks, sites + apps to skip
+
 def isUnproductiveSite(site: str | None) -> bool:
     return siteCategory(site) == "unproductive"
 
@@ -42,6 +47,11 @@ def isUnproductiveSite(site: str | None) -> bool:
 def isIgnoredApp(window) -> bool:
     return window.app_id.lower() in IGNORED_APPS
 
+
+
+
+
+# App sorting. every name an app could go by so the big list matches on mac + windows
 
 def possibleNames(window) -> list[str]:
     appId = window.app_id.lower()

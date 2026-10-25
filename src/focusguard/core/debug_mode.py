@@ -3,6 +3,9 @@ import os
 import sys
 
 
+# Debug mode -- --debug, FOCUSGUARD_DEBUG=1 or running from vs code debugger
+# shows testing buttons, skips admin prompt + keep alive
+
 def isDebugMode() -> bool:
     if "--debug" in sys.argv:
         return True

@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSlider,
+    QStyleFactory,
     QTimeEdit,
     QVBoxLayout,
     QWidget,
@@ -22,6 +23,8 @@ from focusguard.core.debug_mode import isDebugMode
 from focusguard.core.setting_changes import frozenSecondsLeft, markChanged
 from focusguard.storage import memory, parent_pin, time_tracking
 from focusguard.ui.theme import applyTheme, getColors
+
+# Settings page -- app config dropdowns, AI key, parental controls
 
 SETTINGS_STYLE = """
     QDialog#PinDialog { background-color: @surface; }
@@ -96,8 +99,10 @@ SETTINGS_STYLE = """
     }
     QPushButton#DayChip:checked { color: @onPrimary; background-color: @primary; }
     QPushButton#DayChip:disabled { color: @outline; }
+    QPushButton#DayChip:checked:disabled { color: @onPrimary; background-color: @primary; }
     QFrame#TimeChip { background-color: @surfaceContainerHighest; border-radius: 10px; }
     QTimeEdit { color: @onSurface; background-color: transparent; font-size: 14px; font-weight: 600; }
+    QTimeEdit:disabled { color: @onSurface; }
     QLabel#ChipOn {
         color: @onGreenContainer;
         background-color: @greenContainer;
@@ -133,6 +138,11 @@ def makeBackArrow():
     return QIcon(arrow)
 
 
+
+
+
+# seconds -> "2d 23h" etc
+
 def frozenText(secondsLeft):
     daysLeft = secondsLeft // 86400
     hoursLeft = (secondsLeft % 86400) // 3600
@@ -151,8 +161,25 @@ def waitText(secondsLeft):
 
 DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
+
+def scheduleText(schedule):
+    days = schedule["days"]
+    if len(days) == 7:
+        dayText = "Every day"
+    else:
+        dayNames = []
+        for dayNumber in days:
+            dayNames.append(DAY_NAMES[dayNumber])
+        dayText = ", ".join(dayNames)
+    return dayText + "  " + schedule["start"] + " to " + schedule["end"]
+
 SETTING_NAMES = ["Absolute Time Limits", "Schedule Time Limits", "AI Categorizations"]
 
+
+
+
+
+# Parental controls - which settings need the pin
 
 def getLockedSettings():
     return memory.load().get("lockedSettings", [])
@@ -174,6 +201,11 @@ def replaceBody(dropdown, newBody):
     dropdown.layout().addWidget(newBody)
 
 
+
+
+
+# PIN popup, for making a new pin or unlocking a locked setting
+
 class PinDialog(QDialog):
     def __init__(self, parent, mainStyle, creating):
         super().__init__(parent)
@@ -192,7 +224,7 @@ class PinDialog(QDialog):
 
         if creating:
             layout.addWidget(label("Set up parental controls", "Section"))
-            layout.addWidget(label("Create a PIN. You'll need it to change locked settings.", "Streak"))
+            layout.addWidget(label("Create a PIN. You'll need it to change locked settings.", "BodyText"))
         else:
             layout.addWidget(label("Enter the parent PIN", "Section"))
 
@@ -214,10 +246,13 @@ class PinDialog(QDialog):
 
         buttonRow = QHBoxLayout()
         buttonRow.addStretch()
+
         cancelButton = QPushButton("Cancel", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
         cancelButton.clicked.connect(self.reject)
+
         okButton = QPushButton("Save PIN" if creating else "Unlock", objectName="MainButton", cursor=Qt.CursorShape.PointingHandCursor)
         okButton.clicked.connect(self.checkPin)
+
         buttonRow.addWidget(cancelButton)
         buttonRow.addWidget(okButton)
         layout.addLayout(buttonRow)
@@ -252,12 +287,18 @@ def askForPin(parent, mainStyle):
     return PinDialog(parent, mainStyle, False).exec() == QDialog.DialogCode.Accepted
 
 
+
+
+
+# settings page, swaps in where the dashboard normally is
+
 class SettingsPage(QWidget):
-    def __init__(self, mainStyle, goBack, onMemoryCleared=None, onForceQuit=None):
+    def __init__(self, mainStyle, goBack, onMemoryCleared=None, onForceQuit=None, onMetersChanged=None):
         super().__init__()
-        from focusguard.ui.dashboard import Dropdown, label
+        from focusguard.ui.dashboard import Dropdown, FrostedLabel, label, sectionLabel
 
         self.mainStyle = mainStyle
+        self.onMetersChanged = onMetersChanged
         self.onMemoryCleared = onMemoryCleared
         self.onForceQuit = onForceQuit
         self.pendingRows = {}
@@ -267,6 +308,8 @@ class SettingsPage(QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         content = QWidget(objectName="Content")
         scroll.setWidget(content)
+        # glass boxes show the mountain behind them, so repaint on scroll
+        scroll.verticalScrollBar().valueChanged.connect(content.update)
 
         mainLayout = QVBoxLayout(self)
         mainLayout.setContentsMargins(0, 0, 0, 0)
@@ -276,6 +319,8 @@ class SettingsPage(QWidget):
         layout.setContentsMargins(20, 10, 20, 20)
         layout.setSpacing(12)
 
+
+
         topRow = QHBoxLayout()
         backButton = QPushButton(objectName="ThemeButton", cursor=Qt.CursorShape.PointingHandCursor)
         backButton.setFixedSize(32, 32)
@@ -284,19 +329,24 @@ class SettingsPage(QWidget):
         backButton.clicked.connect(goBack)
         topRow.setSpacing(10)
         topRow.addWidget(backButton, alignment=Qt.AlignmentFlag.AlignVCenter)
-        settingsTitle = label("Settings", "AppName")
-        settingsTitle.setWordWrap(False)
+
+        settingsTitle = FrostedLabel("Settings", "AppName")
         topRow.addWidget(settingsTitle, alignment=Qt.AlignmentFlag.AlignVCenter)
         topRow.addStretch()
         layout.addLayout(topRow)
         layout.addSpacing(4)
 
-        layout.addWidget(label("App Config", "Section"))
-        layout.addWidget(label("Changes start 1 hour after you save them, so they're never made on impulse.", "Streak"))
+
+
+        layout.addWidget(sectionLabel("App Config"), alignment=Qt.AlignmentFlag.AlignLeft)
+        configNote, configNoteLayout = self.makePanel()
+        configNoteLayout.addWidget(label("Changes start 1 hour after you save them, so they're never made on impulse.", "BodyText"))
+        layout.addWidget(configNote)
         for settingName in SETTING_NAMES:
             dropdown = Dropdown(settingName)
             dropdown.header.clicked.disconnect()
             dropdown.header.clicked.connect(lambda checked=False, d=dropdown: self.openSetting(d))
+
             if settingName == "Absolute Time Limits":
                 replaceBody(dropdown, self.makeBreakLimits())
             if settingName == "Schedule Time Limits":
@@ -306,52 +356,113 @@ class SettingsPage(QWidget):
             layout.addWidget(dropdown)
         layout.addSpacing(8)
 
-        layout.addWidget(label("Parental Controls", "Section"))
-        self.parentText = label("", "Streak")
-        layout.addWidget(self.parentText)
+
+
+        layout.addWidget(sectionLabel("Parental Controls"), alignment=Qt.AlignmentFlag.AlignLeft)
+        parentPanel, parentLayout = self.makePanel()
+        self.parentText = label("", "BodyText")
+        parentLayout.addWidget(self.parentText)
 
         self.lockBoxes = {}
         for settingName in SETTING_NAMES:
             lockBox = QCheckBox("Lock " + settingName)
             lockBox.clicked.connect(self.saveLocks)
             self.lockBoxes[settingName] = lockBox
-            layout.addWidget(lockBox)
+            parentLayout.addWidget(lockBox)
 
         parentRow = QHBoxLayout()
         self.setupButton = QPushButton("Set up parental controls", objectName="MainButton", cursor=Qt.CursorShape.PointingHandCursor)
         self.setupButton.clicked.connect(self.setUpParentalControls)
+
         self.changePinButton = QPushButton("Change PIN", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
         self.changePinButton.clicked.connect(self.changePin)
+
         self.turnOffButton = QPushButton("Turn off", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
         self.turnOffButton.clicked.connect(self.turnOffParentalControls)
+
         parentRow.addWidget(self.setupButton)
         parentRow.addWidget(self.changePinButton)
         parentRow.addWidget(self.turnOffButton)
         parentRow.addStretch()
-        layout.addLayout(parentRow)
+        parentLayout.addLayout(parentRow)
+        layout.addWidget(parentPanel)
         layout.addSpacing(8)
+
+
 
         # Debug tools for testing, these skip parental controls so take them out before release
         if isDebugMode():
-            layout.addWidget(label("Debug", "Section"))
-            layout.addWidget(label("Testing tools. These skip parental controls.", "Streak"))
+            layout.addWidget(sectionLabel("Debug"), alignment=Qt.AlignmentFlag.AlignLeft)
+            debugPanel, debugLayout = self.makePanel()
+            debugLayout.addWidget(label("Testing tools. These skip parental controls.", "BodyText"))
+
             debugRow = QHBoxLayout()
             forceQuitButton = QPushButton("Force quit", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
             forceQuitButton.clicked.connect(self.forceQuit)
+
             resetTimersButton = QPushButton("Reset lock timers", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
             resetTimersButton.clicked.connect(self.resetLockTimers)
+
             clearMemoryButton = QPushButton("Clear all memory", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
             clearMemoryButton.clicked.connect(self.clearAllMemory)
+
             debugRow.addWidget(forceQuitButton)
             debugRow.addWidget(resetTimersButton)
             debugRow.addWidget(clearMemoryButton)
             debugRow.addStretch()
-            layout.addLayout(debugRow)
+            debugLayout.addLayout(debugRow)
+
+            blockingSwitch = QCheckBox("Blocking on", objectName="Switch", cursor=Qt.CursorShape.PointingHandCursor)
+            blockingSwitch.setChecked(enforcement.blockingOn)
+            blockingSwitch.toggled.connect(self.toggleBlocking)
+            debugLayout.addWidget(blockingSwitch)
+
+            # write ur climb meters directly, for testing the everest stages
+            metersRow = QHBoxLayout()
+            self.metersBox = QLineEdit()
+            self.metersBox.setPlaceholderText("Meters (0 - " + format(memory.SUMMIT_METERS, ",") + "), now " + format(memory.climbMeters(), ","))
+            self.metersBox.returnPressed.connect(self.setMeters)
+
+            setMetersButton = QPushButton("Set meters", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
+            setMetersButton.clicked.connect(self.setMeters)
+
+            metersRow.addWidget(self.metersBox)
+            metersRow.addWidget(setMetersButton)
+            debugLayout.addLayout(metersRow)
+            layout.addWidget(debugPanel)
+
         layout.addStretch()
 
+
+
         self.updateParentSection()
+
         self.countdownTimer = QTimer(self, interval=1000, timeout=self.updateCountdowns)
         self.countdownTimer.start()
+
+    def makePanel(self):
+        # glass box for loose text + controls so they dont sit right on the mountain
+        from focusguard.ui.dashboard import FrostedFrame
+
+        panel = FrostedFrame("Panel", 20)
+        panelLayout = QVBoxLayout(panel)
+        panelLayout.setContentsMargins(16, 14, 16, 14)
+        panelLayout.setSpacing(10)
+        return panel, panelLayout
+
+    def toggleBlocking(self, isOn):
+        enforcement.blockingOn = isOn
+
+    def setMeters(self):
+        try:
+            newMeters = int(self.metersBox.text().replace(",", "").strip())
+        except ValueError:
+            return
+        newMeters = memory.setClimbMeters(newMeters)
+        self.metersBox.clear()
+        self.metersBox.setPlaceholderText("Meters (0 - " + format(memory.SUMMIT_METERS, ",") + "), now " + format(newMeters, ","))
+        if self.onMetersChanged is not None:
+            self.onMetersChanged()
 
     def updateParentSection(self):
         isSetUp = parent_pin.hasPin()
@@ -394,6 +505,8 @@ class SettingsPage(QWidget):
         saveLockedSettings(lockedSettings)
         self.updateParentSection()
 
+
+    # pending changes, countdown till it kicks in + cancel button
     def canEdit(self, settingName):
         return frozenSecondsLeft(settingName) == 0 and not setting_changes.isPending(settingName)
 
@@ -505,6 +618,8 @@ class SettingsPage(QWidget):
         if self.onForceQuit is not None:
             self.onForceQuit()
 
+
+    # shared helpers for building each section
     def makeTab(self):
         tab = QWidget()
         tabLayout = QVBoxLayout(tab)
@@ -518,11 +633,19 @@ class SettingsPage(QWidget):
         saveRow.addWidget(saveButton)
         return saveRow
 
+
+    # schedule tab, study days + start/end
     def makeSchedule(self):
         from focusguard.ui.dashboard import label
 
         tab, tabLayout = self.makeTab()
-        tabLayout.addWidget(label("Study days and hours.", "SliderHint"))
+        tabLayout.addWidget(label("Study days and hours. You can add more than one.", "SliderHint"))
+        self.scheduleListBox = QWidget()
+        self.scheduleListLayout = QVBoxLayout(self.scheduleListBox)
+        self.scheduleListLayout.setContentsMargins(0, 0, 0, 0)
+        self.scheduleListLayout.setSpacing(6)
+        tabLayout.addWidget(self.scheduleListBox)
+
         dayRow = QHBoxLayout()
         self.dayBoxes = []
         for dayNumber in range(7):
@@ -530,47 +653,121 @@ class SettingsPage(QWidget):
             dayBox.setCheckable(True)
             self.dayBoxes.append(dayBox)
             dayRow.addWidget(dayBox)
+
         tabLayout.addLayout(dayRow)
+
         timeRow = QHBoxLayout()
+        self.timeBoxStyle = QStyleFactory.create("Fusion")
+        self.timeBoxStyle.setParent(self)
         self.startTimeBox = QTimeEdit()
         self.startTimeBox.setDisplayFormat("HH:mm")
         self.startTimeBox.setButtonSymbols(QTimeEdit.ButtonSymbols.NoButtons)
         self.startTimeBox.setFrame(False)
+        self.startTimeBox.setAttribute(Qt.WidgetAttribute.WA_MacShowFocusRect, False)
+        self.startTimeBox.setStyle(self.timeBoxStyle)
         self.startTimeBox.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.startTimeBox.setFixedSize(64, 32)
+
         self.endTimeBox = QTimeEdit()
         self.endTimeBox.setDisplayFormat("HH:mm")
         self.endTimeBox.setButtonSymbols(QTimeEdit.ButtonSymbols.NoButtons)
         self.endTimeBox.setFrame(False)
+        self.endTimeBox.setAttribute(Qt.WidgetAttribute.WA_MacShowFocusRect, False)
+        self.endTimeBox.setStyle(self.timeBoxStyle)
         self.endTimeBox.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.endTimeBox.setFixedSize(64, 32)
+
         timeRow.setSpacing(10)
         timeRow.addWidget(label("From", "SliderLabel"), alignment=Qt.AlignmentFlag.AlignVCenter)
         timeRow.addWidget(self.makeTimeChip(self.startTimeBox))
         timeRow.addWidget(label("to", "SliderLabel"), alignment=Qt.AlignmentFlag.AlignVCenter)
         timeRow.addWidget(self.makeTimeChip(self.endTimeBox))
         timeRow.addStretch()
+        self.addScheduleButton = QPushButton("Add", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
+        self.addScheduleButton.clicked.connect(self.addSchedule)
+        timeRow.addWidget(self.addScheduleButton)
         tabLayout.addLayout(timeRow)
+
         self.scheduleHint = label("", "SliderHint")
         tabLayout.addWidget(self.scheduleHint)
         self.scheduleError = QLabel("", objectName="ErrorText")
         self.scheduleError.hide()
         tabLayout.addWidget(self.scheduleError)
+
         tabLayout.addWidget(self.makePendingRow("Schedule Time Limits"))
         self.saveScheduleButton = QPushButton("Save", objectName="MainButton", cursor=Qt.CursorShape.PointingHandCursor)
         self.saveScheduleButton.clicked.connect(self.saveSchedule)
         tabLayout.addLayout(self.makeSaveRow(self.saveScheduleButton))
+
         self.showScheduleValues()
         return tab
 
     def showScheduleValues(self):
-        schedule = setting_changes.upcomingValue("Schedule Time Limits", "studySchedule", memory.load().get("studySchedule", {}))
-        for dayNumber in range(7):
-            self.dayBoxes[dayNumber].setChecked(dayNumber in schedule.get("days", []))
-        self.startTimeBox.setTime(QTime.fromString(schedule.get("start", "16:00"), "HH:mm"))
-        self.endTimeBox.setTime(QTime.fromString(schedule.get("end", "18:00"), "HH:mm"))
+        savedMemory = memory.load()
+        schedules = savedMemory.get("studySchedules")
+        if schedules is None and savedMemory.get("studySchedule", {}).get("days"):
+            schedules = [savedMemory["studySchedule"]]
+        if schedules is None:
+            schedules = []
+        self.schedules = list(setting_changes.upcomingValue("Schedule Time Limits", "studySchedules", schedules))
+        for dayBox in self.dayBoxes:
+            dayBox.setChecked(False)
+        self.startTimeBox.setTime(QTime(16, 0))
+        self.endTimeBox.setTime(QTime(18, 0))
         self.scheduleError.hide()
+        self.showScheduleList()
         self.updateSchedule()
+
+    def showScheduleList(self):
+        from focusguard.ui.dashboard import label
+
+        while self.scheduleListLayout.count() > 0:
+            oldRow = self.scheduleListLayout.takeAt(0).widget()
+            oldRow.hide()
+            oldRow.deleteLater()
+        self.removeButtons = []
+        if len(self.schedules) == 0:
+            self.scheduleListLayout.addWidget(label("No study times yet.", "SliderLabel"))
+        for index in range(len(self.schedules)):
+            schedule = self.schedules[index]
+            row = QFrame(objectName="TimeChip")
+            rowLayout = QHBoxLayout(row)
+            rowLayout.setContentsMargins(12, 6, 6, 6)
+            rowText = label(scheduleText(schedule), "SliderLabel")
+            rowText.setWordWrap(False)
+            rowLayout.addWidget(rowText)
+            rowLayout.addStretch()
+            removeButton = QPushButton("Remove", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
+            removeButton.setEnabled(self.canEdit("Schedule Time Limits"))
+            self.removeButtons.append(removeButton)
+            removeButton.clicked.connect(lambda checked=False, i=index: self.removeSchedule(i))
+            rowLayout.addWidget(removeButton)
+            self.scheduleListLayout.addWidget(row)
+
+    def addSchedule(self):
+        startText = self.startTimeBox.time().toString("HH:mm")
+        endText = self.endTimeBox.time().toString("HH:mm")
+        chosenDays = []
+        for dayNumber in range(7):
+            if self.dayBoxes[dayNumber].isChecked():
+                chosenDays.append(dayNumber)
+        if len(chosenDays) == 0:
+            self.scheduleError.setText("Pick at least one day.")
+            self.scheduleError.show()
+            return
+        if startText >= endText:
+            self.scheduleError.setText("The end time has to be after the start time.")
+            self.scheduleError.show()
+            return
+        self.scheduleError.hide()
+        self.schedules.append({"days": chosenDays, "start": startText, "end": endText})
+        for dayBox in self.dayBoxes:
+            dayBox.setChecked(False)
+        self.showScheduleList()
+
+    def removeSchedule(self, index):
+        self.schedules.pop(index)
+        self.showScheduleList()
 
     def makeTimeChip(self, timeBox):
         timeChip = QFrame(objectName="TimeChip")
@@ -586,6 +783,7 @@ class SettingsPage(QWidget):
             dayBox.setEnabled(canEdit)
         self.startTimeBox.setEnabled(canEdit)
         self.endTimeBox.setEnabled(canEdit)
+        self.addScheduleButton.setEnabled(canEdit)
         self.saveScheduleButton.setEnabled(canEdit)
         hintText = ""
         if secondsLeft > 0:
@@ -593,23 +791,16 @@ class SettingsPage(QWidget):
         self.scheduleHint.setText(hintText)
         self.scheduleHint.setVisible(hintText != "")
         self.updatePendingRow("Schedule Time Limits")
+        for removeButton in self.removeButtons:
+            removeButton.setEnabled(canEdit)
 
     def saveSchedule(self):
-        startText = self.startTimeBox.time().toString("HH:mm")
-        endText = self.endTimeBox.time().toString("HH:mm")
-        if startText >= endText:
-            self.scheduleError.setText("The end time has to be after the start time.")
-            self.scheduleError.show()
-            return
         self.scheduleError.hide()
-        chosenDays = []
-        for dayNumber in range(7):
-            if self.dayBoxes[dayNumber].isChecked():
-                chosenDays.append(dayNumber)
-        newSchedule = {"days": chosenDays, "start": startText, "end": endText}
-        setting_changes.queueChange("Schedule Time Limits", {"studySchedule": newSchedule})
+        setting_changes.queueChange("Schedule Time Limits", {"studySchedules": self.schedules})
         self.updateSchedule()
 
+
+    # AI tab, gemini key + all the sites its sorted so far
     def makeAiTab(self):
         from focusguard.ui.dashboard import label
 
@@ -619,12 +810,14 @@ class SettingsPage(QWidget):
             "after you've been on them for 1 minute. Each answer is remembered, so a site is only checked once."
         )
         tabLayout.addWidget(label(explanation, "SliderHint"))
+
         keyStatusRow = QHBoxLayout()
         self.keyText = label("", "ChipOn")
         self.keyText.setWordWrap(False)
         keyStatusRow.addWidget(self.keyText)
         keyStatusRow.addStretch()
         tabLayout.addLayout(keyStatusRow)
+
         keyRow = QHBoxLayout()
         self.keyBox = QLineEdit()
         self.keyBox.setEchoMode(QLineEdit.EchoMode.Password)
@@ -634,11 +827,13 @@ class SettingsPage(QWidget):
         keyRow.addWidget(self.keyBox)
         keyRow.addWidget(self.saveKeyButton)
         tabLayout.addLayout(keyRow)
+
         self.aiCountLabel = label("", "SliderHint")
         tabLayout.addWidget(self.aiCountLabel)
         self.aiSitesLabel = label("", "SitesList")
         self.aiSitesLabel.setTextFormat(Qt.TextFormat.RichText)
         tabLayout.addWidget(self.aiSitesLabel)
+
         self.updateKeySection()
         return tab
 
@@ -665,6 +860,7 @@ class SettingsPage(QWidget):
         secondsLeft = frozenSecondsLeft("Gemini API key")
         self.keyBox.setEnabled(secondsLeft == 0)
         self.saveKeyButton.setEnabled(secondsLeft == 0)
+
         if vision.getApiKey() == "":
             keyStatus = "No key saved"
             self.keyText.setObjectName("ChipOff")
@@ -673,6 +869,7 @@ class SettingsPage(QWidget):
             self.keyText.setObjectName("ChipOn")
         if secondsLeft > 0:
             keyStatus = keyStatus + ", " + frozenText(secondsLeft)
+
         self.keyText.setText(keyStatus)
         self.keyText.style().unpolish(self.keyText)
         self.keyText.style().polish(self.keyText)
@@ -704,19 +901,23 @@ class SettingsPage(QWidget):
         clearAnswer = QMessageBox.question(
             self,
             "Clear all memory",
-            "This deletes all saved settings, the parent PIN, streaks, break counts, tracked times and website verdicts. "
+            "This deletes all saved settings, the parent PIN, your climb progress, break counts, tracked times and website verdicts. "
             "The Gemini API key is kept. This can't be undone.",
         )
         if clearAnswer != QMessageBox.StandardButton.Yes:
             return
+
         memory.FILE.unlink(missing_ok=True)
         time_tracking.FILE.unlink(missing_ok=True)
         site_memory.FILE.unlink(missing_ok=True)
         site_memory.rememberedSites = None
+
         if self.onMemoryCleared is not None:
             self.onMemoryCleared()
         self.refreshEverything()
 
+
+    # parental control buttons, needs pin after setup
     def setUpParentalControls(self):
         PinDialog(self, self.mainStyle, True).exec()
         self.updateParentSection()

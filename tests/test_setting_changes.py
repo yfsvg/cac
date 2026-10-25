@@ -1,3 +1,6 @@
+# settings changes wait an hour then freeze for 3 days
+# temp memory file + fake clock for every test
+
 import pytest
 
 from focusguard.core import setting_changes
@@ -24,6 +27,8 @@ def clock(monkeypatch):
     return fakeClock
 
 
+
+# waiting freezing cancelling
 def test_change_waits_an_hour(clock):
     setting_changes.queueChange("Absolute Time Limits", {"maxBreaks": 5})
     assert "maxBreaks" not in memory.load()

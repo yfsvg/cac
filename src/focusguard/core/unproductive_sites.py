@@ -1,3 +1,6 @@
+# always unproductive, checked before we bother the AI
+# streaming, social, games, sports
+
 UNPRODUCTIVE_SITES = frozenset({
     "youtube.com", "youtu.be", "youtube-nocookie.com",
     "netflix.com", "hulu.com", "disneyplus.com", "max.com", "hbomax.com",
@@ -32,6 +35,9 @@ UNPRODUCTIVE_SITES = frozenset({
     "sports.yahoo.com", "theathletic.com", "barstoolsports.com", "si.com", "247sports.com",
     "on3.com", "ufc.com", "wwe.com", "f1.com", "formula1.com", "nascar.com",
 })
+
+
+# always productive, school stuff docs coding research
 
 PRODUCTIVE_SITES = frozenset({
     "docs.google.com", "drive.google.com", "classroom.google.com", "sheets.google.com", "slides.google.com",

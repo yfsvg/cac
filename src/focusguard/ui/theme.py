@@ -41,9 +41,15 @@ COLORS = {
     "outlineVariant": "#CAC4D0",
     "scrim": "rgba(29, 27, 32, 140)",
     "chipBackground": "rgba(255, 255, 255, 170)",
+    # frosted glass boxes over the mountain, #AARRGGBB
+    "frostTint": "#B8FFFFFF",
+    "frostBorder": "#D9FFFFFF",
+    "frostHover": "#33FFFFFF",
     "primaryHover": "#7965AF",
 }
 
+
+# dark mode, same names
 DARK = {
     "primary": "#D0BCFF",
     "onPrimary": "#381E72",
@@ -80,11 +86,19 @@ DARK = {
     "outlineVariant": "#4F4B55",
     "scrim": "rgba(0, 0, 0, 160)",
     "chipBackground": "rgba(0, 0, 0, 90)",
+    "frostTint": "#A61C1C20",
+    "frostBorder": "#33FFFFFF",
+    "frostHover": "#1AFFFFFF",
     "primaryHover": "#E0D2FF",
 }
 
 currentTheme = "light"
 
+
+
+
+
+# current theme stuff, light/dark/system
 
 def setTheme(themeName):
     global currentTheme
@@ -120,6 +134,55 @@ def choiceFor(themeName, systemThemeName):
 
 
 
+
+
+
+
+# climb colour, green at the bottom -> blue halfway -> purple at the peak
+# overwrites primary in both themes so buttons/sliders/numbers all follow how high u are
+
+CLIMB_COLORS = ["#2E9E5B", "#2F6FD6", "#7A4BD6"]
+
+
+def mixColor(firstColor, secondColor, amount):
+    mixedColor = "#"
+    for index in (1, 3, 5):
+        firstValue = int(firstColor[index:index + 2], 16)
+        secondValue = int(secondColor[index:index + 2], 16)
+        mixedColor = mixedColor + format(round(firstValue + (secondValue - firstValue) * amount), "02X")
+    return mixedColor
+
+
+def climbAccent(climbFraction):
+    if climbFraction < 0:
+        climbFraction = 0
+    if climbFraction > 1:
+        climbFraction = 1
+
+    # first half is green -> blue, second half is blue -> purple
+    if climbFraction <= 0.5:
+        return mixColor(CLIMB_COLORS[0], CLIMB_COLORS[1], climbFraction * 2)
+    return mixColor(CLIMB_COLORS[1], CLIMB_COLORS[2], (climbFraction - 0.5) * 2)
+
+
+def setClimbAccent(climbFraction):
+    accentColor = climbAccent(climbFraction)
+
+    # light mode
+    COLORS["primary"] = accentColor
+    COLORS["primaryHover"] = mixColor(accentColor, "#FFFFFF", 0.2)
+    COLORS["onPrimary"] = "#FFFFFF"
+
+    # dark mode needs a lighter version or blue/purple text vanishes on the dark glass
+    lightAccent = mixColor(accentColor, "#FFFFFF", 0.5)
+    DARK["primary"] = lightAccent
+    DARK["primaryHover"] = mixColor(accentColor, "#FFFFFF", 0.65)
+    DARK["onPrimary"] = "#16141C"
+
+
+
+
+# swaps @colourName for the real colour
 
 def applyTheme(styleText):
     # parse longest names first

@@ -77,6 +77,11 @@ def countUp(label, endText, duration=600):
     except ValueError:
         label.setText(endText)
         return
+    # stop any count up already going on this label, otherwise the older one can finish last + leave the wrong number
+    oldAnimation = getattr(label, "countAnimation", None)
+    if oldAnimation is not None:
+        oldAnimation.stop()
+        forget(oldAnimation)
     decimals = 0
     if "." in endText:
         decimals = len(endText.split(".")[1])
@@ -87,6 +92,7 @@ def countUp(label, endText, duration=600):
     animation.setEasingCurve(QEasingCurve.Type.OutCubic)
     animation.valueChanged.connect(lambda value: label.setText(numberText(value, decimals)))
     animation.finished.connect(lambda: label.setText(endText))
+    label.countAnimation = animation
     keepAlive(animation)
 
 

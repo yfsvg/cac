@@ -18,6 +18,11 @@ def hashPin(pin: str, salt: bytes, n: int, r: int, p: int) -> str:
     return pinHash.hex()
 
 
+
+
+
+# Saving / removing pin
+
 def savePin(newPin: str) -> None:
     salt = os.urandom(16)
     savedMemory = memory.load()
@@ -39,6 +44,7 @@ def removePin() -> None:
     memory.save(savedMemory)
 
 
+# old versions saved pin as plain text, this hashes it first time its seen
 def upgradeOldPin() -> None:
     oldPin = memory.load().get("parentPin")
     if oldPin is None:
@@ -48,6 +54,11 @@ def upgradeOldPin() -> None:
     else:
         savePin(str(oldPin))
 
+
+
+
+
+# checking pin
 
 def hasPin() -> bool:
     upgradeOldPin()
@@ -64,4 +75,5 @@ def pinMatches(typedPin: str) -> bool:
         typedHash = hashPin(typedPin, salt, int(savedHash["n"]), int(savedHash["r"]), int(savedHash["p"]))
     except (KeyError, TypeError, ValueError):
         return False
+    # compare_digest = same time match or not, so no timing guessing
     return hmac.compare_digest(typedHash, str(savedHash["hash"]))
