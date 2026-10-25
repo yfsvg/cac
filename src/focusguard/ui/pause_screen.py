@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from focusguard.platform import get_backend
+from focusguard.ui import animations
 from focusguard.ui.theme import applyTheme
 
 # Pause screen, pops up on unproductive stuff + makes u wait before opening
@@ -201,7 +202,9 @@ class PauseScreen(QWidget):
             self.shakeTimer.stop()
 
     def popUp(self):
+        animations.fadeWindowIn(self)
         self.show()
+        animations.slideWidgetIn(self.box)
         try:
             get_backend().float_above_everything(int(self.winId()))
         except Exception:
@@ -235,18 +238,26 @@ class PauseScreen(QWidget):
         self.progressBar.show()
         self.box.adjustSize()
         self.placeBox()
-        self.timer.start(1000)
-        self.fillStep = 0
-        self.fillTimer.start(100)
+        self.countdownStart = time.time()
+        self.timer.start(100)
+        self.fillTimer.start(30)
 
     def fillOpenButton(self):
-        self.fillStep = self.fillStep + 1
-        self.progressBar.setValue(self.fillStep)
-        if self.fillStep >= COUNTDOWN * 10:
+        secondsPassed = time.time() - self.countdownStart
+        fillStep = min(int(secondsPassed * 10), COUNTDOWN * 10)
+        self.progressBar.setValue(fillStep)
+        if fillStep >= COUNTDOWN * 10:
             self.fillTimer.stop()
 
     def countDown(self):
-        self.secondsLeft = self.secondsLeft - 1
+        secondsPassed = time.time() - self.countdownStart
+        secondsLeft = max(COUNTDOWN - int(secondsPassed), 0)
+        if secondsLeft == self.secondsLeft:
+            return
+        self.secondsLeft = secondsLeft
+        if self.secondsLeft <= 0:
+            self.progressBar.setValue(COUNTDOWN * 10)
+            self.fillTimer.stop()
         self.title.setText("Take a breath... " + str(self.secondsLeft) + " seconds")
         if self.secondsLeft <= 0:
             self.timer.stop()
@@ -353,7 +364,9 @@ class CheckInScreen(QWidget):
 
 
     def popUp(self):
+        animations.fadeWindowIn(self)
         self.show()
+        animations.slideWidgetIn(self.box)
         try:
             get_backend().float_above_everything(int(self.winId()))
         except Exception:
@@ -460,6 +473,7 @@ class BreakBadge(QWidget):
         self.adjustSize()
         screen = QApplication.primaryScreen().availableGeometry()
         self.move(screen.right() - self.width() - BADGE_MARGIN, screen.top() + BADGE_MARGIN + self.topOffset)
+        animations.slideWindowIn(self, 40, 320)
         self.show()
         self.ticker.start()
 

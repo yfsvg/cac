@@ -369,11 +369,18 @@ class SettingsPage(QWidget):
             debugRow.addWidget(clearMemoryButton)
             debugRow.addStretch()
             layout.addLayout(debugRow)
+            blockingSwitch = QCheckBox("Blocking on", objectName="Switch", cursor=Qt.CursorShape.PointingHandCursor)
+            blockingSwitch.setChecked(enforcement.blockingOn)
+            blockingSwitch.toggled.connect(self.toggleBlocking)
+            layout.addWidget(blockingSwitch)
         layout.addStretch()
 
         self.updateParentSection()
         self.countdownTimer = QTimer(self, interval=1000, timeout=self.updateCountdowns)
         self.countdownTimer.start()
+
+    def toggleBlocking(self, isOn):
+        enforcement.blockingOn = isOn
 
     def updateParentSection(self):
         isSetUp = parent_pin.hasPin()

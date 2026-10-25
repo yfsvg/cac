@@ -37,6 +37,7 @@ from focusguard.core.classifier import classifyTypeOfApp, isIgnoredApp, isUnprod
 from focusguard.core import enforcement, keep_alive, setting_changes
 from focusguard.core.enforcement import Enforcer
 from focusguard.storage import memory, time_tracking
+from focusguard.ui import animations
 from focusguard.ui.settings_window import SettingsPage
 from focusguard.ui.pause_screen import BreakBadge, CheckInScreen, PauseScreen
 from focusguard.ui.theme import applyTheme, choiceFor, getColors, getTheme, resolveTheme, setTheme, systemTheme
@@ -153,6 +154,8 @@ class StatCard(QFrame):
         cardLayout.setContentsMargins(8, 14, 8, 14)
         cardLayout.setSpacing(0)
         self.numberLabel = label(number, "BigNumber", centerAlign)
+        # the number its counting up to, can be different from whats on screen mid animation
+        self.numberTarget = number
         cardLayout.addWidget(self.numberLabel)
         cardLayout.addWidget(label(caption, "Caption", centerAlign))
         cardLayout.addStretch()
@@ -167,7 +170,11 @@ class StatCard(QFrame):
         self.statusChip.setStyleSheet(applyTheme(self.chipStyle))
 
     def setValues(self, number: str, status: str, statusColor: str) -> None:
-        self.numberLabel.setText(number)
+        self.numberTarget = number
+        if number != self.numberLabel.text() and self.isVisible():
+            animations.countUp(self.numberLabel, number)
+        else:
+            self.numberLabel.setText(number)
         self.statusChip.setText(status)
         self.chipStyle = f"color: {statusColor};"
         self.statusChip.setStyleSheet(applyTheme(self.chipStyle))
@@ -259,11 +266,24 @@ class SplitBar(QWidget):
         super().__init__()
         self.setFixedHeight(14)
         self.productiveSeconds = 0
+        self.shownFraction = 0.0
         self.unproductiveSeconds = 0
 
     def setTimes(self, productiveSeconds: int, unproductiveSeconds: int) -> None:
+        oldFraction = self.shownFraction
         self.productiveSeconds = productiveSeconds
         self.unproductiveSeconds = unproductiveSeconds
+        totalSeconds = productiveSeconds + unproductiveSeconds
+        newFraction = 0.0
+        if totalSeconds > 0:
+            newFraction = productiveSeconds / totalSeconds
+        if abs(newFraction - oldFraction) > 0.01 and self.isVisible():
+            animations.animateValue(oldFraction, newFraction, self.setFraction, 450)
+        else:
+            self.setFraction(newFraction)
+
+    def setFraction(self, fraction) -> None:
+        self.shownFraction = fraction
         self.update()
 
     def paintEvent(self, event: QPaintEvent) -> None:
@@ -277,7 +297,7 @@ class SplitBar(QWidget):
         totalSeconds = self.productiveSeconds + self.unproductiveSeconds
         if totalSeconds == 0:
             return
-        productiveWidth = int(self.width() * self.productiveSeconds / totalSeconds)
+        productiveWidth = int(self.width() * self.shownFraction)
         painter.fillRect(0, 0, productiveWidth, self.height(), QColor(colors["green"]))
         painter.fillRect(productiveWidth, 0, self.width() - productiveWidth, self.height(), QColor(colors["error"]))
         if 0 < productiveWidth < self.width():
@@ -405,8 +425,11 @@ class Dropdown(QWidget):
         self.updateHeader()
 
     def toggle(self) -> None:
-        self.body.setVisible(self.body.isHidden())
-        self.updateHeader()
+        if self.body.isHidden():
+            animations.expand(self.body)
+        else:
+            animations.collapse(self.body)
+        self.header.setOpen(self.body.isHidden())
 
     def updateHeader(self) -> None:
         self.header.setText(self.title)
@@ -608,6 +631,7 @@ class Dashboard(QWidget):
         heroLayout.addWidget(label("Hello, User", "Hello"))
         heroLayout.addWidget(label(memory.streakText(memory.markOpenedToday()), "Streak"))
         layout.addWidget(heroCard)
+        self.entranceWidgets = [heroCard]
         layout.addSpacing(8)
 
 
@@ -760,7 +784,7 @@ class Dashboard(QWidget):
         self.currentSite = site
         self.currentKind = appKind
 
-        onBreakRightNow = self.breakName is not None
+        onBreakRightNow = self.breakName is not None or not enforcement.blockingOn
 
         if appKind == "unproductive" and not onBreakRightNow:
             if enforcement.breaksLeftToday() == 0:
@@ -948,6 +972,10 @@ class Dashboard(QWidget):
 
 
 
+    def playEntrance(self) -> None:
+        animations.staggerIn(self.entranceWidgets + self.statCards)
+        for statCard in self.statCards:
+            animations.countUp(statCard.numberLabel, statCard.numberTarget, 700)
 
 
 
@@ -957,9 +985,11 @@ class Dashboard(QWidget):
         self.settingsPage = SettingsPage(STYLE, self.closeSettings, self.memoryCleared, self.quitFocusGuard)
         self.pages.addWidget(self.settingsPage)
         self.pages.setCurrentWidget(self.settingsPage)
+        animations.fadeIn(self.settingsPage, 260)
 
     def closeSettings(self) -> None:
         self.pages.setCurrentIndex(0)
+        animations.fadeIn(self.pages.widget(0), 260)
         self.pages.removeWidget(self.settingsPage)
         self.settingsPage.deleteLater()
         self.settingsPage = None
