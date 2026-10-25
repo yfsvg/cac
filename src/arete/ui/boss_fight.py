@@ -33,6 +33,8 @@ QPushButton#BossOk {
     border-radius: 12px;
     padding: 6px 14px;
 }
+QPushButton#BossOk:hover { background-color: @primaryShadow; }
+QPushButton#BossOk:pressed { border-bottom: 1px solid @primaryShadow; padding-top: 8px; }
 """
 
 TOAST_SECONDS = 10

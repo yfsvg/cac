@@ -194,6 +194,8 @@ def setClimbPercent(totalPercent, bossesBeaten):
 def changeText(change):
     if change is None:
         return ""
+    if change["amount"] == 0:
+        return change["reason"][0].upper() + change["reason"][1:]
     amountText = format(abs(change["amount"]), ".2f").rstrip("0").rstrip(".")
     if change["amount"] >= 0:
         return "+" + amountText + "% from " + change["reason"]

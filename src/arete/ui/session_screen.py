@@ -37,6 +37,10 @@ QPushButton#ToastMain {
     border-radius: 12px;
     padding: 6px 10px;
 }
+QPushButton#ToastButton:hover { background-color: @primaryContainer; color: @onPrimaryContainer; }
+QPushButton#ToastButton:pressed { padding-top: 8px; padding-bottom: 4px; }
+QPushButton#ToastMain:hover { background-color: @primaryShadow; }
+QPushButton#ToastMain:pressed { padding-top: 8px; padding-bottom: 4px; }
 QLabel#ToastHint { color: @onSurfaceVariant; font-size: 12px; font-weight: 400; }
 QLabel#ToastBig { color: @primary; font-size: 20px; font-weight: 800; }
 """

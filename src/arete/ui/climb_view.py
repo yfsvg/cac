@@ -48,6 +48,9 @@ CLIMB_STYLE = """
         padding: 3px 10px;
     }
     QLabel#MapInfo { color: @onSurfaceVariant; font-size: 13px; }
+    QLabel#MapMessage { color: @onSurface; font-size: 13px; font-style: italic; }
+    QLabel#ClimbGain { color: #1F9D55; font-size: 12px; font-weight: 700; }
+    QLabel#ClimbLoss { color: #D64545; font-size: 12px; font-weight: 700; }
     QFrame#BossCard { background-color: @surfaceContainerLow; border: 2px solid @boss; border-radius: 24px; }
     QLabel#BossCardHeading { color: @boss; font-size: 12px; font-weight: 800; }
     QLabel#BossCardName { color: @onSurface; font-size: 18px; font-weight: 800; }
@@ -549,7 +552,12 @@ class ClimbCard(QFrame):
         self.summaryLabel = QLabel("", objectName="ClimbLine")
         self.shownPercent = None
         self.shownMountain = None
-        bottomRow.addWidget(self.summaryLabel)
+        summaryLayout = QVBoxLayout()
+        summaryLayout.setSpacing(2)
+        summaryLayout.addWidget(self.summaryLabel)
+        self.changeLabel = QLabel("", objectName="ClimbGain")
+        summaryLayout.addWidget(self.changeLabel)
+        bottomRow.addLayout(summaryLayout)
         bottomRow.addStretch()
         openButton = QPushButton("Open map", objectName="OpenMap", cursor=Qt.CursorShape.PointingHandCursor)
         openButton.clicked.connect(openMap)
@@ -565,6 +573,16 @@ class ClimbCard(QFrame):
             animations.animateValue(self.shownPercent, state["percent"], lambda value: self.summaryLabel.setText(percentText(value) + "% up " + mountainName), 1200)
         self.shownPercent = state["percent"]
         self.shownMountain = mountainName
+        change = state["lastChange"]
+        self.changeLabel.setText(climbing.changeText(change))
+        self.changeLabel.setVisible(change is not None)
+        changeName = "ClimbGain"
+        if change is not None and change["amount"] < 0:
+            changeName = "ClimbLoss"
+        if self.changeLabel.objectName() != changeName:
+            self.changeLabel.setObjectName(changeName)
+            self.changeLabel.style().unpolish(self.changeLabel)
+            self.changeLabel.style().polish(self.changeLabel)
         self.miniMap.refresh()
 
 
@@ -699,6 +717,9 @@ class MapHome(QWidget):
         infoLayout.addWidget(self.progressBar)
         self.goalLabel = QLabel("", objectName="MapInfo")
         infoLayout.addWidget(self.goalLabel)
+        self.stageMessageLabel = QLabel("", objectName="MapMessage")
+        self.stageMessageLabel.setWordWrap(True)
+        infoLayout.addWidget(self.stageMessageLabel)
         pageLayout.addWidget(infoCard)
 
         self.mapFrame = MapFrame(self.placeMap)
@@ -759,8 +780,11 @@ class MapHome(QWidget):
             percent = 0
         stageNumber = mountains.stageNumber(percent)
         stageText = "Trailhead"
+        stageMessage = mountain["startMessage"]
         if stageNumber >= 0:
             stageText = mountain["stages"][stageNumber][0]
+            stageMessage = mountain["stages"][stageNumber][1]
+        self.stageMessageLabel.setText(stageMessage)
         heightText = format(int(mountain["heightMeters"] * percent / 100), ",") + " m of " + format(mountain["heightMeters"], ",") + " m"
         self.stageLabel.setText(stageText)
         self.percentLabel.setText(percentText(percent) + "%")

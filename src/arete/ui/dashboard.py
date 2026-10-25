@@ -36,7 +36,7 @@ from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPainter, QPai
 from arete.ai import vision
 from arete.ai.site_memory import siteCategory
 from arete.core.classifier import classifyTypeOfApp, isIgnoredApp, isUnproductiveSite, siteRoot
-from arete.core import climbing, enforcement, keep_alive, mountains, session, setting_changes
+from arete.core import climbing, enforcement, keep_alive, mountains, policy, session, setting_changes
 from arete.core.enforcement import Enforcer
 from arete.storage import memory, time_tracking
 from arete.ui import animations, backdrop
@@ -785,7 +785,7 @@ class Dashboard(QWidget):
 
 
         # Init window & styling & layout
-        self.setWindowTitle("focus guard appie")
+        self.setWindowTitle("Arete")
         windowPropertiesSize = QApplication.primaryScreen().availableGeometry()
         self.resize(500, windowPropertiesSize.height() - 50) # padding boy
 
@@ -973,6 +973,8 @@ class Dashboard(QWidget):
         self.sessionBossMinutes = 0
         self.bossCard.refresh()
         self.inSession = False
+        self.scheduleStarted = None
+        self.isAway = False
         self.sessionTimed = False
         self.sessionSeconds = 0
         self.productiveSeconds = 0
@@ -1009,6 +1011,8 @@ class Dashboard(QWidget):
     def tick(self) -> None:
         for settingName in setting_changes.applyDueChanges():
             self.enforcer.sendNotification("Your " + settingName + " change is on now.")
+        self.checkSchedule()
+        self.checkIdle()
         self.sessionTick()
         window = self.backend.get_active_window()
         while len(vision.notices) > 0:
@@ -1323,8 +1327,35 @@ class Dashboard(QWidget):
             self.sessionPanel.updateFree(0)
         self.sessionPanel.showRunning(self.sessionTimed)
 
+    def checkSchedule(self):
+        schedule = policy.activeSchedule()
+        if schedule is None:
+            self.scheduleStarted = None
+            return
+        if self.scheduleStarted == schedule or self.inSession:
+            return
+        self.scheduleStarted = schedule
+        minutes = policy.minutesLeftInSchedule(schedule)
+        self.sessionChosen(minutes)
+        self.enforcer.sendNotification("Your study time just started, so Arete started a " + str(minutes) + " minute focus session. You got this!")
+
+    def checkIdle(self):
+        try:
+            idleSeconds = self.backend.get_idle_seconds()
+        except Exception:
+            idleSeconds = 0
+        if policy.isIdle(idleSeconds):
+            self.isAway = True
+            return
+        if self.isAway:
+            self.isAway = False
+            if self.inSession:
+                self.enforcer.sendNotification("Welcome back! Your session was paused while you were away.")
+
     def sessionTick(self):
         if not self.inSession or self.sessionToast is not None:
+            return
+        if self.isAway:
             return
         self.sessionSeconds = self.sessionSeconds + 1
         onBreak = self.breakName is not None or self.pauseScreen is not None
@@ -1461,6 +1492,8 @@ class Dashboard(QWidget):
         self.setStyleSheet(applyTheme(STYLE))
         for statCard in self.statCards:
             statCard.restyle()
+        if self.settingsPage is not None:
+            self.settingsPage.restyle()
         self.themeButton.setDark(themeName == "dark", animate=oldLook is not None)
         if oldLook is not None:
             self.fadeOut(oldLook)
