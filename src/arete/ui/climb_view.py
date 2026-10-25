@@ -2,7 +2,7 @@ import math
 import time
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPixmap, QRegion, QTransform
+from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QRegion, QTransform
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
 from arete.core import climbing, mountains
@@ -103,6 +103,7 @@ class MountainMap(QWidget):
         self.state = climbing.climbState()
         self.bottomPad = 80
         self.showLabels = True
+        self.zoom = 1.0
         self.shownPercent = None
         self.picture = None
         self.pictureKey = None
@@ -136,7 +137,10 @@ class MountainMap(QWidget):
         self.update()
 
     def scale(self):
-        return self.width() / mountain_art.PICTURE_WIDTH
+        return self.width() * self.zoom / mountain_art.PICTURE_WIDTH
+
+    def offsetX(self):
+        return (self.width() - mountain_art.PICTURE_WIDTH * self.scale()) / 2
 
     def topCrop(self):
         return mountains.MOUNTAINS[self.mountainNumber]["topCrop"]
@@ -191,7 +195,7 @@ class MountainMap(QWidget):
         return self.state["percent"]
 
     def onScreen(self, picturePoint):
-        return QPointF(picturePoint.x() * self.scale(), (picturePoint.y() - self.topCrop()) * self.scale())
+        return QPointF(self.offsetX() + picturePoint.x() * self.scale(), (picturePoint.y() - self.topCrop()) * self.scale())
 
     def markerPoint(self):
         scene = self.scene()
@@ -206,7 +210,30 @@ class MountainMap(QWidget):
             self.picture.fill(Qt.GlobalColor.transparent)
             picturePainter = QPainter(self.picture)
             picturePainter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            self.scene().renderer.render(picturePainter, QRectF(0, -self.topCrop() * self.scale(), self.width(), mountain_art.PICTURE_HEIGHT * self.scale()))
+            fullHeight = mountain_art.PICTURE_HEIGHT * self.scale()
+            self.scene().renderer.render(picturePainter, QRectF(0, -self.topCrop() * self.scale(), self.width(), fullHeight))
+            if self.zoom < 1:
+                picturePainter.save()
+                picturePainter.scale(self.width() / mountain_art.PICTURE_WIDTH, self.scale())
+                picturePainter.translate(0, -self.topCrop())
+                mountain_art.paintTrees(picturePainter, self.scene(), 0, 0, mountain_art.PICTURE_HEIGHT)
+                picturePainter.restore()
+                pictureWidth = int(mountain_art.PICTURE_WIDTH * self.scale())
+                middle = QPixmap(int(pictureWidth * pixelRatio), int(self.height() * pixelRatio))
+                middle.setDevicePixelRatio(pixelRatio)
+                middle.fill(Qt.GlobalColor.transparent)
+                middlePainter = QPainter(middle)
+                middlePainter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                self.scene().renderer.render(middlePainter, QRectF(0, -self.topCrop() * self.scale(), pictureWidth, fullHeight))
+                fade = QLinearGradient(0, 0, pictureWidth, 0)
+                fade.setColorAt(0, QColor(0, 0, 0, 0))
+                fade.setColorAt(30 / pictureWidth, QColor(0, 0, 0, 255))
+                fade.setColorAt(1 - 30 / pictureWidth, QColor(0, 0, 0, 255))
+                fade.setColorAt(1, QColor(0, 0, 0, 0))
+                middlePainter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
+                middlePainter.fillRect(QRectF(0, 0, pictureWidth, self.height()), fade)
+                middlePainter.end()
+                picturePainter.drawPixmap(int(self.offsetX()), 0, middle)
             picturePainter.end()
             self.bottomColor = self.picture.toImage().pixelColor(int(4 * pixelRatio), int((self.pictureHeight() - 3) * pixelRatio))
             picturePainter = QPainter(self.picture)
@@ -228,6 +255,7 @@ class MountainMap(QWidget):
         visibleBottom = event.rect().bottom() / self.scale() + self.topCrop()
 
         painter.save()
+        painter.translate(self.offsetX(), 0)
         painter.scale(self.scale(), self.scale())
         painter.translate(0, -self.topCrop())
         mountain_art.paintTrees(painter, scene, seconds, visibleTop, visibleBottom)
@@ -238,7 +266,7 @@ class MountainMap(QWidget):
         percentHere = self.percentHere()
         if percentHere > 0:
             walked = mountain_art.partOfPath(scene.trail, scene.trailFraction(percentHere))
-            walked = QTransform().scale(self.scale(), self.scale()).translate(0, -self.topCrop()).map(walked)
+            walked = QTransform().translate(self.offsetX(), 0).scale(self.scale(), self.scale()).translate(0, -self.topCrop()).map(walked)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(QPen(QColor(colors["trailShadow"]), 10, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
             painter.drawPath(walked.translated(0, 2))
@@ -528,6 +556,7 @@ class MapHome(QWidget):
         sideBar.rangeChanged.connect(lambda lowest, highest: sideBar.setRange(0, 0) if highest > 0 else None)
         self.scrollArea.setFrameShape(QFrame.Shape.NoFrame)
         self.mountainMap = MountainMap()
+        self.mountainMap.zoom = MAP_ZOOM
         self.scrollArea.setWidget(self.mountainMap)
         self.leftArrow = MapArrowButton(-1)
         self.leftArrow.setParent(self.mapFrame)
@@ -539,12 +568,11 @@ class MapHome(QWidget):
         self.switchMountain(self.viewedMountain, False)
 
     def placeMap(self):
-        mapWidth = int(self.mapFrame.width() * MAP_ZOOM)
-        mapLeft = (self.mapFrame.width() - mapWidth) // 2
-        self.scrollArea.setGeometry(mapLeft, 0, mapWidth, self.mapFrame.height())
+        mapWidth = self.mapFrame.width()
+        self.scrollArea.setGeometry(0, 0, mapWidth, self.mapFrame.height())
         arrowY = self.mapFrame.height() // 2 - 20
-        self.leftArrow.move(mapLeft // 2 - 20, arrowY)
-        self.rightArrow.move(mapLeft + mapWidth + mapLeft // 2 - 20, arrowY)
+        self.leftArrow.move(10, arrowY)
+        self.rightArrow.move(mapWidth - 50, arrowY)
         roundedShape = QPainterPath()
         roundedShape.addRoundedRect(QRectF(0, 0, mapWidth, self.mapFrame.height()), 24, 24)
         self.scrollArea.setMask(QRegion(roundedShape.toFillPolygon().toPolygon()))
