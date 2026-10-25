@@ -1,7 +1,7 @@
 import time
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QFontDatabase, QPainter
+from PySide6.QtGui import QColor, QCursor, QFontDatabase, QPainter
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -442,11 +442,11 @@ class BreakBadge(QWidget):
         topRow.setContentsMargins(0, 0, 0, 0)
         topRow.addWidget(QLabel("Break time!"))
         topRow.addStretch()
-        cancelButton = QPushButton("✕", objectName="CancelBreak", cursor=Qt.CursorShape.PointingHandCursor)
-        cancelButton.setFixedSize(20, 20)
-        cancelButton.setToolTip("End break early")
-        cancelButton.clicked.connect(self.cancelBreak)
-        topRow.addWidget(cancelButton)
+        self.cancelButton = QPushButton("✕", objectName="CancelBreak", cursor=Qt.CursorShape.PointingHandCursor)
+        self.cancelButton.setFixedSize(20, 20)
+        self.cancelButton.setToolTip("End break early")
+        self.cancelButton.clicked.connect(self.cancelBreak)
+        topRow.addWidget(self.cancelButton)
         cardLayout.addLayout(topRow)
         self.progressBar = QProgressBar()
         self.progressBar.setTextVisible(False)
@@ -462,6 +462,8 @@ class BreakBadge(QWidget):
         self.breakSeconds = 0
         self.topOffset = 0
         self.ticker = QTimer(self, interval=1000, timeout=self.updateBar)
+        self.isFaded = False
+        self.fadeTimer = QTimer(self, interval=50, timeout=self.checkCursor)
 
     def startBreak(self, breakSeconds):
         # Restyle every time so it matches the current light/dark theme
@@ -476,6 +478,22 @@ class BreakBadge(QWidget):
         animations.slideWindowIn(self, 40, 320)
         self.show()
         self.ticker.start()
+        self.fadeTimer.start()
+
+    def checkCursor(self):
+        cursor = QCursor.pos()
+        nearBadge = self.frameGeometry().adjusted(-40, -40, 40, 40).contains(cursor)
+        buttonTopLeft = self.cancelButton.mapToGlobal(self.cancelButton.rect().topLeft())
+        buttonArea = self.cancelButton.rect().translated(buttonTopLeft).adjusted(-6, -6, 6, 6)
+        shouldFade = nearBadge and not buttonArea.contains(cursor)
+        if shouldFade:
+            self.setWindowOpacity(max(self.windowOpacity() - 0.2, 0.0))
+        else:
+            self.setWindowOpacity(min(self.windowOpacity() + 0.2, 1.0))
+        if shouldFade != self.isFaded:
+            self.isFaded = shouldFade
+            self.setWindowFlag(Qt.WindowType.WindowTransparentForInput, shouldFade)
+            self.show()
 
     def updateBar(self):
         # Milliseconds so the bar drains smoothly instead of jumping a second early
@@ -486,6 +504,7 @@ class BreakBadge(QWidget):
 
     def stopBreak(self):
         self.ticker.stop()
+        self.fadeTimer.stop()
         self.hide()
 
     def cancelBreak(self):
