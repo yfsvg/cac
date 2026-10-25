@@ -2,6 +2,7 @@
 """what actually appears on the widget"""
 
 from PySide6.QtWidgets import QApplication, QStyle, QSystemTrayIcon
+from focusguard.ui import animations
 from focusguard.ui.dashboard import Dashboard
 
 
@@ -17,6 +18,10 @@ class Tray(QSystemTrayIcon):
 
 
     def openDashboard(self) -> None:
+        if not self.dashboard.isVisible():
+            self.dashboard.show()
+            animations.slideWindowIn(self.dashboard)
+            self.dashboard.playEntrance()
         # show and raise only hides it but daemon keeps on going baby
         self.dashboard.show()
         self.dashboard.raise_()

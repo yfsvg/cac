@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from focusguard.platform import get_backend
+from focusguard.ui import animations
 from focusguard.ui.theme import applyTheme
 
 COUNTDOWN = 15
@@ -197,7 +198,9 @@ class PauseScreen(QWidget):
             self.shakeTimer.stop()
 
     def popUp(self):
+        animations.fadeWindowIn(self)
         self.show()
+        animations.slideWidgetIn(self.box)
         try:
             get_backend().float_above_everything(int(self.winId()))
         except Exception:
@@ -341,7 +344,9 @@ class CheckInScreen(QWidget):
 
 
     def popUp(self):
+        animations.fadeWindowIn(self)
         self.show()
+        animations.slideWidgetIn(self.box)
         try:
             get_backend().float_above_everything(int(self.winId()))
         except Exception:
@@ -447,6 +452,7 @@ class BreakBadge(QWidget):
         self.adjustSize()
         screen = QApplication.primaryScreen().availableGeometry()
         self.move(screen.right() - self.width() - BADGE_MARGIN, screen.top() + BADGE_MARGIN + self.topOffset)
+        animations.slideWindowIn(self, 40, 320)
         self.show()
         self.ticker.start()
 
