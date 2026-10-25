@@ -34,7 +34,7 @@ MOUNTAINS = [
         "stages": [
             ("Base Camp", "You made it to base camp. The real climb starts now."),
             ("Khumbu Icefall", "The ice is moving under you. Steady sessions get you through."),
-            ("Camp One", "A boss guards the camp. Beat it with focus minutes to pass."),
+            ("Camp One", "A boss guards the camp. Stay focused in your sessions to pass."),
             ("Western Cwm", "Halfway up the biggest mountain on Earth. Keep it going."),
             ("Lhotse Face", "The air is getting thin, and so is the room for slacking off."),
             ("South Col", "The death zone boss is waiting. Show it what focus looks like."),

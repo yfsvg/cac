@@ -49,6 +49,7 @@ SETTINGS_STYLE = """
         border-bottom: 4px solid @primaryShadow;
         border-radius: 16px;
     }
+    QPushButton#MainButton:hover { background-color: @primaryShadow; }
     QPushButton#MainButton:pressed { border-bottom: 1px solid @primaryShadow; padding-top: 11px; }
     QLineEdit {
         color: @onSurface;
@@ -322,6 +323,7 @@ class SettingsPage(QWidget):
         backButton = QPushButton(objectName="ThemeButton", cursor=Qt.CursorShape.PointingHandCursor)
         backButton.setFixedSize(32, 32)
         backButton.setIcon(makeBackArrow())
+        self.backButton = backButton
         backButton.setIconSize(QSize(32, 32))
         backButton.clicked.connect(goBack)
         topRow.setSpacing(10)
@@ -759,6 +761,10 @@ class SettingsPage(QWidget):
         chipLayout.setContentsMargins(8, 2, 8, 2)
         chipLayout.addWidget(timeBox)
         return timeChip
+
+    def restyle(self):
+        self.setStyleSheet(applyTheme(SETTINGS_STYLE))
+        self.backButton.setIcon(makeBackArrow())
 
     def updateSchedule(self):
         secondsLeft = frozenSecondsLeft("Schedule Time Limits")
