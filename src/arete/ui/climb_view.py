@@ -54,6 +54,7 @@ CLIMB_STYLE = """
 """
 
 NODE_RADIUS = 13
+MAP_ZOOM = 0.8
 BOSS_RADIUS = 19
 
 
@@ -545,13 +546,15 @@ class MapHome(QWidget):
         self.switchMountain(self.viewedMountain, False)
 
     def placeMap(self):
-        self.scrollArea.setGeometry(0, 0, self.mapFrame.width(), self.mapFrame.height())
+        mapWidth = int(self.mapFrame.width() * MAP_ZOOM)
+        mapLeft = (self.mapFrame.width() - mapWidth) // 2
+        self.scrollArea.setGeometry(mapLeft, 0, mapWidth, self.mapFrame.height())
         arrowY = self.mapFrame.height() // 2 - 20
-        self.leftArrow.move(10, arrowY)
-        self.rightArrow.move(self.mapFrame.width() - 50, arrowY)
+        self.leftArrow.move(mapLeft // 2 - 20, arrowY)
+        self.rightArrow.move(mapLeft + mapWidth + mapLeft // 2 - 20, arrowY)
         roundedShape = QPainterPath()
-        roundedShape.addRoundedRect(QRectF(self.mapFrame.rect()), 24, 24)
-        self.mapFrame.setMask(QRegion(roundedShape.toFillPolygon().toPolygon()))
+        roundedShape.addRoundedRect(QRectF(0, 0, mapWidth, self.mapFrame.height()), 24, 24)
+        self.scrollArea.setMask(QRegion(roundedShape.toFillPolygon().toPolygon()))
         if self.needsFirstScroll and self.mapFrame.height() > 100:
             self.needsFirstScroll = False
             QTimer.singleShot(50, lambda: self.scrollToClimber(900))
