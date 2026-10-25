@@ -10,6 +10,7 @@ MOUNTAINS = [
         "name": "Mount Fuji",
         "shortName": "Fuji",
         "picture": ASSETS / "fuji.svg",
+        "topCrop": 150,
         "heightMeters": 3776,
         "startMessage": "The climb starts here. Stay on task and every session moves you up.",
         "stages": [
@@ -27,6 +28,7 @@ MOUNTAINS = [
         "name": "Mount Everest",
         "shortName": "Everest",
         "picture": ASSETS / "everest.svg",
+        "topCrop": 140,
         "heightMeters": 8849,
         "startMessage": "Welcome to Everest. It's a lot taller than Fuji, so keep showing up.",
         "stages": [
@@ -44,6 +46,7 @@ MOUNTAINS = [
         "name": "Matterhorn",
         "shortName": "Matterhorn",
         "picture": ASSETS / "matterhorn.svg",
+        "topCrop": 70,
         "heightMeters": 4478,
         "startMessage": "The final mountain. Shorter than Everest, but way harder.",
         "stages": [

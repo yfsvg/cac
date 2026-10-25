@@ -759,12 +759,12 @@ class Dashboard(QWidget):
         self.setStyleSheet(applyTheme(STYLE)) # blurless now
 
         mainLayout = QVBoxLayout(self)
-        mainLayout.setContentsMargins(10, 10, 10, 10)
+        mainLayout.setContentsMargins(10, 4, 10, 10)
 
 
 
         topRow = QHBoxLayout()
-        topRow.setContentsMargins(20, 10, 20, 0)
+        topRow.setContentsMargins(20, 6, 20, 0)
         topRow.addWidget(AppNameLabel())
         topRow.addSpacing(12)
         self.sessionCard = SessionCard()

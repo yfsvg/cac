@@ -149,8 +149,11 @@ class MountainMap(QWidget):
     def scale(self):
         return self.width() / mountain_art.PICTURE_WIDTH
 
+    def topCrop(self):
+        return mountains.MOUNTAINS[self.mountainNumber]["topCrop"]
+
     def pictureHeight(self):
-        return int(mountain_art.PICTURE_HEIGHT * self.scale())
+        return int((mountain_art.PICTURE_HEIGHT - self.topCrop()) * self.scale())
 
     def setBottomPad(self, bottomPad):
         self.bottomPad = bottomPad
@@ -177,7 +180,7 @@ class MountainMap(QWidget):
 
     def visiblePictureRange(self):
         visibleRect = self.visibleRegion().boundingRect()
-        return visibleRect.top() / self.scale(), visibleRect.bottom() / self.scale()
+        return visibleRect.top() / self.scale() + self.topCrop(), visibleRect.bottom() / self.scale() + self.topCrop()
 
     def animate(self):
         if self.width() == 0:
@@ -199,7 +202,7 @@ class MountainMap(QWidget):
         return self.state["percent"]
 
     def onScreen(self, picturePoint):
-        return QPointF(picturePoint.x() * self.scale(), picturePoint.y() * self.scale())
+        return QPointF(picturePoint.x() * self.scale(), (picturePoint.y() - self.topCrop()) * self.scale())
 
     def markerPoint(self):
         scene = self.scene()
@@ -214,7 +217,7 @@ class MountainMap(QWidget):
             self.picture.fill(Qt.GlobalColor.transparent)
             picturePainter = QPainter(self.picture)
             picturePainter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            self.scene().renderer.render(picturePainter, QRectF(0, 0, self.width(), self.pictureHeight()))
+            self.scene().renderer.render(picturePainter, QRectF(0, -self.topCrop() * self.scale(), self.width(), mountain_art.PICTURE_HEIGHT * self.scale()))
             picturePainter.end()
             self.bottomColor = self.picture.toImage().pixelColor(int(4 * pixelRatio), int((self.pictureHeight() - 3) * pixelRatio))
             picturePainter = QPainter(self.picture)
@@ -232,11 +235,12 @@ class MountainMap(QWidget):
         painter.drawPixmap(0, 0, self.basePicture())
         scene = self.scene()
         seconds = self.seconds()
-        visibleTop = event.rect().top() / self.scale()
-        visibleBottom = event.rect().bottom() / self.scale()
+        visibleTop = event.rect().top() / self.scale() + self.topCrop()
+        visibleBottom = event.rect().bottom() / self.scale() + self.topCrop()
 
         painter.save()
         painter.scale(self.scale(), self.scale())
+        painter.translate(0, -self.topCrop())
         mountain_art.paintTrees(painter, scene, seconds, visibleTop, visibleBottom)
         self.sky.paint(painter, seconds)
         painter.restore()
@@ -245,7 +249,7 @@ class MountainMap(QWidget):
         percentHere = self.percentHere()
         if percentHere > 0:
             walked = mountain_art.partOfPath(scene.trail, scene.trailFraction(percentHere))
-            walked = QTransform().scale(self.scale(), self.scale()).map(walked)
+            walked = QTransform().scale(self.scale(), self.scale()).translate(0, -self.topCrop()).map(walked)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(QPen(QColor(colors["trailShadow"]), 10, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
             painter.drawPath(walked.translated(0, 2))
