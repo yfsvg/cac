@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel, QPushBu
 
 from arete.platform import get_backend
 from arete.ui import animations
+from arete.ui.boss_art import BossPortrait
 from arete.ui.brain_games import ALL_GAMES
 from arete.ui.pause_screen import STYLE
 from arete.ui.theme import applyTheme
@@ -140,8 +141,15 @@ class BossFight(QWidget):
             self.sideAction = sideAction
             self.sideButton.show()
 
+    def addPortrait(self, size):
+        portrait = BossPortrait(self.bossNumber, size)
+        self.pageLayout.addWidget(portrait, alignment=Qt.AlignmentFlag.AlignHCenter)
+        portrait.show()
+        return portrait
+
     def showIntro(self, allowSkip):
         self.clearPage()
+        self.addPortrait(150)
         self.addText("Boss fight!", "Hint")
         self.addText(bossName(self.bossNumber), "BossName")
         self.addText("It's blocking the trail. Win " + str(WINS_NEEDED) + " of " + str(GAMES_PER_FIGHT) + " brain games to get past it.", "Hint")
@@ -186,9 +194,12 @@ class BossFight(QWidget):
         if losses > GAMES_PER_FIGHT - WINS_NEEDED:
             self.showResult(False)
             return
+        portrait = self.addPortrait(96)
         if passed:
+            QTimer.singleShot(250, portrait.hurt)
             self.addText("Nice, you won that one!", "GameTitle")
         else:
+            portrait.laugh()
             self.addText("That one got away.", "GameTitle")
         winsText = str(wins) + " wins so far."
         if wins == 1:
@@ -199,12 +210,16 @@ class BossFight(QWidget):
         self.fadeInPage()
 
     def showResult(self, won):
+        portrait = self.addPortrait(130)
         if won:
+            QTimer.singleShot(150, portrait.hurt)
+            QTimer.singleShot(700, portrait.defeat)
             self.addText("You beat " + bossName(self.bossNumber) + "!", "GameTitle")
             self.addText("The trail is open again. Keep focusing to keep climbing.", "Hint")
             self.setButtons("Keep climbing", lambda: self.finishFight(True))
-            QTimer.singleShot(150, lambda: animations.confetti(self.box))
+            QTimer.singleShot(1500, lambda: animations.confetti(self.box))
         else:
+            portrait.laugh()
             self.addText(bossName(self.bossNumber) + " won this time.", "GameTitle")
             self.addText("No worries, you can fight it again after your next focus session.", "Hint")
             self.setButtons("OK", lambda: self.finishFight(False))

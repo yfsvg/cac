@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QProgressBar, QPushBu
 
 from arete.core import climbing, mountains
 from arete.ui import animations, mountain_art
+from arete.ui.boss_art import drawBossCharacter
 from arete.ui.boss_fight import bossName
 from arete.ui.theme import getColors
 
@@ -84,19 +85,6 @@ def shieldPath(center, size):
     shield.quadTo(QPointF(center.x() - size * 0.9, center.y() + size * 0.8), QPointF(center.x() - size, center.y() + size * 0.1))
     shield.closeSubpath()
     return shield
-
-
-def drawBolt(painter, center, size):
-    bolt = QPainterPath(QPointF(center.x() + size * 0.15, center.y() - size * 0.7))
-    bolt.lineTo(QPointF(center.x() - size * 0.4, center.y() + size * 0.1))
-    bolt.lineTo(QPointF(center.x() - size * 0.02, center.y() + size * 0.1))
-    bolt.lineTo(QPointF(center.x() - size * 0.15, center.y() + size * 0.75))
-    bolt.lineTo(QPointF(center.x() + size * 0.4, center.y() - size * 0.12))
-    bolt.lineTo(QPointF(center.x() + size * 0.02, center.y() - size * 0.12))
-    bolt.closeSubpath()
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(QColor("white"))
-    painter.drawPath(bolt)
 
 
 def drawLock(painter, center, size, color):
@@ -275,7 +263,7 @@ class MountainMap(QWidget):
                 bossNumber = bossesBefore + mountains.BOSS_CHECKPOINTS.index(checkpointNumber)
                 isNextBoss = bossNumber == self.state["bossesBeaten"]
                 if not underClimber:
-                    self.drawBoss(painter, nodePoint, bossNumber < self.state["bossesBeaten"], colors, seconds, isNextBoss)
+                    self.drawBoss(painter, nodePoint, bossNumber < self.state["bossesBeaten"], colors, seconds, isNextBoss, bossNumber)
                 self.drawLabel(painter, stageText + "  ·  " + bossName(bossNumber), nodePoint, BOSS_RADIUS + 10)
             else:
                 if reached and not underClimber:
@@ -297,7 +285,7 @@ class MountainMap(QWidget):
         painter.drawEllipse(point, NODE_RADIUS, NODE_RADIUS)
         drawCheck(painter, point, NODE_RADIUS * 0.9, QColor("white"))
 
-    def drawBoss(self, painter, point, beaten, colors, seconds, isNextBoss):
+    def drawBoss(self, painter, point, beaten, colors, seconds, isNextBoss, bossNumber):
         shieldColor = QColor(colors["boss"])
         if beaten:
             shieldColor = QColor(colors["trail"])
@@ -310,16 +298,21 @@ class MountainMap(QWidget):
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(glowColor)
             painter.drawEllipse(point, BOSS_RADIUS + 10 + 6 * beat, BOSS_RADIUS + 10 + 6 * beat)
+        if not beaten:
+            badgeSize = shieldSize + 5
+            painter.setPen(QPen(shieldColor, 3))
+            painter.setBrush(QColor("#FFF6EE"))
+            painter.drawEllipse(point, badgeSize, badgeSize)
+            faceSize = badgeSize * 1.7
+            drawBossCharacter(painter, bossNumber, QRectF(point.x() - faceSize / 2, point.y() - faceSize / 2, faceSize, faceSize))
+            return
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(shieldColor.darker(135))
         painter.drawPath(shieldPath(QPointF(point.x(), point.y() + 3), shieldSize))
         painter.setPen(QPen(QColor("white"), 2.5))
         painter.setBrush(shieldColor)
         painter.drawPath(shieldPath(point, shieldSize))
-        if beaten:
-            drawCheck(painter, point, shieldSize * 0.8, QColor("white"))
-        else:
-            drawBolt(painter, point, shieldSize * 0.8)
+        drawCheck(painter, point, shieldSize * 0.8, QColor("white"))
 
     def drawLabel(self, painter, text, point, gap):
         if not self.showLabels:
