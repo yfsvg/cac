@@ -37,7 +37,7 @@ from arete.core.classifier import classifyTypeOfApp, isIgnoredApp, isUnproductiv
 from arete.core import climbing, enforcement, keep_alive, session, setting_changes
 from arete.core.enforcement import Enforcer
 from arete.storage import memory, time_tracking
-from arete.ui import animations
+from arete.ui import animations, backdrop
 from arete.ui.boss_fight import BossFight
 from arete.ui.climb_view import CLIMB_STYLE, ClimbCard, MapHome, climbSummary
 from arete.ui.settings_window import SettingsPage
@@ -55,7 +55,7 @@ NO_DATA = "@onSurfaceVariant"
 
 STYLE = """
     QWidget#Dashboard {
-        background-color: @surface;
+        background-color: transparent;
         border-radius: 28px;
         border: 1px solid @outlineVariant;
     }
@@ -133,6 +133,7 @@ DOT_NAMES = {
 }
 
 MAX_NAME_LENGTH = 30
+STAT_ICONS = ["target", "clock", "bounce"]
 
 
 # small widgets, labels + stat cards
@@ -195,6 +196,9 @@ class StatCard(QFrame):
         cardLayout.addWidget(label(caption, "Caption", centerAlign))
         cardLayout.addStretch()
 
+        self.iconName = ""
+        self.iconColor = onContainerColor
+
         self.statusChip = QLabel(status, objectName="Chip")
         self.chipStyle = f"color: {statusColor};"
         self.statusChip.setStyleSheet(applyTheme(self.chipStyle))
@@ -203,6 +207,16 @@ class StatCard(QFrame):
     def restyle(self) -> None:
         self.setStyleSheet(applyTheme(self.cardStyle))
         self.statusChip.setStyleSheet(applyTheme(self.chipStyle))
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        iconColor = QColor(applyTheme(self.iconColor))
+        iconColor.setAlpha(150)
+        painter.translate(24, 24)
+        drawStatIcon(painter, self.iconName, iconColor)
+
 
     def setValues(self, number: str, status: str, statusColor: str) -> None:
         self.numberTarget = number
@@ -218,6 +232,67 @@ class StatCard(QFrame):
 
 
 # Stat card wording, always encouraging so it never feels like a punishment
+
+class HeroCard(QFrame):
+    def __init__(self) -> None:
+        super().__init__(objectName="Hero")
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        heroShape = QPainterPath()
+        heroShape.addRoundedRect(QRectF(self.rect()), 28, 28)
+        painter.setClipPath(heroShape)
+        colors = getColors()
+        sunColor = QColor(colors["trail"])
+        sunColor.setAlpha(200)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(sunColor)
+        painter.drawEllipse(QPointF(self.width() - 70, 34), 16, 16)
+        backColor = QColor(colors["primary"])
+        backColor.setAlpha(60)
+        frontColor = QColor(colors["primary"])
+        frontColor.setAlpha(110)
+        bottom = self.height()
+        for mountainColor, peaks in ((backColor, ((-150, 60), (-95, 30), (-40, 55))), (frontColor, ((-120, 75), (-60, 45), (0, 80)))):
+            ridge = QPainterPath(QPointF(self.width() - 200, bottom))
+            for peakX, peakY in peaks:
+                ridge.lineTo(QPointF(self.width() + peakX, peakY))
+            ridge.lineTo(QPointF(self.width(), bottom))
+            ridge.closeSubpath()
+            painter.setBrush(mountainColor)
+            painter.drawPath(ridge)
+        snowColor = QColor("white")
+        snowColor.setAlpha(150)
+        snowCap = QPainterPath(QPointF(self.width() - 60 - 11, 45 + 9))
+        snowCap.lineTo(QPointF(self.width() - 60, 45))
+        snowCap.lineTo(QPointF(self.width() - 60 + 12, 45 + 9))
+        snowCap.closeSubpath()
+        painter.setBrush(snowColor)
+        painter.drawPath(snowCap)
+
+
+def drawStatIcon(painter: QPainter, iconName: str, color: QColor) -> None:
+    painter.setPen(QPen(color, 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    if iconName == "target":
+        painter.drawEllipse(QPointF(0, 0), 8, 8)
+        painter.drawEllipse(QPointF(0, 0), 4, 4)
+        painter.setBrush(color)
+        painter.drawEllipse(QPointF(0, 0), 1.2, 1.2)
+    elif iconName == "clock":
+        painter.drawEllipse(QPointF(0, 0), 8, 8)
+        painter.drawLine(QPointF(0, 0), QPointF(0, -5))
+        painter.drawLine(QPointF(0, 0), QPointF(3.5, 2))
+    elif iconName == "bounce":
+        bounce = QPainterPath(QPointF(-8, -6))
+        bounce.quadTo(QPointF(-4, 10), QPointF(0, 2))
+        bounce.quadTo(QPointF(4, -8), QPointF(8, -4))
+        painter.drawPath(bounce)
+        painter.drawLine(QPointF(8, -4), QPointF(4, -6))
+        painter.drawLine(QPointF(8, -4), QPointF(7, 0))
+
 
 def focusedStatus(percent):
     if percent is None:
@@ -666,7 +741,7 @@ class Dashboard(QWidget):
 
 
 
-        heroCard = QFrame(objectName="Hero")
+        heroCard = HeroCard()
         heroLayout = QVBoxLayout(heroCard)
         heroLayout.setContentsMargins(24, 20, 24, 22)
         heroLayout.setSpacing(6)
@@ -790,6 +865,7 @@ class Dashboard(QWidget):
         cardIndex = 0
         for number, caption, status, statusColor in cards:
             statCard = StatCard(number, caption, status, statusColor, colorFamilies[cardIndex])
+            statCard.iconName = STAT_ICONS[cardIndex]
             self.statCards.append(statCard)
             cardRowLayout.addWidget(statCard)
             cardIndex = cardIndex + 1
@@ -1375,12 +1451,18 @@ class Dashboard(QWidget):
 
 
 
-    # Drawing, lets the stylesheet paint the rounded background
+    # Drawing, sky picture first then the stylesheet paints the rounded border
 
     def paintEvent(self, event: QPaintEvent) -> None:
         styleOption = QStyleOption()
         styleOption.initFrom(self)
         painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        panelShape = QPainterPath()
+        panelShape.addRoundedRect(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), 28, 28)
+        painter.setClipPath(panelShape)
+        painter.drawPixmap(0, 0, backdrop.backdropPicture(self.width(), self.height(), getTheme() == "dark", self.devicePixelRatioF()))
+        painter.setClipping(False)
         self.style().drawPrimitive(
             QStyle.PrimitiveElement.PE_Widget, styleOption, painter, self
         )

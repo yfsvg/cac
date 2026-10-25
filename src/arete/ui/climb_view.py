@@ -33,10 +33,12 @@ CLIMB_STYLE = """
         font-weight: 600;
         background-color: @primary;
         border: none;
+        border-bottom: 3px solid @primaryShadow;
         border-radius: 14px;
         padding: 6px 14px;
     }
     QPushButton#OpenMap:hover { background-color: @primaryHover; }
+    QPushButton#OpenMap:pressed { border-bottom: 1px solid @primaryShadow; padding-top: 8px; }
 """
 
 NODE_RADIUS = 13
@@ -98,7 +100,7 @@ class MountainMap(QWidget):
         super().__init__()
         self.mountainNumber = 0
         self.state = climbing.climbState()
-        self.bottomPad = 0
+        self.bottomPad = 80
         self.picture = None
         self.pictureKey = None
         self.bottomColor = QColor("#2A1F4A")

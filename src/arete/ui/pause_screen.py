@@ -60,6 +60,8 @@ QPushButton#BackButton {
     font-weight: 600;
 }
 QPushButton#BackButton:hover { background-color: @primaryHover; color: @onPrimary; }
+QPushButton#BackButton { border-bottom: 4px solid @primaryShadow; }
+QPushButton#BackButton:pressed { border-bottom: 1px solid @primaryShadow; padding-top: 13px; }
 QPushButton#OpenButton { text-align: center; background-color: @tertiaryContainer; color: @onTertiaryContainer; }
 QPushButton#OpenButton:disabled { background-color: @surfaceContainerHighest; color: @outline; }
 QPushButton:disabled { background-color: @surfaceContainerHighest; color: @outline; }

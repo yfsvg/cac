@@ -44,8 +44,10 @@ SETTINGS_STYLE = """
         padding: 8px 16px;
         background-color: @primary;
         border: none;
+        border-bottom: 4px solid @primaryShadow;
         border-radius: 16px;
     }
+    QPushButton#MainButton:pressed { border-bottom: 1px solid @primaryShadow; padding-top: 11px; }
     QLineEdit {
         color: @onSurface;
         font-size: 15px;

@@ -39,6 +39,8 @@ QPushButton#MainChoice {
     font-weight: 600;
 }
 QPushButton#MainChoice:hover { background-color: @primaryHover; color: @onPrimary; }
+QPushButton#MainChoice { border-bottom: 4px solid @primaryShadow; }
+QPushButton#MainChoice:pressed { border-bottom: 1px solid @primaryShadow; padding-top: 13px; }
 QPushButton#SideChoice { text-align: center; }
 QPushButton#LeaveButton {
     text-align: center;
@@ -124,6 +126,7 @@ class BossFight(QWidget):
         textLabel = QLabel(text, objectName=name)
         textLabel.setWordWrap(True)
         self.pageLayout.addWidget(textLabel)
+        textLabel.show()
         return textLabel
 
     def setButtons(self, mainText, mainAction, sideText=None, sideAction=None):
@@ -223,7 +226,8 @@ class BossFight(QWidget):
     def placeBox(self):
         self.pageLayout.activate()
         self.boxLayout.activate()
-        self.box.resize(self.box.width(), self.box.sizeHint().height())
+        boxHeight = max(self.box.sizeHint().height(), self.box.heightForWidth(self.box.width()))
+        self.box.resize(self.box.width(), boxHeight)
         screen = self.geometry()
         self.box.move(screen.width() // 2 - self.box.width() // 2, screen.height() // 2 - self.box.height() // 2)
 
