@@ -46,6 +46,11 @@ COLORS = {
     "trail": "#FFC23D",
     "trailShadow": "#D99A0B",
     "boss": "#D94E66",
+    "field": "#F4F9FF",
+    "fieldBorder": "#9FC2DD",
+    "cardBorder": "#CFE2F1",
+    "hud": "#E4FFFFFF",
+    "hudText": "#10283A",
 }
 
 
@@ -91,6 +96,11 @@ DARK = {
     "trail": "#5FE0B8",
     "trailShadow": "#2FA98A",
     "boss": "#FF6FA8",
+    "field": "#17123A",
+    "fieldBorder": "#5A4CA8",
+    "cardBorder": "#3E3480",
+    "hud": "#D714102F",
+    "hudText": "#EEEAFF",
 }
 
 currentTheme = "light"

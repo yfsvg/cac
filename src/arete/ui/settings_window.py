@@ -52,12 +52,11 @@ SETTINGS_STYLE = """
         color: @onSurface;
         font-size: 15px;
         padding: 10px 14px;
-        background-color: @surfaceContainerHighest;
-        border: none;
-        border-bottom: 2px solid @primary;
-        border-top-left-radius: 8px;
-        border-top-right-radius: 8px;
+        background-color: @field;
+        border: 1.5px solid @fieldBorder;
+        border-radius: 12px;
     }
+    QLineEdit:focus { border: 1.5px solid @primary; }
     QLabel#ErrorText { color: @error; font-size: 13px; }
     QCheckBox { color: @onSurface; font-size: 14px; spacing: 10px; }
     QLabel#SliderLabel { color: @onSurface; font-size: 14px; }
@@ -102,7 +101,7 @@ SETTINGS_STYLE = """
     QPushButton#DayChip:checked { color: @onPrimary; background-color: @primary; }
     QPushButton#DayChip:disabled { color: @outline; }
     QPushButton#DayChip:checked:disabled { color: @onPrimary; background-color: @primary; }
-    QFrame#TimeChip { background-color: @surfaceContainerHighest; border-radius: 10px; }
+    QFrame#TimeChip { background-color: @field; border: 1.5px solid @fieldBorder; border-radius: 10px; }
     QTimeEdit { color: @onSurface; background-color: transparent; font-size: 14px; font-weight: 600; }
     QTimeEdit:disabled { color: @onSurface; }
     QLabel#ChipOn {
