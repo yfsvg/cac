@@ -68,7 +68,7 @@ STYLE = """
     QLabel { color: @onSurface; }
     QLabel#AppName { color: @onSurface; font-size: 15px; font-weight: 800; }
     QLabel#Hello { color: @onPrimaryContainer; font-size: 32px; font-weight: 700; }
-    QLabel#ClimbMessage { color: @onPrimaryContainer; font-size: 14px; }
+    QLabel#ClimbMessage, QLabel#CurrentMountain { color: @onPrimaryContainer; font-size: 14px; }
 
     QLabel#Section { color: @onSurface; font-size: 22px; font-weight: 600; }
     QLabel#BigNumber { font-size: 44px; font-weight: 800; }
@@ -827,7 +827,9 @@ class Dashboard(QWidget):
         heroLayout = QVBoxLayout(heroCard)
         heroLayout.setContentsMargins(24, 20, 24, 22)
         heroLayout.setSpacing(6)
-        heroLayout.addWidget(label("Hello, User", "Hello"))
+        heroLayout.addWidget(label("Hello!", "Hello"))
+        self.currentMountain = label("", "CurrentMountain")
+        heroLayout.addWidget(self.currentMountain)
         self.climbMessage = label("", "ClimbMessage")
         heroLayout.addWidget(self.climbMessage)
         layout.addWidget(heroCard)
@@ -1048,7 +1050,7 @@ class Dashboard(QWidget):
             return
 
         self.askedSites.append(site)
-        threading.Thread(target=vision.classifySite, args=(self.backend, window, site), daemon=True).start()
+        threading.Thread(target=vision.classifySite, args=(site,), daemon=True).start()
 
     def browserSite(self, window):
         browserWindow = (window.window_handle, window.title)
@@ -1253,7 +1255,7 @@ class Dashboard(QWidget):
         savedMemory = memory.load()
         savedMemory["mountainChoice"] = (chosenMountain() + 1) % len(MOUNTAINS)
         memory.save(savedMemory)
-        self.climbCard.refresh()
+        self.refreshClimb()
         if self.mountainPage is not None:
             self.mountainPage.switchMountain(chosenMountain())
 
@@ -1461,6 +1463,7 @@ class Dashboard(QWidget):
     # Climb, hero card text + the climb card / map page
 
     def refreshClimb(self) -> None:
+        self.currentMountain.setText("Currently climbing: <b>" + MOUNTAINS[chosenMountain()]["name"] + "</b>")
         self.climbMessage.setText(memory.climbStage(memory.climbMeters())["message"])
         self.climbCard.refresh()
         if self.mountainPage is not None:

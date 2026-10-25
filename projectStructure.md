@@ -19,7 +19,7 @@ cac/
 │   │   └── __init__.py        # picks backend via sys.platform
 │   │
 │   ├── ai/
-│   │   ├── vision.py          # screenshot -> productive/not (for unknown sites)
+│   │   ├── vision.py          # homepage metadata -> productive/not (for unknown sites)
 │   │   └── site_memory.py     # domain -> verdict cache
 │   │
 │   ├── storage/
