@@ -13,7 +13,7 @@ BOSS_NAMES = [
     "The Fuji Guardian",
     "The Icefall Yeti",
     "The Death Zone Wraith",
-    "The Everest Guardian",
+    "Monsoon God",
     "The Hornli Troll",
     "The Ridge Eagle",
     "The Matterhorn King",
