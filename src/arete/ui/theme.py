@@ -48,7 +48,7 @@ COLORS = {
     "boss": "#D94E66",
     "field": "#F4F9FF",
     "fieldBorder": "#9FC2DD",
-    "cardBorder": "#CFE2F1",
+    "cardBorder": "#A9C9E2",
     "hud": "#E4FFFFFF",
     "hudText": "#10283A",
 }

@@ -26,9 +26,9 @@ def backdropPicture(width, height, dark, pixelRatio):
 
 def paintDay(painter, width, height):
     sky = QLinearGradient(0, 0, 0, height)
-    sky.setColorAt(0, QColor("#8FD0FF"))
-    sky.setColorAt(0.35, QColor("#D4EDFF"))
-    sky.setColorAt(1, QColor("#F1F8FF"))
+    sky.setColorAt(0, QColor("#5FB6F2"))
+    sky.setColorAt(0.35, QColor("#9DD2F7"))
+    sky.setColorAt(1, QColor("#BFE0F6"))
     painter.fillRect(QRectF(0, 0, width, height), sky)
 
     sunCenter = QPointF(width * 0.6, 36)
@@ -45,7 +45,7 @@ def paintDay(painter, width, height):
     for cloudX, cloudY, cloudSize in ((width * 0.25, 24, 13), (width * 0.66, 38, 10)):
         drawCloud(painter, cloudX, cloudY, cloudSize)
 
-    hillColors = ("#CDEBD8", "#B6E0C4", "#A2D6B3")
+    hillColors = ("#A9D9B9", "#8FCDA5", "#79C092")
     for hillNumber in range(3):
         hillTop = height - 150 + hillNumber * 45
         hill = QPainterPath(QPointF(0, hillTop))

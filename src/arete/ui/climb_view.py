@@ -25,7 +25,7 @@ CLIMB_STYLE = """
     QPushButton#MountainTab[locked="true"] { color: @outline; }
     QPushButton#MountainTab[locked="true"]:checked { color: @onPrimary; }
     QLabel#MapTitle { color: @onSurface; font-size: 18px; font-weight: 700; }
-    QFrame#ClimbCard { background-color: @surfaceContainerLow; border-radius: 24px; }
+    QFrame#ClimbCard { background-color: @surfaceContainerLow; border-radius: 24px; border: 1px solid @cardBorder; }
     QLabel#ClimbLine { color: @primary; font-size: 13px; font-weight: 700; }
     QPushButton#OpenMap {
         color: @onPrimary;
@@ -101,6 +101,7 @@ class MountainMap(QWidget):
         self.mountainNumber = 0
         self.state = climbing.climbState()
         self.bottomPad = 80
+        self.showLabels = True
         self.picture = None
         self.pictureKey = None
         self.bottomColor = QColor("#2A1F4A")
@@ -272,6 +273,8 @@ class MountainMap(QWidget):
             drawBolt(painter, point, BOSS_RADIUS * 0.8)
 
     def drawLabel(self, painter, text, point, gap):
+        if not self.showLabels:
+            return
         textWidth = painter.fontMetrics().horizontalAdvance(text) + 20
         pillHeight = 24
         if point.x() < self.width() / 2:
@@ -343,6 +346,7 @@ class MiniMap(QScrollArea):
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setFixedHeight(150)
         self.mountainMap = MountainMap()
+        self.mountainMap.showLabels = False
         self.setWidget(self.mountainMap)
 
     def wheelEvent(self, event):

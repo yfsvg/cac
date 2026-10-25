@@ -67,7 +67,7 @@ STYLE = """
     QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { height: 0; background: none; }
 
     QLabel { color: @onSurface; }
-    QLabel#AppName { color: @primary; font-size: 14px; font-weight: 600; }
+    QLabel#AppName { color: @onSurface; font-size: 15px; font-weight: 800; }
     QLabel#Hello { color: @onPrimaryContainer; font-size: 32px; font-weight: 700; }
 
     QLabel#Section { color: @onSurface; font-size: 22px; font-weight: 600; }
@@ -84,10 +84,10 @@ STYLE = """
 
     QLabel#EmptyText { font-size: 13px; color: @onSurfaceVariant; padding: 4px 0 4px 0; }
 
-    QFrame#Hero { background-color: @primaryContainer; border-radius: 28px; }
-    QFrame#StatCard { border-radius: 24px; }
+    QFrame#Hero { background-color: @primaryContainer; border-radius: 28px; border: 1px solid @cardBorder; }
+    QFrame#StatCard { border-radius: 24px; border: 1px solid @cardBorder; }
 
-    QFrame#TimeCard { background-color: @surfaceContainerLow; border-radius: 24px; }
+    QFrame#TimeCard { background-color: @surfaceContainerLow; border-radius: 24px; border: 1px solid @cardBorder; }
     QLabel#SplitTitle { color: @onSurface; font-size: 15px; font-weight: 600; }
 
     QLabel#RowName { color: @onSurface; font-size: 13px; font-weight: 600; }
@@ -104,7 +104,7 @@ STYLE = """
         font-size: 15px;
         text-align: left;
         background-color: @surfaceContainer;
-        border: none;
+        border: 1px solid @cardBorder;
         border-radius: 16px;
         padding: 12px 16px 12px 40px;
     }
@@ -119,7 +119,7 @@ STYLE = """
     }
     QPushButton#ThemeButton:hover { background-color: @surfaceContainerHighest; }
 
-    QFrame#SessionCard { background-color: @secondaryContainer; border-radius: 20px; }
+    QFrame#SessionCard { background-color: @surfaceContainerLow; border-radius: 20px; border: 1px solid @cardBorder; }
     QLabel#SessionTime { color: @onSecondaryContainer; font-size: 15px; font-weight: 600; }
     QProgressBar#SessionBar { background-color: @surfaceContainerHighest; border: none; border-radius: 3px; }
     QProgressBar#SessionBar::chunk { background-color: @primary; border-radius: 3px; }
