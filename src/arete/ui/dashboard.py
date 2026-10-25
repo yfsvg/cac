@@ -1492,6 +1492,8 @@ class Dashboard(QWidget):
         self.setStyleSheet(applyTheme(STYLE))
         for statCard in self.statCards:
             statCard.restyle()
+        if self.settingsPage is not None:
+            self.settingsPage.restyle()
         self.themeButton.setDark(themeName == "dark", animate=oldLook is not None)
         if oldLook is not None:
             self.fadeOut(oldLook)

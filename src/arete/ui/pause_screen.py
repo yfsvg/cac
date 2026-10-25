@@ -287,7 +287,7 @@ class PauseScreen(QWidget):
 
 # Check in popup when break runs out, ready to bounce back or nah
 
-TREE_REMINDER = "Saying continue won't knock you down the mountain!"
+TREE_REMINDER = "Saying continue won't hurt your climb!"
 
 # diff message each time, loops back around
 CHECK_IN_MESSAGES = [
