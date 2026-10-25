@@ -258,17 +258,22 @@ class MountainMap(QWidget):
         painter.setFont(labelFont)
         mountain = mountains.MOUNTAINS[self.mountainNumber]
         bossesBefore = self.mountainNumber * len(mountains.BOSS_CHECKPOINTS)
+        climberPoint = None
+        if self.mountainNumber == self.state["mountainNumber"]:
+            climberPoint = self.markerPoint()
         for checkpointNumber in range(mountains.CHECKPOINT_COUNT):
             nodePoint = self.onScreen(scene.rings[checkpointNumber])
+            underClimber = climberPoint is not None and (nodePoint.x() - climberPoint.x()) ** 2 + (nodePoint.y() - climberPoint.y()) ** 2 < 24 ** 2
             reached = percentHere >= mountains.checkpointPercent(checkpointNumber) - 0.001
             stageText = mountain["stages"][checkpointNumber][0]
             if checkpointNumber in mountains.BOSS_CHECKPOINTS:
                 bossNumber = bossesBefore + mountains.BOSS_CHECKPOINTS.index(checkpointNumber)
                 isNextBoss = bossNumber == self.state["bossesBeaten"]
-                self.drawBoss(painter, nodePoint, bossNumber < self.state["bossesBeaten"], colors, seconds, isNextBoss)
+                if not underClimber:
+                    self.drawBoss(painter, nodePoint, bossNumber < self.state["bossesBeaten"], colors, seconds, isNextBoss)
                 self.drawLabel(painter, stageText + "  ·  " + bossName(bossNumber), nodePoint, BOSS_RADIUS + 10)
             else:
-                if reached:
+                if reached and not underClimber:
                     self.drawDoneNode(painter, nodePoint, colors)
                 self.drawLabel(painter, stageText, nodePoint, NODE_RADIUS + 10)
 
@@ -442,6 +447,35 @@ class ClimbCard(QFrame):
         self.miniMap.refresh()
 
 
+class MapArrowButton(QPushButton):
+    def __init__(self, direction):
+        super().__init__(objectName="MapArrow", cursor=Qt.CursorShape.PointingHandCursor)
+        self.direction = direction
+        self.setFixedSize(40, 40)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        backColor = QColor(20, 16, 40, 170)
+        if self.underMouse():
+            backColor = QColor(20, 16, 40, 220)
+        painter.setPen(QPen(QColor(255, 255, 255, 120), 1))
+        painter.setBrush(backColor)
+        painter.drawEllipse(QRectF(1, 1, 38, 38))
+        painter.setPen(QPen(QColor("white"), 2.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        middle = QPointF(20 + self.direction * 2, 20)
+        painter.drawLine(QPointF(middle.x() - self.direction * 5, 13), middle)
+        painter.drawLine(QPointF(middle.x() - self.direction * 5, 27), middle)
+
+    def enterEvent(self, event):
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.update()
+        super().leaveEvent(event)
+
+
 class MapHome(QWidget):
     def __init__(self, goBack):
         super().__init__()
@@ -478,8 +512,8 @@ class MapHome(QWidget):
 
         infoCard = QFrame(objectName="ClimbCard")
         infoLayout = QVBoxLayout(infoCard)
-        infoLayout.setContentsMargins(16, 12, 16, 14)
-        infoLayout.setSpacing(6)
+        infoLayout.setContentsMargins(14, 10, 14, 10)
+        infoLayout.setSpacing(4)
         stageRow = QHBoxLayout()
         self.stageLabel = QLabel("", objectName="MapStage")
         stageRow.addWidget(self.stageLabel)
@@ -495,7 +529,6 @@ class MapHome(QWidget):
         self.progressBar.setRange(0, 1000)
         infoLayout.addWidget(self.progressBar)
         self.goalLabel = QLabel("", objectName="MapInfo")
-        self.goalLabel.setWordWrap(True)
         infoLayout.addWidget(self.goalLabel)
         pageLayout.addWidget(infoCard)
 
@@ -507,11 +540,20 @@ class MapHome(QWidget):
         self.scrollArea.setFrameShape(QFrame.Shape.NoFrame)
         self.mountainMap = MountainMap()
         self.scrollArea.setWidget(self.mountainMap)
+        self.leftArrow = MapArrowButton(-1)
+        self.leftArrow.setParent(self.mapFrame)
+        self.leftArrow.clicked.connect(lambda: self.switchMountain(self.viewedMountain - 1))
+        self.rightArrow = MapArrowButton(1)
+        self.rightArrow.setParent(self.mapFrame)
+        self.rightArrow.clicked.connect(lambda: self.switchMountain(self.viewedMountain + 1))
         self.needsFirstScroll = True
         self.switchMountain(self.viewedMountain, False)
 
     def placeMap(self):
         self.scrollArea.setGeometry(0, 0, self.mapFrame.width(), self.mapFrame.height())
+        arrowY = self.mapFrame.height() // 2 - 20
+        self.leftArrow.move(10, arrowY)
+        self.rightArrow.move(self.mapFrame.width() - 50, arrowY)
         roundedShape = QPainterPath()
         roundedShape.addRoundedRect(QRectF(self.mapFrame.rect()), 24, 24)
         self.mapFrame.setMask(QRegion(roundedShape.toFillPolygon().toPolygon()))
@@ -545,19 +587,16 @@ class MapHome(QWidget):
         animations.animateValue(self.progressBar.value(), int(percent * 10), lambda value: self.progressBar.setValue(int(value)), 700)
         if self.viewedMountain > state["mountainNumber"]:
             self.percentLabel.setText("Locked")
-            self.goalLabel.setText("Reach the top of " + mountains.MOUNTAINS[self.viewedMountain - 1]["name"] + " and beat its boss to start this mountain.")
+            self.goalLabel.setText("Beat " + mountains.MOUNTAINS[self.viewedMountain - 1]["shortName"] + " to unlock this mountain")
         elif self.viewedMountain < state["mountainNumber"]:
-            self.goalLabel.setText("You climbed this whole mountain. Nice work.")
+            self.goalLabel.setText("You climbed this whole mountain")
         elif state["finished"]:
-            self.goalLabel.setText("You climbed all three mountains. Legendary.")
+            self.goalLabel.setText("You climbed all three mountains")
         elif state["atBoss"]:
-            self.goalLabel.setText(bossName(state["bossesBeaten"]) + " is blocking the trail. Beat it after your next focus session.")
+            self.goalLabel.setText(bossName(state["bossesBeaten"]) + " is blocking the trail")
         elif state["nextBoss"] is not None:
-            stageMessage = mountain["startMessage"]
-            if stageNumber >= 0:
-                stageMessage = mountain["stages"][stageNumber][1]
             bossDistance = percentText(state["nextBoss"] - state["totalPercent"])
-            self.goalLabel.setText(bossDistance + "% to " + bossName(state["bossesBeaten"]) + ". " + stageMessage)
+            self.goalLabel.setText(bossDistance + "% to " + bossName(state["bossesBeaten"]))
 
     def switchMountain(self, mountainNumber, animate=True):
         if animate and self.mapFrame.width() > 0:
@@ -570,6 +609,10 @@ class MapHome(QWidget):
         self.viewedMountain = mountainNumber
         self.mountainMap.showMountain(mountainNumber)
         self.titleLabel.setText(mountains.MOUNTAINS[mountainNumber]["name"])
+        self.leftArrow.setVisible(mountainNumber > 0)
+        self.rightArrow.setVisible(mountainNumber < len(mountains.MOUNTAINS) - 1)
+        self.leftArrow.raise_()
+        self.rightArrow.raise_()
         self.updateInfo()
         state = climbing.climbState()
         for tabNumber in range(len(self.tabs)):

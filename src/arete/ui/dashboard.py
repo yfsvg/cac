@@ -120,10 +120,10 @@ STYLE = """
     }
     QPushButton#ThemeButton:hover { background-color: @surfaceContainerHighest; }
 
-    QFrame#SessionCard { background-color: @surfaceContainerLow; border-radius: 20px; border: 1px solid @cardBorder; }
-    QLabel#SessionTime { color: @onSecondaryContainer; font-size: 15px; font-weight: 600; }
-    QProgressBar#SessionBar { background-color: @surfaceContainerHighest; border: none; border-radius: 3px; }
-    QProgressBar#SessionBar::chunk { background-color: @primary; border-radius: 3px; }
+    QFrame#SessionCard { background-color: @surfaceContainerLow; border-radius: 14px; border: 1px solid @cardBorder; }
+    QLabel#SessionTime { color: @onSurface; font-size: 12px; font-weight: 700; }
+    QProgressBar#SessionBar { background-color: @surfaceContainerHighest; border: none; border-radius: 2px; }
+    QProgressBar#SessionBar::chunk { background-color: @primary; border-radius: 2px; }
 """ + CLIMB_STYLE
 
 DOT_NAMES = {
@@ -767,6 +767,9 @@ class Dashboard(QWidget):
         topRow.setContentsMargins(20, 10, 20, 0)
         topRow.addWidget(AppNameLabel())
         topRow.addStretch()
+        self.sessionCard = SessionCard()
+        topRow.addWidget(self.sessionCard)
+        topRow.addStretch()
 
         self.themeButton = ThemeToggle(getTheme() == "dark")
         self.themeButton.clicked.connect(self.toggleTheme)
@@ -776,12 +779,6 @@ class Dashboard(QWidget):
         self.settingsButton.clicked.connect(self.openSettings)
         topRow.addWidget(self.settingsButton)
         mainLayout.addLayout(topRow)
-
-        self.sessionCard = SessionCard()
-        sessionRow = QHBoxLayout()
-        sessionRow.setContentsMargins(20, 8, 26, 0)
-        sessionRow.addWidget(self.sessionCard)
-        mainLayout.addLayout(sessionRow)
 
 
 

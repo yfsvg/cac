@@ -159,14 +159,16 @@ class SessionPrompt(QWidget):
 class SessionCard(QFrame):
     def __init__(self):
         super().__init__(objectName="SessionCard")
+        self.setFixedWidth(180)
         cardLayout = QVBoxLayout(self)
-        cardLayout.setContentsMargins(20, 12, 20, 14)
-        cardLayout.setSpacing(8)
+        cardLayout.setContentsMargins(12, 6, 12, 8)
+        cardLayout.setSpacing(4)
         self.timeLabel = QLabel("Focus session", objectName="SessionTime")
+        self.timeLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
         cardLayout.addWidget(self.timeLabel)
         self.progressBar = QProgressBar(objectName="SessionBar")
         self.progressBar.setTextVisible(False)
-        self.progressBar.setFixedHeight(6)
+        self.progressBar.setFixedHeight(4)
         cardLayout.addWidget(self.progressBar)
         self.totalSeconds = 1
         self.hide()
@@ -177,7 +179,7 @@ class SessionCard(QFrame):
         self.show()
 
     def updateTime(self, secondsLeft):
-        self.timeLabel.setText("Focus session: " + session.timeLeftText(secondsLeft))
+        self.timeLabel.setText("Focus  " + session.timeLeftText(secondsLeft))
         self.progressBar.setRange(0, self.totalSeconds)
         self.progressBar.setValue(secondsLeft)
 
