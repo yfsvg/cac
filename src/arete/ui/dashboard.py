@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QScrollBar,
     QSizePolicy,
     QStackedWidget,
     QStyle,
@@ -62,20 +63,7 @@ STYLE = """
     }
 
     QScrollArea, QWidget#Content { background: transparent; border: none; }
-    QScrollBar:vertical {
-        background: @surfaceContainerHigh;
-        width: 12px;
-        margin: 6px 2px 6px 0;
-        border: 1px solid @cardBorder;
-        border-radius: 6px;
-    }
-    QScrollBar::handle:vertical {
-        background: @primary;
-        border-bottom: 3px solid @primaryShadow;
-        border-radius: 5px;
-        min-height: 44px;
-    }
-    QScrollBar::handle:vertical:hover { background: @primaryHover; }
+    QScrollBar:vertical { background: transparent; width: 14px; }
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
     QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { height: 0; background: none; }
 
@@ -155,7 +143,43 @@ STAT_ICONS = ["target", "clock", "bounce"]
 
 # small widgets, labels + stat cards
 
+class RoundScrollBar(QScrollBar):
+    def __init__(self) -> None:
+        super().__init__(Qt.Orientation.Vertical)
+        self.setFixedWidth(14)
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        colors = getColors()
+        trackRect = QRectF(self.rect()).adjusted(3, 6, -3, -6)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(colors["surfaceContainerHigh"]))
+        painter.drawRoundedRect(trackRect, trackRect.width() / 2, trackRect.width() / 2)
+        if self.maximum() <= self.minimum():
+            return
+        visibleShare = self.pageStep() / (self.maximum() - self.minimum() + self.pageStep())
+        handleHeight = max(trackRect.height() * visibleShare, 40)
+        movedShare = (self.value() - self.minimum()) / (self.maximum() - self.minimum())
+        handleTop = trackRect.top() + (trackRect.height() - handleHeight) * movedShare
+        handleRect = QRectF(trackRect.left(), handleTop, trackRect.width(), handleHeight)
+        handleColor = QColor(colors["primary"])
+        if self.underMouse() or self.isSliderDown():
+            handleColor = QColor(colors["primaryHover"])
+        painter.setBrush(handleColor)
+        painter.drawRoundedRect(handleRect, handleRect.width() / 2, handleRect.width() / 2)
+
+    def enterEvent(self, event) -> None:
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self.update()
+        super().leaveEvent(event)
+
+
 def stopSideScrolling(scrollArea) -> None:
+    scrollArea.setVerticalScrollBar(RoundScrollBar())
     scrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
     sideBar = scrollArea.horizontalScrollBar()
     sideBar.rangeChanged.connect(lambda lowest, highest: sideBar.setRange(0, 0) if highest > 0 else None)

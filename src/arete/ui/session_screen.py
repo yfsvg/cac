@@ -1,5 +1,5 @@
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFontDatabase
+from PySide6.QtGui import QFont, QFontDatabase, QFontMetrics
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -48,12 +48,12 @@ QLabel#PanelHint { color: @onSurfaceVariant; font-size: 13px; }
 QLabel#PanelClock { color: @primary; font-size: 30px; font-weight: 800; }
 QPushButton#LengthChip {
     color: @onSurfaceVariant;
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 12px;
+    font-weight: 700;
     background-color: @surfaceContainerHigh;
     border: 1px solid @cardBorder;
     border-radius: 14px;
-    padding: 7px 10px;
+    padding: 7px 0px;
 }
 QPushButton#LengthChip:hover { background-color: @surfaceContainerHighest; }
 QPushButton#LengthChip:checked { color: @onPrimary; background-color: @primary; border: 1px solid @primary; }
@@ -130,7 +130,10 @@ class SessionPanel(QFrame):
             chip = QPushButton(chipName, objectName="LengthChip", cursor=Qt.CursorShape.PointingHandCursor)
             chip.setCheckable(True)
             chip.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
-            chip.setMinimumWidth(40)
+            chipFont = QFont(chip.font())
+            chipFont.setPixelSize(12)
+            chipFont.setBold(True)
+            chip.setMinimumWidth(QFontMetrics(chipFont).horizontalAdvance(chipName) + 16)
             chip.clicked.connect(lambda checked=False, m=chipMinutes, c=chip: self.pickLength(m, c))
             chipLayout.addWidget(chip)
             self.chips.append(chip)
