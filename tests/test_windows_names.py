@@ -7,7 +7,7 @@ import pytest
 if sys.platform != "win32":
     pytest.skip("Windows backend", allow_module_level=True)
 
-from focusguard.platform.windows import _tidy_description
+from arete.platform.windows import _tidy_description
 
 
 @pytest.mark.parametrize(

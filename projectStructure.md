@@ -4,7 +4,7 @@
 cac/
 ├── readme
 ├── pyproject.toml
-├── src/focusguard/
+├── src/arete/
 │   ├── core/                  # 100% portable
 │   │   ├── scheduler.py       # random-interval check loop (~2 min with jitter)
 │   │   ├── policy.py          # schedule blocks, "is this allowed right now?" logic

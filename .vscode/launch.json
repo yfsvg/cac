@@ -5,13 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "focusguard",
+            "name": "arete",
             "type": "debugpy",
             "request": "launch",
-            "module": "focusguard",
+            "module": "arete",
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
-            "preLaunchTask": "setup focusguard",
+            "preLaunchTask": "setup arete",
 
 
             "python": "${workspaceFolder}/.venv/bin/python",

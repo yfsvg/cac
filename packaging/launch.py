@@ -1,3 +1,3 @@
-from focusguard.__main__ import main
+from arete.__main__ import main
 
 main()

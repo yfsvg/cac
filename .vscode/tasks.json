@@ -2,7 +2,7 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "setup focusguard",
+            "label": "setup arete",
             "type": "shell",
             "command": "python3",
             "windows": {

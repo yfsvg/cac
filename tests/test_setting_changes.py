@@ -3,8 +3,8 @@
 
 import pytest
 
-from focusguard.core import setting_changes
-from focusguard.storage import memory
+from arete.core import setting_changes
+from arete.storage import memory
 
 
 class FakeClock:

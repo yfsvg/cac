@@ -1,0 +1,169 @@
+from __future__ import annotations
+import logging
+import os
+import signal
+import subprocess
+import sys
+import time
+
+import psutil
+from PySide6.QtCore import QCoreApplication, QTimer
+
+from arete.core.debug_mode import isDebugMode
+from arete.platform import get_backend
+from arete.storage.memory import dataDirectory
+
+log = logging.getLogger(__name__)
+
+# helper = little 2nd process that reopens us if we get killed
+helper = None
+helperTimer = None
+
+
+# launch commands, frozen = packaged app not python -m
+
+def isFrozen() -> bool:
+    return getattr(sys, "frozen", False)
+
+
+def pythonPath() -> str:
+    if sys.platform == "win32":
+        return os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+    return sys.executable
+
+
+def appCommand() -> list:
+    if isFrozen():
+        return [sys.executable]
+    return [pythonPath(), "-m", "arete"]
+
+
+def helperCommand(appPid: int) -> list:
+    if isFrozen():
+        return [sys.executable, "--keep-alive", str(appPid)]
+    return [pythonPath(), "-m", "arete.core.keep_alive", str(appPid)]
+
+
+# detached process so killing us doesnt kill it
+def startInBackground(command: list):
+    if sys.platform == "win32":
+        flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+        return subprocess.Popen(command, creationflags=flags)
+    return subprocess.Popen(
+        command,
+        start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+
+
+
+# harder to close on impulse
+
+def stopCtrlC() -> None:
+    if isDebugMode():
+        return
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    if sys.platform != "win32":
+        signal.signal(signal.SIGHUP, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+
+
+def quitOnCtrlC() -> None:
+    if isDebugMode():
+        signal.signal(signal.SIGINT, lambda signalNumber, frame: QCoreApplication.quit())
+
+
+def makeSureIsAdmin() -> None:
+    if isDebugMode():
+        return
+    backend = get_backend()
+    if backend.is_admin():
+        return
+    if backend.run_as_admin(appCommand() + sys.argv[1:]):
+        sys.exit(0)
+    log.warning("Arete needs administrator rights to run, closing")
+    sys.exit(1)
+
+
+
+
+
+# Startup - relaunch w/o terminal, only one copy ever
+
+def startedFromTerminal() -> bool:
+    if isFrozen():
+        return False
+    if sys.platform == "win32":
+        return not sys.executable.lower().endswith("pythonw.exe")
+    return sys.stdin is not None and sys.stdin.isatty()
+
+
+def runWithoutTerminal() -> None:
+    if isDebugMode() or not startedFromTerminal():
+        return
+    startInBackground(appCommand())
+    sys.exit(0)
+
+
+def alreadyRunning() -> bool:
+    pidFile = dataDirectory() / "running.pid"
+    try:
+        otherPid = int(pidFile.read_text())
+    except (OSError, ValueError):
+        otherPid = 0
+    # already running if saved pid is alive and its not the keep alive helper
+    if otherPid != 0 and otherPid != os.getpid() and psutil.pid_exists(otherPid):
+        try:
+            otherCommand = " ".join(psutil.Process(otherPid).cmdline()).lower()
+        except psutil.Error:
+            otherCommand = ""
+        if "arete" in otherCommand and "keep_alive" not in otherCommand and "--keep-alive" not in otherCommand:
+            return True
+    pidFile.parent.mkdir(parents=True, exist_ok=True)
+    pidFile.write_text(str(os.getpid()))
+    return False
+
+
+
+
+
+# keep alive helper. we watch it, it watches us
+
+def startHelper() -> None:
+    global helper, helperTimer
+    if isDebugMode():
+        return
+    helper = startInBackground(helperCommand(os.getpid()))
+    if helperTimer is None:
+        helperTimer = QTimer()
+        helperTimer.timeout.connect(checkHelper)
+        helperTimer.start(2000)
+
+
+def checkHelper() -> None:
+    if helper is not None and helper.poll() is not None:
+        startHelper()
+
+
+def stopHelper() -> None:
+    if helperTimer is not None:
+        helperTimer.stop()
+    if helper is not None:
+        helper.kill()
+
+
+# runs in the helper, reopens arete as soon as its gone
+def helperLoop(appPid: int) -> None:
+    while True:
+        time.sleep(2)
+        if not psutil.pid_exists(appPid):
+            startInBackground(appCommand())
+            return
+
+
+if __name__ == "__main__":
+    helperLoop(int(sys.argv[1]))

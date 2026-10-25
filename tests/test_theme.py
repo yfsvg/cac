@@ -2,7 +2,7 @@
 
 import pytest
 
-from focusguard.ui.theme import choiceFor, resolveTheme
+from arete.ui.theme import choiceFor, resolveTheme
 
 
 @pytest.mark.parametrize(

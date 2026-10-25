@@ -17,11 +17,11 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact: FocusGuard-windows
-            file: dist/FocusGuard.exe
+            artifact: Arete-windows
+            file: dist/Arete.exe
           - os: macos-latest # Apple Silicon
-            artifact: FocusGuard-macos
-            file: dist/FocusGuard-macos.zip
+            artifact: Arete-macos
+            file: dist/Arete-macos.zip
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -39,12 +39,12 @@ jobs:
         run: python -m pytest -q
 
       - name: Build
-        run: pyinstaller packaging/focusguard.spec --noconfirm
+        run: pyinstaller packaging/arete.spec --noconfirm
 
       # ditto keeps the symlinks inside the Qt frameworks that a plain zip would break.
       - name: Zip app bundle
         if: runner.os == 'macOS'
-        run: ditto -c -k --keepParent dist/FocusGuard.app dist/FocusGuard-macos.zip
+        run: ditto -c -k --keepParent dist/Arete.app dist/Arete-macos.zip
 
       - uses: actions/upload-artifact@v7
         with:

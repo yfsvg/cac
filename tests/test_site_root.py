@@ -2,7 +2,7 @@
 
 import pytest
 
-from focusguard.core.classifier import siteRoot
+from arete.core.classifier import siteRoot
 
 
 @pytest.mark.parametrize(

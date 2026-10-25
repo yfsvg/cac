@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from focusguard.storage import memory, parent_pin
+from arete.storage import memory, parent_pin
 
 
 @pytest.fixture(autouse=True)

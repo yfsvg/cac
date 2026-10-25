@@ -2,8 +2,8 @@
 
 import pytest
 
-from focusguard.core.classifier import isIgnoredApp
-from focusguard.core.models import ActiveWindow
+from arete.core.classifier import isIgnoredApp
+from arete.core.models import ActiveWindow
 
 
 @pytest.mark.parametrize(
@@ -12,7 +12,7 @@ from focusguard.core.models import ActiveWindow
         ("explorer.exe", True),
         ("ShellExperienceHost.exe", True),
         ("SnippingTool.exe", True),
-        ("focusguard.exe", True),
+        ("arete.exe", True),
         ("com.apple.finder", True),
         ("discord.exe", False),
         ("chrome.exe", False),
