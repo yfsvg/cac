@@ -11,7 +11,7 @@
 import os
 import threading
 import time
-from datetime import date
+from datetime import date, timedelta
 
 from PySide6.QtCore import QEasingCurve, QPointF, QPropertyAnimation, QRectF, Qt, QTimer, QVariantAnimation
 from PySide6.QtWidgets import (
@@ -42,14 +42,6 @@ from focusguard.ui.pause_screen import BreakBadge, CheckInScreen, PauseScreen
 from focusguard.ui.theme import applyTheme, choiceFor, getColors, getTheme, resolveTheme, setTheme, systemTheme
 from focusguard.platform import get_backend
 
-
-# Placeholder text for every dropdown until the real stuff exists
-
-LOREM = (
-    "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor "
-    "incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud "
-    "exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
-)
 
 # Status chip text colours (theme tokens)
 GOOD = "@green"
@@ -86,14 +78,21 @@ STYLE = """
         padding: 3px 10px;
     }
 
-    QLabel#DropdownBody { font-size: 13px; color: @onSurfaceVariant; padding: 4px 16px 8px 16px; }
+    QLabel#EmptyText { font-size: 13px; color: @onSurfaceVariant; padding: 4px 0 4px 0; }
 
     QFrame#Hero { background-color: @primaryContainer; border-radius: 28px; }
     QFrame#StatCard { border-radius: 24px; }
 
     QFrame#TimeCard { background-color: @surfaceContainerLow; border-radius: 24px; }
     QLabel#SplitTitle { color: @onSurface; font-size: 15px; font-weight: 600; }
-    QLabel#SplitLegend { color: @onSurface; font-size: 13px; }
+
+    QLabel#RowName { color: @onSurface; font-size: 13px; font-weight: 600; }
+    QLabel#RowKind { color: @onSurfaceVariant; font-size: 12px; }
+    QLabel#RowTime { color: @onSurface; font-size: 13px; }
+    QLabel#DotNeutral { background-color: @secondary; border-radius: 5px; }
+    QLabel#DotBrowser { background-color: @blue; border-radius: 5px; }
+    QLabel#DotUnproductive { background-color: @error; border-radius: 5px; }
+    QLabel#DotProductive { background-color: @green; border-radius: 5px; }
 
 
     QPushButton#DropdownHeader {
@@ -103,7 +102,7 @@ STYLE = """
         background-color: @surfaceContainer;
         border: none;
         border-radius: 16px;
-        padding: 12px 16px;
+        padding: 12px 16px 12px 40px;
     }
     QPushButton#DropdownHeader:hover { background-color: @surfaceContainerHigh; }
 
@@ -117,9 +116,14 @@ STYLE = """
     QPushButton#ThemeButton:hover { background-color: @surfaceContainerHighest; }
 """
 
-# Dot colour per app kind in the time list
-KIND_COLORS = {"browser": "blue", "unproductive": "error", "neutral": "secondary"}
+DOT_NAMES = {
+    "neutral": "DotNeutral",
+    "browser": "DotBrowser",
+    "unproductive": "DotUnproductive",
+    "productive": "DotProductive",
+}
 
+MAX_NAME_LENGTH = 30
 
 
 def label(text: str, name: str, align: Qt.AlignmentFlag = Qt.AlignmentFlag.AlignLeft) -> QLabel:
@@ -209,8 +213,6 @@ def numberText(value):
     return str(value)
 
 
-# Chevron header that opens/closes a paragraph underneath. No real content yet
-
 def isSiteName(name):
     return "." in name and " " not in name
 
@@ -221,6 +223,23 @@ def durationText(seconds):
     if hours > 0:
         return str(hours) + "h " + str(minutes) + "m"
     return str(minutes) + "m " + str(seconds % 60) + "s"
+
+
+def dayText(dayName, today):
+    dayDate = date.fromisoformat(dayName)
+    if dayDate == today:
+        return "Today"
+    if dayDate == today - timedelta(days=1):
+        return "Yesterday"
+    return dayDate.strftime("%a %b ") + str(dayDate.day)
+
+
+def shownRows(rows, limit):
+    sortedRows = sorted(rows, key=lambda row: -row[3])
+    returnVal = []
+    for name, kindText, dotKind, seconds in sortedRows[:limit]:
+        returnVal.append((name, kindText, dotKind, durationText(seconds)))
+    return returnVal
 
 
 class SplitBar(QWidget):
@@ -253,17 +272,110 @@ class SplitBar(QWidget):
             painter.fillRect(productiveWidth - 1, 0, 2, self.height(), QColor(colors["surfaceContainerLow"]))
 
 
+class TimeRow(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        rowLayout = QHBoxLayout(self)
+        rowLayout.setContentsMargins(0, 4, 0, 4)
+        rowLayout.setSpacing(8)
+
+        self.dotKind = "neutral"
+        self.dot = QLabel(objectName=DOT_NAMES[self.dotKind])
+        self.dot.setFixedSize(10, 10)
+        self.nameLabel = QLabel(objectName="RowName")
+        self.kindLabel = QLabel(objectName="RowKind")
+        self.timeLabel = QLabel(objectName="RowTime", alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        for rowLabel in (self.nameLabel, self.kindLabel, self.timeLabel):
+            rowLabel.setTextFormat(Qt.TextFormat.PlainText)
+
+        rowLayout.addWidget(self.dot, alignment=Qt.AlignmentFlag.AlignVCenter)
+        rowLayout.addWidget(self.nameLabel)
+        rowLayout.addWidget(self.kindLabel)
+        rowLayout.addStretch()
+        rowLayout.addWidget(self.timeLabel)
+
+    def setRow(self, name: str, kindText: str, dotKind: str, timeText: str) -> None:
+        shownName = name
+        if len(name) > MAX_NAME_LENGTH:
+            shownName = name[:MAX_NAME_LENGTH - 3] + "..."
+        self.nameLabel.setText(shownName)
+        self.kindLabel.setText(kindText)
+        self.timeLabel.setText(timeText)
+        if dotKind != self.dotKind:
+            self.dotKind = dotKind
+            self.dot.setObjectName(DOT_NAMES[dotKind])
+            self.dot.style().unpolish(self.dot)
+            self.dot.style().polish(self.dot)
+
+
+class TimeList(QWidget):
+    def __init__(self, emptyText: str) -> None:
+        super().__init__()
+        self.listLayout = QVBoxLayout(self)
+        self.listLayout.setContentsMargins(16, 4, 16, 8)
+        self.listLayout.setSpacing(0)
+
+        self.emptyLabel = QLabel(emptyText, objectName="EmptyText")
+        self.emptyLabel.setTextFormat(Qt.TextFormat.PlainText)
+        self.emptyLabel.setIndent(0)
+        self.listLayout.addWidget(self.emptyLabel)
+        self.timeRows = []
+
+    def setRows(self, rows: list[tuple[str, str, str, str]]) -> None:
+        self.emptyLabel.setVisible(len(rows) == 0)
+        while len(self.timeRows) < len(rows):
+            newRow = TimeRow()
+            self.listLayout.addWidget(newRow)
+            self.timeRows.append(newRow)
+
+        for rowNumber in range(len(self.timeRows)):
+            timeRow = self.timeRows[rowNumber]
+            if rowNumber >= len(rows):
+                if not timeRow.isHidden():
+                    timeRow.hide()
+                continue
+            if timeRow.isHidden():
+                timeRow.show()
+            name, kindText, dotKind, timeText = rows[rowNumber]
+            timeRow.setRow(name, kindText, dotKind, timeText)
+
+
+class DropdownHeader(QPushButton):
+    def __init__(self) -> None:
+        super().__init__(objectName="DropdownHeader", cursor=Qt.CursorShape.PointingHandCursor)
+        self.isOpen = False
+
+    def setOpen(self, isOpen: bool) -> None:
+        if isOpen != self.isOpen:
+            self.isOpen = isOpen
+            self.update()
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.translate(24, self.height() / 2)
+        if self.isOpen:
+            painter.rotate(90)
+        chevronPen = QPen(QColor(getColors()["onSurface"]), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(chevronPen)
+        painter.drawLine(QPointF(-2, -4), QPointF(2, 0))
+        painter.drawLine(QPointF(2, 0), QPointF(-2, 4))
+
+
 class Dropdown(QWidget):
-    def __init__(self, title: str) -> None:
+    def __init__(self, title: str, body=None) -> None:
         super().__init__()
         self.title = title
         dropdownLayout = QVBoxLayout(self)
         dropdownLayout.setContentsMargins(0, 0, 0, 0)
         dropdownLayout.setSpacing(4)
 
-        self.header = QPushButton(objectName="DropdownHeader", cursor=Qt.CursorShape.PointingHandCursor)
+        self.header = DropdownHeader()
         self.header.clicked.connect(self.toggle)
-        self.body = label(LOREM, "DropdownBody")
+        if body is None:
+            body = QWidget()
+        self.body = body
         self.body.hide()
 
         dropdownLayout.addWidget(self.header)
@@ -271,14 +383,12 @@ class Dropdown(QWidget):
         self.updateHeader()
 
     def toggle(self) -> None:
-        self.body.setVisible(not self.body.isVisible())
+        self.body.setVisible(self.body.isHidden())
         self.updateHeader()
 
     def updateHeader(self) -> None:
-        chevron = "›"
-        if self.body.isVisible():
-            chevron = "⌄"
-        self.header.setText(f" {chevron}   {self.title}")
+        self.header.setText(self.title)
+        self.header.setOpen(not self.body.isHidden())
 
 
 
@@ -472,7 +582,8 @@ class Dashboard(QWidget):
             ("–", "Average rebounding speed", "No data yet", NO_DATA),
         ]))
         self.todayCards = self.statCards[-3:]
-        layout.addWidget(Dropdown("Show more stats"))
+        self.todayList = TimeList("Nothing tracked yet")
+        layout.addWidget(Dropdown("Show more stats", self.todayList))
         layout.addSpacing(8)
 
         layout.addWidget(label("Weekly Stats", "Section"))
@@ -482,7 +593,8 @@ class Dashboard(QWidget):
             ("–", "Average rebounding speed", "No data yet", NO_DATA),
         ]))
         self.weekCards = self.statCards[-3:]
-        layout.addWidget(Dropdown("Show more stats"))
+        self.weekList = TimeList("Nothing tracked yet")
+        layout.addWidget(Dropdown("Show more stats", self.weekList))
         layout.addSpacing(8)
 
 
@@ -530,16 +642,15 @@ class Dashboard(QWidget):
         timeCardLayout.addWidget(self.timeList)
         self.splitTitle = label("Productive vs unproductive", "SplitTitle")
         self.splitBar = SplitBar()
-        self.splitLegend = label("", "SplitLegend")
-        self.splitLegend.setTextFormat(Qt.TextFormat.RichText)
+        self.splitLegend = TimeList("")
+        self.splitLegend.listLayout.setContentsMargins(0, 0, 0, 0)
         for splitPart in (self.splitTitle, self.splitBar, self.splitLegend):
             splitPart.hide()
             timeCardLayout.addWidget(splitPart)
         timeCardLayout.addSpacing(4)
-        self.appsDropdown = Dropdown("Apps")
-        self.sitesDropdown = Dropdown("Websites")
+        self.appsDropdown = Dropdown("Apps", TimeList(""))
+        self.sitesDropdown = Dropdown("Websites", TimeList(""))
         for timeDropdown in (self.appsDropdown, self.sitesDropdown):
-            timeDropdown.body.setTextFormat(Qt.TextFormat.RichText)
             timeDropdown.hide()
             timeCardLayout.addWidget(timeDropdown)
         layout.addWidget(timeCard)
@@ -677,6 +788,7 @@ class Dashboard(QWidget):
         self.timeList.show()
         for timePart in (self.splitTitle, self.splitBar, self.splitLegend, self.appsDropdown, self.sitesDropdown):
             timePart.hide()
+        self.todayList.setRows([])
         self.refreshStats()
 
 
@@ -698,6 +810,35 @@ class Dashboard(QWidget):
         weekHours = memory.hoursProductive(weekTimes)
         weekRebound = memory.averageRebound(allRebounds, memory.lastSevenDays(today))
         self.setCardRow(self.weekCards, weekPercent, weekHours, weekRebound, 15)
+        self.fillWeekList(today)
+
+    def fillWeekList(self, today) -> None:
+        allDays = time_tracking.loadAllDays()
+        weekRows = []
+        hasTime = False
+        for dayName in memory.lastSevenDays(today):
+            if dayName == today.isoformat():
+                dayTimes = self.trackedTimes
+            else:
+                dayTimes = time_tracking.dayTimes(allDays.get(dayName, {}))
+            productiveSeconds = memory.focusedSeconds(dayTimes)
+            unproductiveSeconds = memory.unproductiveSeconds(dayTimes)
+            if productiveSeconds + unproductiveSeconds == 0:
+                weekRows.append((dayText(dayName, today), "Nothing tracked", "neutral", ""))
+                continue
+            hasTime = True
+            dotKind = "productive"
+            if unproductiveSeconds > productiveSeconds:
+                dotKind = "unproductive"
+            weekRows.append((
+                dayText(dayName, today),
+                durationText(productiveSeconds) + " productive",
+                dotKind,
+                durationText(unproductiveSeconds) + " unproductive",
+            ))
+        if not hasTime:
+            weekRows = []
+        self.weekList.setRows(weekRows)
 
     def setCardRow(self, cards, percent, hours, averageBreaks, goodHours) -> None:
         focusedText, focusedColor = focusedStatus(percent)
@@ -726,18 +867,17 @@ class Dashboard(QWidget):
                 siteRows.append((name, siteKind, rowKind, seconds))
             else:
                 appRows.append((name, rowKind, rowKind, seconds))
+        self.todayList.setRows(shownRows(appRows + siteRows, 5))
         if productiveSeconds + unproductiveSeconds == 0:
             return
         self.timeList.hide()
         self.splitBar.setTimes(productiveSeconds, unproductiveSeconds)
-        colors = getColors()
         totalSeconds = productiveSeconds + unproductiveSeconds
         productivePercent = round(100 * productiveSeconds / totalSeconds)
-        self.splitLegend.setText(
-            "<span style='color:" + colors["green"] + ";'>●</span> Productive <b>" + durationText(productiveSeconds) + "</b>"
-            + "&nbsp;&nbsp;&nbsp;<span style='color:" + colors["error"] + ";'>●</span> Unproductive <b>" + durationText(unproductiveSeconds) + "</b>"
-            + "&nbsp;&nbsp;&nbsp;<span style='color:" + colors["onSurfaceVariant"] + ";'>" + str(productivePercent) + "% productive</span>"
-        )
+        self.splitLegend.setRows([
+            ("Productive", str(productivePercent) + "%", "productive", durationText(productiveSeconds)),
+            ("Unproductive", str(100 - productivePercent) + "%", "unproductive", durationText(unproductiveSeconds)),
+        ])
         for splitPart in (self.splitTitle, self.splitBar, self.splitLegend):
             splitPart.show()
         self.fillTimeDropdown(self.appsDropdown, "Apps", appRows)
@@ -750,17 +890,7 @@ class Dashboard(QWidget):
         timeDropdown.title = title + "   " + durationText(totalSeconds)
         timeDropdown.updateHeader()
         timeDropdown.setVisible(len(rows) > 0)
-        colors = getColors()
-        sortedRows = sorted(rows, key=lambda row: -row[3])
-        timeRows = []
-        for name, kindText, colorKind, seconds in sortedRows:
-            dotColor = colors[KIND_COLORS[colorKind]]
-            timeRows.append(
-                f"<tr><td width='18' style='color:{dotColor}; font-size:14px;'>●</td>"
-                f"<td width='100%' style='padding-left:4px; color:{colors['onSurface']};'><b>{name}</b> <span style='color:{colors['onSurfaceVariant']};'>{kindText}</span></td>"
-                f"<td style='padding-left:16px; color:{colors['onSurface']};' align='right' nowrap>{durationText(seconds)}</td></tr>"
-            )
-        timeDropdown.body.setText("<table width='100%' cellspacing='0' cellpadding='3'>" + "".join(timeRows) + "</table>")
+        timeDropdown.body.setRows(shownRows(rows, len(rows)))
 
 
 
@@ -805,7 +935,6 @@ class Dashboard(QWidget):
         self.setStyleSheet(applyTheme(STYLE))
         for statCard in self.statCards:
             statCard.restyle()
-        self.showTimes()
         self.themeButton.setDark(themeName == "dark", animate=oldLook is not None)
         if oldLook is not None:
             self.fadeOut(oldLook)
