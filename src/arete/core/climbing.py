@@ -77,7 +77,8 @@ def changeClimb(amount, reason):
         newPercent = lowestPercent(bossesBeaten)
     changedBy = round(newPercent - oldPercent, 2)
     savedMemory["climbPercent"] = newPercent
-    savedMemory["lastClimbChange"] = {"amount": changedBy, "reason": reason, "time": time.time()}
+    if changedBy != 0:
+        savedMemory["lastClimbChange"] = {"amount": changedBy, "reason": reason, "time": time.time()}
     memory.save(savedMemory)
     return changedBy
 
