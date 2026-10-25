@@ -31,7 +31,7 @@ COLORS = {
 
     # surfaces
     "surface": "#EEF7FF",
-    "surfaceContainerLow": "#FFFFFF",
+    "surfaceContainerLow": "#DEFFFFFF",
     "surfaceContainer": "#F6FBFF",
     "surfaceContainerHigh": "#E8F3FC",
     "surfaceContainerHighest": "#D5E7F5",
@@ -81,7 +81,7 @@ DARK = {
     "blue": "#8CC4FF",
 
     "surface": "#140F30",
-    "surfaceContainerLow": "#1E1844",
+    "surfaceContainerLow": "#D71E1844",
     "surfaceContainer": "#251E50",
     "surfaceContainerHigh": "#2D255D",
     "surfaceContainerHighest": "#372E6B",
