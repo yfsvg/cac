@@ -36,7 +36,7 @@ from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPainter, QPai
 from focusguard.ai import vision
 from focusguard.ai.site_memory import siteCategory
 from focusguard.core.classifier import classifyTypeOfApp, isIgnoredApp, isUnproductiveSite, siteRoot
-from focusguard.core import enforcement, keep_alive, ranked, setting_changes
+from focusguard.core import enforcement, keep_alive, setting_changes
 from focusguard.core.enforcement import Enforcer
 from focusguard.storage import memory, time_tracking
 from focusguard.ui import animations
@@ -913,14 +913,12 @@ class Dashboard(QWidget):
             self.checkUnknownSite(window, site)
         self.trackedTimes[timeKey] = self.trackedTimes.get(timeKey, 0) + 1
         self.usedSeconds[appName] = self.usedSeconds.get(appName, 0) + 1
-        self.countRankedTime(appKind, onBreakRightNow)
 
         # using anything unproductive (breaks too) restarts the clean hour
         if appKind == "unproductive":
             self.cleanSeconds = 0
 
         if not onBreakRightNow and self.enforcer.checkApp(window, appKind, self.usedSeconds[appName], site):
-            self.changePoints(-ranked.KICK_PENALTY)
             self.usedSeconds[appName] = 0
             self.passedAt.pop(appName, None)
             self.lastApp = None
@@ -1182,7 +1180,6 @@ class Dashboard(QWidget):
         self.pauseScreen = None
 
         if choice == "back":
-            self.changePoints(ranked.BACK_TO_WORK_BONUS)
             if self.pausedSite is None:
                 self.backend.close_app(window.pid)
             else:
@@ -1255,7 +1252,6 @@ class Dashboard(QWidget):
         self.checkInScreen = None
         window = self.breakWindow
         if choice == "bounceBack":
-            self.changePoints(ranked.BOUNCE_BACK_BONUS)
             if self.breakSite is None:
                 self.backend.close_app(window.pid)
             else:
