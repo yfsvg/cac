@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSlider,
     QStyleFactory,
     QTimeEdit,
@@ -294,7 +295,7 @@ def askForPin(parent, mainStyle):
 class SettingsPage(QWidget):
     def __init__(self, mainStyle, goBack, onMemoryCleared=None, onForceQuit=None, onClimbChanged=None, onFightBoss=None):
         super().__init__()
-        from arete.ui.dashboard import Dropdown, label
+        from arete.ui.dashboard import Dropdown, label, stopSideScrolling
 
         self.mainStyle = mainStyle
         self.onMemoryCleared = onMemoryCleared
@@ -305,7 +306,7 @@ class SettingsPage(QWidget):
         self.setStyleSheet(applyTheme(SETTINGS_STYLE))
 
         scroll = QScrollArea(widgetResizable=True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        stopSideScrolling(scroll)
         content = QWidget(objectName="Content")
         scroll.setWidget(content)
 
@@ -638,6 +639,8 @@ class SettingsPage(QWidget):
         self.dayBoxes = []
         for dayNumber in range(7):
             dayBox = QPushButton(DAY_NAMES[dayNumber], objectName="DayChip", cursor=Qt.CursorShape.PointingHandCursor)
+            dayBox.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            dayBox.setMinimumWidth(36)
             dayBox.setCheckable(True)
             self.dayBoxes.append(dayBox)
             dayRow.addWidget(dayBox)

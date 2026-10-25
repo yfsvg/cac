@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -128,6 +129,8 @@ class SessionPanel(QFrame):
         for chipName, chipMinutes in lengths:
             chip = QPushButton(chipName, objectName="LengthChip", cursor=Qt.CursorShape.PointingHandCursor)
             chip.setCheckable(True)
+            chip.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            chip.setMinimumWidth(40)
             chip.clicked.connect(lambda checked=False, m=chipMinutes, c=chip: self.pickLength(m, c))
             chipLayout.addWidget(chip)
             self.chips.append(chip)

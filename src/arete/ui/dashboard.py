@@ -62,8 +62,20 @@ STYLE = """
     }
 
     QScrollArea, QWidget#Content { background: transparent; border: none; }
-    QScrollBar:vertical { background: transparent; width: 6px; margin: 4px 0; }
-    QScrollBar::handle:vertical { background: @outlineVariant; border-radius: 3px; min-height: 30px; }
+    QScrollBar:vertical {
+        background: @surfaceContainerHigh;
+        width: 12px;
+        margin: 6px 2px 6px 0;
+        border: 1px solid @cardBorder;
+        border-radius: 6px;
+    }
+    QScrollBar::handle:vertical {
+        background: @primary;
+        border-bottom: 3px solid @primaryShadow;
+        border-radius: 5px;
+        min-height: 44px;
+    }
+    QScrollBar::handle:vertical:hover { background: @primaryHover; }
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
     QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { height: 0; background: none; }
 
@@ -142,6 +154,12 @@ STAT_ICONS = ["target", "clock", "bounce"]
 
 
 # small widgets, labels + stat cards
+
+def stopSideScrolling(scrollArea) -> None:
+    scrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    sideBar = scrollArea.horizontalScrollBar()
+    sideBar.rangeChanged.connect(lambda lowest, highest: sideBar.setRange(0, 0) if highest > 0 else None)
+
 
 def label(text: str, name: str, align: Qt.AlignmentFlag = Qt.AlignmentFlag.AlignLeft) -> QLabel:
     newLabel = QLabel(text, objectName=name, alignment=align)
@@ -789,7 +807,7 @@ class Dashboard(QWidget):
 
         # Everything scrolls since the config list + time list
         scrollArea = QScrollArea(widgetResizable=True)
-        scrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        stopSideScrolling(scrollArea)
 
         scrollContent = QWidget(objectName="Content")
         scrollArea.setWidget(scrollContent)
