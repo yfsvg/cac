@@ -238,7 +238,7 @@ class SessionCard(QFrame):
 
 
 class SessionDoneToast(QWidget):
-    def __init__(self, climbText, detailText, whenDone):
+    def __init__(self, climbText, detailText, whenDone, heading="Session done!"):
         super().__init__()
         self.whenDone = whenDone
         self.setWindowFlags(
@@ -256,7 +256,7 @@ class SessionDoneToast(QWidget):
         cardLayout = QVBoxLayout(card)
         cardLayout.setContentsMargins(14, 10, 14, 12)
         cardLayout.setSpacing(6)
-        cardLayout.addWidget(QLabel("Session done!"))
+        cardLayout.addWidget(QLabel(heading))
         cardLayout.addWidget(QLabel(climbText, objectName="ToastBig"))
         hint = QLabel(detailText, objectName="ToastHint")
         hint.setWordWrap(True)
@@ -278,7 +278,7 @@ class SessionDoneToast(QWidget):
         outerLayout = QVBoxLayout(self)
         outerLayout.setContentsMargins(0, 0, 0, 0)
         outerLayout.addWidget(card)
-        self.setFixedWidth(260)
+        self.setFixedWidth(290)
         self.fillStep = 0
         self.fillTimer = QTimer(self, interval=100, timeout=self.fillBar)
 

@@ -1342,9 +1342,8 @@ class Dashboard(QWidget):
     def failSession(self):
         session.failLastSession()
         self.stopSession()
-        self.sessionToast = SessionDoneToast("Session failed", "You gave up before the timer ran out, so this one didn't count for the climb.", self.sessionToastDone)
+        self.sessionToast = SessionDoneToast("Session failed", "You gave up before the timer ran out, so this one didn't count for the climb.", self.sessionToastDone, "Focus session")
         self.sessionToast.popUp()
-        animations.shake(self.sessionToast)
 
     def endSession(self):
         minutes = self.sessionSeconds / 60

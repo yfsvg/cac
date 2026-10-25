@@ -48,6 +48,22 @@ CLIMB_STYLE = """
         padding: 3px 10px;
     }
     QLabel#MapInfo { color: @onSurfaceVariant; font-size: 13px; }
+    QLabel#MapPercentDone {
+        color: #173D08;
+        background-color: #7BE3A0;
+        font-size: 13px;
+        font-weight: 800;
+        border-radius: 11px;
+        padding: 3px 10px;
+    }
+    QLabel#MapPercentLocked {
+        color: @onSurfaceVariant;
+        background-color: @surfaceContainerHighest;
+        font-size: 13px;
+        font-weight: 800;
+        border-radius: 11px;
+        padding: 3px 10px;
+    }
     QProgressBar#MapBar { background-color: @surfaceContainerHighest; border: none; border-radius: 4px; }
     QProgressBar#MapBar::chunk { background-color: @trail; border-radius: 4px; }
     QPushButton#OpenMap:hover { background-color: @primaryHover; }
@@ -384,19 +400,78 @@ class MountainMap(QWidget):
         painter.drawPath(body)
 
     def drawLocked(self, painter):
-        painter.fillRect(self.rect(), QColor(10, 8, 30, 110))
-        cardRect = QRectF(30, self.pictureHeight() * 0.69 - 60, self.width() - 60, 120)
+        painter.fillRect(self.rect(), QColor(10, 8, 30, 140))
+
+
+def drawTrophy(painter, center, size, color):
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(color)
+    cup = QPainterPath(QPointF(center.x() - size * 0.55, center.y() - size * 0.6))
+    cup.lineTo(QPointF(center.x() + size * 0.55, center.y() - size * 0.6))
+    cup.quadTo(QPointF(center.x() + size * 0.55, center.y() + size * 0.25), QPointF(center.x(), center.y() + size * 0.3))
+    cup.quadTo(QPointF(center.x() - size * 0.55, center.y() + size * 0.25), QPointF(center.x() - size * 0.55, center.y() - size * 0.6))
+    painter.drawPath(cup)
+    painter.drawRect(QRectF(center.x() - size * 0.1, center.y() + size * 0.25, size * 0.2, size * 0.3))
+    painter.drawRoundedRect(QRectF(center.x() - size * 0.4, center.y() + size * 0.5, size * 0.8, size * 0.18), 3, 3)
+    painter.setPen(QPen(color, size * 0.12))
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.drawArc(QRectF(center.x() - size * 0.85, center.y() - size * 0.5, size * 0.5, size * 0.5), 90 * 16, 180 * 16)
+    painter.drawArc(QRectF(center.x() + size * 0.35, center.y() - size * 0.5, size * 0.5, size * 0.5), 270 * 16, 180 * 16)
+
+
+class MapBanner(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.kind = "locked"
+        self.title = ""
+        self.detail = ""
+        self.setFixedHeight(150)
+
+    def showBanner(self, kind, title, detail):
+        wasHidden = self.isHidden() or self.title != title
+        self.kind = kind
+        self.title = title
+        self.detail = detail
+        self.show()
+        self.raise_()
+        self.update()
+        if wasHidden:
+            animations.fadeIn(self, 350)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        cardRect = QRectF(self.rect()).adjusted(4, 4, -4, -4)
         card = QPainterPath()
-        card.addRoundedRect(cardRect, 22, 22)
-        painter.fillPath(card, QColor(20, 16, 50, 215))
-        drawLock(painter, QPointF(cardRect.center().x(), cardRect.top() + 34), 22, QColor("white"))
-        textFont = QFont(self.font())
-        textFont.setPixelSize(14)
-        textFont.setBold(True)
-        painter.setFont(textFont)
-        painter.setPen(QColor("white"))
-        previousName = mountains.MOUNTAINS[self.mountainNumber - 1]["name"]
-        painter.drawText(QRectF(cardRect.left(), cardRect.top() + 58, cardRect.width(), 50), Qt.AlignmentFlag.AlignCenter, "Reach the top of " + previousName + "\nand beat its boss to unlock")
+        card.addRoundedRect(cardRect, 26, 26)
+        if self.kind == "done":
+            backColor = QColor("#FFC23D")
+            edgeColor = QColor("#D99A0B")
+            textColor = QColor("#4A3300")
+        else:
+            backColor = QColor(20, 16, 50, 235)
+            edgeColor = QColor(255, 255, 255, 90)
+            textColor = QColor("white")
+        painter.fillPath(card.translated(0, 4), edgeColor)
+        painter.fillPath(card, backColor)
+        painter.setPen(QPen(edgeColor, 2))
+        painter.drawPath(card)
+        iconCenter = QPointF(cardRect.center().x(), cardRect.top() + 38)
+        if self.kind == "done":
+            drawTrophy(painter, iconCenter, 28, textColor)
+        else:
+            drawLock(painter, iconCenter, 26, textColor)
+        titleFont = QFont(self.font())
+        titleFont.setPixelSize(20)
+        titleFont.setBold(True)
+        painter.setFont(titleFont)
+        painter.setPen(textColor)
+        painter.drawText(QRectF(cardRect.left(), cardRect.top() + 64, cardRect.width(), 30), Qt.AlignmentFlag.AlignCenter, self.title)
+        detailFont = QFont(self.font())
+        detailFont.setPixelSize(13)
+        painter.setFont(detailFont)
+        painter.drawText(QRectF(cardRect.left() + 12, cardRect.top() + 94, cardRect.width() - 24, 36), Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap, self.detail)
 
 
 class MapFrame(QWidget):
@@ -558,6 +633,9 @@ class MapHome(QWidget):
         self.mountainMap = MountainMap()
         self.mountainMap.zoom = MAP_ZOOM
         self.scrollArea.setWidget(self.mountainMap)
+        self.banner = MapBanner()
+        self.banner.setParent(self.mapFrame)
+        self.banner.hide()
         self.leftArrow = MapArrowButton(-1)
         self.leftArrow.setParent(self.mapFrame)
         self.leftArrow.clicked.connect(lambda: self.switchMountain(self.viewedMountain - 1))
@@ -573,6 +651,11 @@ class MapHome(QWidget):
         arrowY = self.mapFrame.height() // 2 - 20
         self.leftArrow.move(10, arrowY)
         self.rightArrow.move(mapWidth - 50, arrowY)
+        self.banner.setFixedWidth(mapWidth - 110)
+        bannerY = self.mapFrame.height() // 2 - 75
+        if self.banner.kind == "done":
+            bannerY = 24
+        self.banner.move(55, bannerY)
         roundedShape = QPainterPath()
         roundedShape.addRoundedRect(QRectF(0, 0, mapWidth, self.mapFrame.height()), 24, 24)
         self.scrollArea.setMask(QRegion(roundedShape.toFillPolygon().toPolygon()))
@@ -604,7 +687,25 @@ class MapHome(QWidget):
         self.percentLabel.setText(percentText(percent) + "%")
         self.metersLabel.setText(heightText + "  ·  " + bossText)
         animations.animateValue(self.progressBar.value(), int(percent * 10), lambda value: self.progressBar.setValue(int(value)), 700)
-        if self.viewedMountain > state["mountainNumber"]:
+        isDone = self.viewedMountain < state["mountainNumber"] or (self.viewedMountain == state["mountainNumber"] and state["finished"])
+        isLocked = self.viewedMountain > state["mountainNumber"]
+        pillName = "MapPercent"
+        if isDone:
+            pillName = "MapPercentDone"
+            self.percentLabel.setText("Completed")
+            self.banner.showBanner("done", mountain["name"] + " completed!", "You beat all " + str(len(mountains.BOSS_CHECKPOINTS)) + " bosses and reached the summit.")
+        elif isLocked:
+            pillName = "MapPercentLocked"
+            previousName = mountains.MOUNTAINS[self.viewedMountain - 1]["name"]
+            self.banner.showBanner("locked", "Locked", "Beat " + previousName + " and its summit boss to unlock " + mountain["name"] + ".")
+        else:
+            self.banner.hide()
+        if self.percentLabel.objectName() != pillName:
+            self.percentLabel.setObjectName(pillName)
+            self.percentLabel.style().unpolish(self.percentLabel)
+            self.percentLabel.style().polish(self.percentLabel)
+        self.placeMap()
+        if isLocked:
             self.percentLabel.setText("Locked")
             self.goalLabel.setText("Beat " + mountains.MOUNTAINS[self.viewedMountain - 1]["shortName"] + " to unlock this mountain")
         elif self.viewedMountain < state["mountainNumber"]:
