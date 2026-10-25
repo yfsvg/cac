@@ -498,17 +498,6 @@ class MapHome(QWidget):
         topRow.addStretch()
         pageLayout.addLayout(topRow)
 
-        tabRow = QHBoxLayout()
-        tabRow.setSpacing(6)
-        self.tabs = []
-        for mountainNumber in range(len(mountains.MOUNTAINS)):
-            tab = QPushButton(mountains.MOUNTAINS[mountainNumber]["shortName"], objectName="MountainTab", cursor=Qt.CursorShape.PointingHandCursor)
-            tab.setCheckable(True)
-            tab.clicked.connect(lambda checked=False, n=mountainNumber: self.switchMountain(n))
-            self.tabs.append(tab)
-            tabRow.addWidget(tab)
-        tabRow.addStretch()
-        pageLayout.addLayout(tabRow)
 
         infoCard = QFrame(objectName="ClimbCard")
         infoLayout = QVBoxLayout(infoCard)
@@ -614,15 +603,6 @@ class MapHome(QWidget):
         self.leftArrow.raise_()
         self.rightArrow.raise_()
         self.updateInfo()
-        state = climbing.climbState()
-        for tabNumber in range(len(self.tabs)):
-            tab = self.tabs[tabNumber]
-            tab.setChecked(tabNumber == mountainNumber)
-            isLocked = tabNumber > state["mountainNumber"]
-            if tab.property("locked") != isLocked:
-                tab.setProperty("locked", isLocked)
-                tab.style().unpolish(tab)
-                tab.style().polish(tab)
         if animate:
             QTimer.singleShot(0, lambda: self.scrollToClimber(0))
 

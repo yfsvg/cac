@@ -159,7 +159,6 @@ class SessionPrompt(QWidget):
 class SessionCard(QFrame):
     def __init__(self):
         super().__init__(objectName="SessionCard")
-        self.setFixedWidth(180)
         cardLayout = QVBoxLayout(self)
         cardLayout.setContentsMargins(12, 6, 12, 8)
         cardLayout.setSpacing(4)

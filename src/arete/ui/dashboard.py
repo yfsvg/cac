@@ -766,10 +766,11 @@ class Dashboard(QWidget):
         topRow = QHBoxLayout()
         topRow.setContentsMargins(20, 10, 20, 0)
         topRow.addWidget(AppNameLabel())
-        topRow.addStretch()
+        topRow.addSpacing(12)
         self.sessionCard = SessionCard()
-        topRow.addWidget(self.sessionCard)
+        topRow.addWidget(self.sessionCard, 1)
         topRow.addStretch()
+        topRow.addSpacing(12)
 
         self.themeButton = ThemeToggle(getTheme() == "dark")
         self.themeButton.clicked.connect(self.toggleTheme)
