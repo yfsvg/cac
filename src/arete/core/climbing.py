@@ -7,6 +7,9 @@ PERCENT_PER_HOUR = 1.0
 SHORTEST_SESSION_MINUTES = 10
 BOUNCE_BACK_PERCENT = 0.25
 BOUNCE_BACK_DAILY_CAP = 1.0
+BOSS_BASE_MINUTES = 45
+BOSS_STEP_MINUTES = 25
+BOSS_HEAL_MINUTES = 5
 PENALTY_PERCENT = PERCENT_PER_HOUR / 3
 PENALTY_GAP_SECONDS = 60
 OLD_METERS_PER_PERCENT = 80
@@ -101,6 +104,9 @@ def unproductivePenalty(appName):
         return 0
     savedMemory["lastPenaltyAt"] = time.time()
     memory.save(savedMemory)
+    if climbState()["atBoss"]:
+        healBoss(BOSS_HEAL_MINUTES)
+        return 0
     return changeClimb(-PENALTY_PERCENT, "opening " + appName)
 
 
@@ -123,17 +129,54 @@ def bounceBackEarned(breakPeriods):
     return changeClimb(amount, "bouncing back")
 
 
+def bossHealth(bossNumber):
+    return BOSS_BASE_MINUTES + BOSS_STEP_MINUTES * bossNumber
+
+
+def bossDamage():
+    return float(loadClimb().get("bossDamage", 0))
+
+
+def bossMinutesLeft():
+    bossNumber = climbState()["bossesBeaten"]
+    minutesLeft = bossHealth(bossNumber) - bossDamage()
+    if minutesLeft < 0:
+        return 0
+    return minutesLeft
+
+
+def damageBoss(minutes):
+    state = climbState()
+    if not state["atBoss"] or state["finished"]:
+        return False
+    savedMemory = loadClimb()
+    damage = float(savedMemory.get("bossDamage", 0)) + minutes
+    savedMemory["bossDamage"] = damage
+    memory.save(savedMemory)
+    if damage >= bossHealth(state["bossesBeaten"]):
+        beatBoss()
+        return True
+    return False
+
+
+def healBoss(minutes):
+    savedMemory = loadClimb()
+    damage = float(savedMemory.get("bossDamage", 0)) - minutes
+    if damage < 0:
+        damage = 0
+    savedMemory["bossDamage"] = damage
+    savedMemory["lastClimbChange"] = {"amount": 0, "reason": "the boss healed", "time": time.time()}
+    memory.save(savedMemory)
+
+
 def beatBoss():
     savedMemory = loadClimb()
     bossesBeaten = int(savedMemory.get("bossesBeaten", 0)) + 1
     savedMemory["bossesBeaten"] = bossesBeaten
+    savedMemory["bossDamage"] = 0
     if savedMemory.get("climbPercent", 0) < lowestPercent(bossesBeaten):
         savedMemory["climbPercent"] = lowestPercent(bossesBeaten)
     memory.save(savedMemory)
-
-
-def bossDifficulty():
-    return climbState()["bossesBeaten"] + 1
 
 
 def setClimbPercent(totalPercent, bossesBeaten):
@@ -144,6 +187,7 @@ def setClimbPercent(totalPercent, bossesBeaten):
         totalPercent = lowestPercent(bossesBeaten)
     savedMemory["bossesBeaten"] = bossesBeaten
     savedMemory["climbPercent"] = totalPercent
+    savedMemory["bossDamage"] = 0
     memory.save(savedMemory)
 
 

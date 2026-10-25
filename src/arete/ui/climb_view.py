@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QProgressBar, QPushBu
 
 from arete.core import climbing, mountains
 from arete.ui import animations, mountain_art
-from arete.ui.boss_art import drawBossCharacter
+from arete.ui.boss_art import BossPortrait, drawBossCharacter
 from arete.ui.boss_fight import bossName
 from arete.ui.theme import getColors
 
@@ -48,6 +48,13 @@ CLIMB_STYLE = """
         padding: 3px 10px;
     }
     QLabel#MapInfo { color: @onSurfaceVariant; font-size: 13px; }
+    QFrame#BossCard { background-color: @surfaceContainerLow; border: 2px solid @boss; border-radius: 24px; }
+    QLabel#BossCardHeading { color: @boss; font-size: 12px; font-weight: 800; }
+    QLabel#BossCardName { color: @onSurface; font-size: 18px; font-weight: 800; }
+    QLabel#BossCardHealth { color: @onSurface; font-size: 13px; font-weight: 700; }
+    QLabel#BossCardHint { color: @onSurfaceVariant; font-size: 12px; }
+    QProgressBar#BossBar { background-color: @surfaceContainerHighest; border: none; border-radius: 6px; }
+    QProgressBar#BossBar::chunk { background-color: @boss; border-radius: 6px; }
     QLabel#MapPercentDone {
         color: #173D08;
         background-color: #7BE3A0;
@@ -120,6 +127,7 @@ class MountainMap(QWidget):
         self.bottomPad = 80
         self.showLabels = True
         self.zoom = 1.0
+        self.bossLeftShare = 1.0
         self.shownPercent = None
         self.picture = None
         self.pictureKey = None
@@ -134,6 +142,7 @@ class MountainMap(QWidget):
     def showMountain(self, mountainNumber):
         self.mountainNumber = mountainNumber
         self.state = climbing.climbState()
+        self.bossLeftShare = climbing.bossMinutesLeft() / climbing.bossHealth(self.state["bossesBeaten"])
         self.shownPercent = self.realPercent()
         self.sky = mountain_art.Sky()
         self.update()
@@ -141,6 +150,7 @@ class MountainMap(QWidget):
     def refresh(self):
         oldPercent = self.percentHere()
         self.state = climbing.climbState()
+        self.bossLeftShare = climbing.bossMinutesLeft() / climbing.bossHealth(self.state["bossesBeaten"])
         newPercent = self.realPercent()
         if self.shownPercent is not None and abs(newPercent - oldPercent) > 0.001:
             animations.animateValue(oldPercent, newPercent, self.setShownPercent, 1200)
@@ -215,7 +225,10 @@ class MountainMap(QWidget):
 
     def markerPoint(self):
         scene = self.scene()
-        return self.onScreen(scene.trail.pointAtPercent(scene.trailFraction(self.percentHere())))
+        percent = self.percentHere()
+        if self.state["atBoss"] and self.mountainNumber == self.state["mountainNumber"]:
+            percent = max(percent - 2.5, 0)
+        return self.onScreen(scene.trail.pointAtPercent(scene.trailFraction(percent)))
 
     def basePicture(self):
         pixelRatio = self.devicePixelRatioF()
@@ -347,6 +360,13 @@ class MountainMap(QWidget):
             painter.setPen(QPen(shieldColor, 3))
             painter.setBrush(QColor("#FFF6EE"))
             painter.drawEllipse(point, badgeSize, badgeSize)
+            if isNextBoss and self.state["atBoss"]:
+                ringSize = badgeSize + 7
+                painter.setPen(QPen(QColor(255, 255, 255, 90), 5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawEllipse(point, ringSize, ringSize)
+                painter.setPen(QPen(shieldColor, 5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                painter.drawArc(QRectF(point.x() - ringSize, point.y() - ringSize, ringSize * 2, ringSize * 2), 90 * 16, int(360 * 16 * self.bossLeftShare))
             faceSize = badgeSize * 1.7
             drawBossCharacter(painter, bossNumber, QRectF(point.x() - faceSize / 2, point.y() - faceSize / 2, faceSize, faceSize))
             return
@@ -548,6 +568,65 @@ class ClimbCard(QFrame):
         self.miniMap.refresh()
 
 
+class BossCard(QFrame):
+    def __init__(self):
+        super().__init__(objectName="BossCard")
+        cardLayout = QHBoxLayout(self)
+        cardLayout.setContentsMargins(12, 12, 16, 14)
+        cardLayout.setSpacing(12)
+        self.portraitHolder = QVBoxLayout()
+        cardLayout.addLayout(self.portraitHolder)
+        self.portrait = None
+        self.bossNumber = None
+        textLayout = QVBoxLayout()
+        textLayout.setSpacing(4)
+        textLayout.addWidget(QLabel("BOSS FIGHT", objectName="BossCardHeading"))
+        self.nameLabel = QLabel("", objectName="BossCardName")
+        textLayout.addWidget(self.nameLabel)
+        self.healthBar = QProgressBar(objectName="BossBar")
+        self.healthBar.setTextVisible(False)
+        self.healthBar.setFixedHeight(12)
+        textLayout.addWidget(self.healthBar)
+        self.healthLabel = QLabel("", objectName="BossCardHealth")
+        textLayout.addWidget(self.healthLabel)
+        hint = QLabel("Every minute you stay focused in a session hits it. Opening distractions heals it.", objectName="BossCardHint")
+        hint.setWordWrap(True)
+        textLayout.addWidget(hint)
+        cardLayout.addLayout(textLayout, 1)
+        self.shownLeft = None
+        self.hide()
+
+    def refresh(self):
+        state = climbing.climbState()
+        if not state["atBoss"] or state["finished"]:
+            self.hide()
+            return
+        bossNumber = state["bossesBeaten"]
+        if bossNumber != self.bossNumber:
+            if self.portrait is not None:
+                self.portrait.deleteLater()
+            self.portrait = BossPortrait(bossNumber, 76)
+            self.portraitHolder.addWidget(self.portrait, alignment=Qt.AlignmentFlag.AlignTop)
+            self.bossNumber = bossNumber
+            self.shownLeft = None
+        health = climbing.bossHealth(bossNumber)
+        minutesLeft = climbing.bossMinutesLeft()
+        self.nameLabel.setText(bossName(bossNumber))
+        self.healthBar.setRange(0, health * 10)
+        newValue = int(minutesLeft * 10)
+        if self.shownLeft is None:
+            self.healthBar.setValue(newValue)
+        else:
+            animations.animateValue(self.healthBar.value(), newValue, lambda value: self.healthBar.setValue(int(value)), 500)
+        self.shownLeft = minutesLeft
+        self.healthLabel.setText(str(int(math.ceil(minutesLeft))) + " of " + str(health) + " focus minutes left")
+        self.show()
+
+    def hit(self):
+        if self.portrait is not None:
+            self.portrait.hurt()
+
+
 class MapArrowButton(QPushButton):
     def __init__(self, direction):
         super().__init__(objectName="MapArrow", cursor=Qt.CursorShape.PointingHandCursor)
@@ -713,7 +792,7 @@ class MapHome(QWidget):
         elif state["finished"]:
             self.goalLabel.setText("You climbed all three mountains")
         elif state["atBoss"]:
-            self.goalLabel.setText(bossName(state["bossesBeaten"]) + " is blocking the trail")
+            self.goalLabel.setText(bossName(state["bossesBeaten"]) + " has " + str(int(math.ceil(climbing.bossMinutesLeft()))) + " focus min of health left")
         elif state["nextBoss"] is not None:
             bossDistance = percentText(state["nextBoss"] - state["totalPercent"])
             self.goalLabel.setText(bossDistance + "% to " + bossName(state["bossesBeaten"]))

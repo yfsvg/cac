@@ -403,7 +403,7 @@ class SettingsPage(QWidget):
             self.climbBox.returnPressed.connect(self.setClimb)
             setClimbButton = QPushButton("Set climb %", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
             setClimbButton.clicked.connect(self.setClimb)
-            fightButton = QPushButton("Fight boss now", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
+            fightButton = QPushButton("Beat boss now", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
             fightButton.clicked.connect(self.fightBoss)
             climbRow.addWidget(self.climbBox)
             climbRow.addWidget(setClimbButton)

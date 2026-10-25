@@ -18,14 +18,14 @@ you climbed, and you can stop or keep going for 30 more minutes.
 Click The Climb on the home screen to see your mountain: Mount Fuji, then Everest, then the Matterhorn.
 - A session moves you up 1% per hour (at least 0.5%), times how much of it you were focused.
 - Opening something unproductive drops you 0.33%, at most once a minute.
-- Each mountain has 3 bosses. A boss stops your climb until you beat it: after your next session you play 3 brain games and need to win 2. Beaten bosses are never lost.
-- The 10 brain games are in `ui/brain_games.py` and get harder with every boss.
+- Each mountain has 3 bosses (9 in total), each with its own character. A boss stops your climb until you beat it.
+- Bosses have health measured in focus minutes (45 for the first, 25 more for each one after). Every minute you stay focused in a session hits the boss, and opening something unproductive heals it 5 minutes. Beaten bosses are never lost.
 
 - Testing without the lock: run `.venv/bin/arete --debug` (setting `ARETE_DEBUG=1` or starting it from the VS Code debugger does the same). In debug mode:
   - Ctrl+C closes it, it stays in the terminal, and nothing reopens it
   - there's no Windows admin prompt
   - settings show Force quit, Reset lock timers and Clear all memory, plus an Apply now button that skips the 1 hour wait
-  - settings also have a Blocking on switch, a box to set your climb % (0 to 300 across all 3 mountains) and a Fight boss now button
+  - settings also have a Blocking on switch, a box to set your climb % (0 to 300 across all 3 mountains) and a Beat boss now button
   - the startup screen has a 15 sec (testing) option
 - Emergency stop on Windows: `taskkill /F /IM pythonw.exe` from an admin terminal (Arete runs as admin)
 

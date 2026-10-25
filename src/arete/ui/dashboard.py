@@ -40,8 +40,8 @@ from arete.core import climbing, enforcement, keep_alive, mountains, session, se
 from arete.core.enforcement import Enforcer
 from arete.storage import memory, time_tracking
 from arete.ui import animations, backdrop
-from arete.ui.boss_fight import BossFight
-from arete.ui.climb_view import CLIMB_STYLE, ClimbCard, MapHome, climbSummary
+from arete.ui.boss_fight import BossToast, bossName
+from arete.ui.climb_view import CLIMB_STYLE, BossCard, ClimbCard, MapHome, climbSummary
 from arete.ui.settings_window import SettingsPage
 from arete.ui.pause_screen import BreakBadge, CheckInScreen, PauseScreen
 from arete.ui.session_screen import PANEL_STYLE, SessionCard, SessionDoneToast, SessionPanel
@@ -859,6 +859,8 @@ class Dashboard(QWidget):
         self.showCurrentMountain()
         self.sessionPanel = SessionPanel(self.sessionChosen, self.endPressed)
         layout.addWidget(self.sessionPanel)
+        self.bossCard = BossCard()
+        layout.addWidget(self.bossCard)
         self.climbCard = ClimbCard(self.openMountain)
         self.climbCard.refresh()
         layout.addWidget(self.climbCard)
@@ -965,7 +967,11 @@ class Dashboard(QWidget):
         self.lastKind = None
 
         self.sessionToast = None
-        self.bossFight = None
+        self.bossToast = None
+        self.fightingBoss = climbing.climbState()["atBoss"]
+        self.bossSeconds = 0
+        self.sessionBossMinutes = 0
+        self.bossCard.refresh()
         self.inSession = False
         self.sessionTimed = False
         self.sessionSeconds = 0
@@ -1238,7 +1244,7 @@ class Dashboard(QWidget):
     # Settings page
 
     def openSettings(self) -> None:
-        self.settingsPage = SettingsPage(STYLE, self.closeSettings, self.memoryCleared, self.quitArete, self.climbChanged, self.startBossFight)
+        self.settingsPage = SettingsPage(STYLE, self.closeSettings, self.memoryCleared, self.quitArete, self.climbChanged, self.beatBossNow)
         self.pages.addWidget(self.settingsPage)
         self.pages.setCurrentWidget(self.settingsPage)
         animations.fadeIn(self.settingsPage, 260)
@@ -1283,6 +1289,12 @@ class Dashboard(QWidget):
     def climbChanged(self) -> None:
         self.climbCard.refresh()
         self.showCurrentMountain()
+        self.bossCard.refresh()
+        state = climbing.climbState()
+        if state["atBoss"] and not self.fightingBoss and not state["finished"]:
+            health = climbing.bossHealth(state["bossesBeaten"])
+            self.showBossToast(state["bossesBeaten"], "appear", "It has " + str(health) + " focus minutes of health. Every minute you stay focused in a session hits it.")
+        self.fightingBoss = state["atBoss"]
         if self.mountainPage is not None:
             self.mountainPage.refresh()
 
@@ -1300,6 +1312,7 @@ class Dashboard(QWidget):
         session.startSession(minutes)
         self.sessionSeconds = 0
         self.productiveSeconds = 0
+        self.sessionBossMinutes = 0
         self.inSession = True
         self.sessionTimed = minutes is not None
         if self.sessionTimed:
@@ -1317,6 +1330,8 @@ class Dashboard(QWidget):
         onBreak = self.breakName is not None or self.pauseScreen is not None
         if self.currentKind != "unproductive" and not onBreak:
             self.productiveSeconds = self.productiveSeconds + 1
+            if self.fightingBoss:
+                self.hitBoss()
         if not self.sessionTimed:
             self.sessionCard.updateFree(self.sessionSeconds)
             self.sessionPanel.updateFree(self.sessionSeconds)
@@ -1359,8 +1374,9 @@ class Dashboard(QWidget):
         detailText = "You were focused " + str(int(round(fraction * 100))) + "% of the time. You're now " + climbSummary(state) + "."
         if minutes < climbing.SHORTEST_SESSION_MINUTES:
             detailText = "Sessions need to be at least " + str(climbing.SHORTEST_SESSION_MINUTES) + " minutes to count for the climb."
-        if state["atBoss"]:
-            detailText = detailText + " A boss is blocking the trail, time to fight it!"
+        if self.sessionBossMinutes > 0 and state["atBoss"]:
+            climbText = "Hit the boss for " + str(self.sessionBossMinutes) + " min"
+            detailText = "You were focused " + str(int(round(fraction * 100))) + "% of the time. " + bossName(state["bossesBeaten"]) + " has " + str(int(climbing.bossMinutesLeft() + 0.99)) + " focus minutes of health left."
         self.sessionToast = SessionDoneToast(climbText, detailText, self.sessionToastDone)
         self.sessionToast.popUp()
         if earned > 0:
@@ -1371,22 +1387,45 @@ class Dashboard(QWidget):
         self.sessionToast = None
         if choice == "continue":
             self.sessionChosen(session.CONTINUE_MINUTES)
-        if climbing.climbState()["atBoss"]:
-            self.startBossFight()
 
-    def startBossFight(self, allowSkip=True):
-        state = climbing.climbState()
-        if state["finished"] or self.bossFight is not None:
+    def hitBoss(self):
+        self.bossSeconds = self.bossSeconds + 1
+        if self.bossSeconds < 60:
             return
-        self.bossFight = BossFight(state["bossesBeaten"], climbing.bossDifficulty(), self.bossFightDone, allowSkip)
-        self.bossFight.popUp()
+        self.bossSeconds = 0
+        self.sessionBossMinutes = self.sessionBossMinutes + 1
+        bossNumber = climbing.climbState()["bossesBeaten"]
+        defeated = climbing.damageBoss(1)
+        self.bossCard.hit()
+        self.bossCard.refresh()
+        if self.mountainPage is not None:
+            self.mountainPage.refresh()
+        if defeated:
+            self.bossDefeated(bossNumber)
 
-    def bossFightDone(self, won):
-        self.bossFight.deleteLater()
-        self.bossFight = None
-        if won:
-            climbing.beatBoss()
+    def beatBossNow(self):
+        state = climbing.climbState()
+        if not state["atBoss"] or state["finished"]:
+            return
+        bossNumber = state["bossesBeaten"]
+        climbing.damageBoss(climbing.bossHealth(bossNumber))
+        self.bossDefeated(bossNumber)
+
+    def bossDefeated(self, bossNumber):
+        self.fightingBoss = False
         self.climbChanged()
+        self.showBossToast(bossNumber, "defeat", "You wore it down with pure focus. The trail is open again, keep climbing!")
+
+    def showBossToast(self, bossNumber, kind, detailText):
+        if self.bossToast is not None:
+            self.bossToast.deleteLater()
+        self.bossToast = BossToast(bossNumber, kind, detailText, self.bossToastDone)
+        self.bossToast.popUp()
+
+    def bossToastDone(self):
+        if self.bossToast is not None:
+            self.bossToast.deleteLater()
+        self.bossToast = None
 
 
 
@@ -1458,6 +1497,8 @@ class Dashboard(QWidget):
         lostPercent = climbing.unproductivePenalty(appName)
         if lostPercent < 0:
             self.climbCard.refresh()
+        if self.fightingBoss:
+            self.bossCard.refresh()
         self.pauseScreen = PauseScreen(appName, self.backend.get_window_rect(window), self.pauseDone)
         self.pauseScreen.popUp()
 
