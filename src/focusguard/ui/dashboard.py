@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPainter, QPainterPath, QPaintEvent, QPen, QTransform
+from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPainter, QPainterPath, QPaintEvent, QPen, QPixmap, QTransform
 
 from focusguard.ai import vision
 from focusguard.ai.site_memory import siteCategory
@@ -133,6 +133,33 @@ def label(text: str, name: str, align: Qt.AlignmentFlag = Qt.AlignmentFlag.Align
     newLabel = QLabel(text, objectName=name, alignment=align)
     newLabel.setWordWrap(True)
     return newLabel
+
+
+class AppNameLabel(QLabel):
+    def __init__(self) -> None:
+        super().__init__("Focusguard", objectName="AppName")
+        self.clicks = 0
+        self.lastClick = 0
+        self.popup = None
+
+    def mousePressEvent(self, event) -> None:
+        if time.time() - self.lastClick > 1:
+            self.clicks = 0
+        self.lastClick = time.time()
+        self.clicks = self.clicks + 1
+        if self.clicks == 5:
+            self.clicks = 0
+            self.showSurprise()
+
+    def showSurprise(self) -> None:
+        picture = QPixmap(os.path.join(os.path.dirname(__file__), "parth.png"))
+        self.popup = QLabel(None, Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
+        self.popup.setPixmap(picture)
+        center = self.window().geometry().center()
+        self.popup.move(center.x() - picture.width() // 2, center.y() - picture.height() // 2)
+        self.popup.show()
+        animations.fadeWindowIn(self.popup)
+        QTimer.singleShot(2000, self.popup.close)
 
 
 class StatCard(QFrame):
@@ -593,7 +620,7 @@ class Dashboard(QWidget):
 
         topRow = QHBoxLayout()
         topRow.setContentsMargins(20, 10, 20, 0)
-        topRow.addWidget(label("Focusguard", "AppName"))
+        topRow.addWidget(AppNameLabel())
         topRow.addStretch()
 
         self.themeButton = ThemeToggle(getTheme() == "dark")
