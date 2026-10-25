@@ -17,7 +17,7 @@ UNPRODUCTIVE_SITES = frozenset({
     "memedroid.com", "buzzfeed.com", "boredpanda.com", "imgflip.com",
     "spotify.com", "soundcloud.com", "pandora.com", "music.apple.com", "deezer.com", "tidal.com",
     "webtoons.com", "myanimelist.net", "fandom.com",
-    "poki.com", "coolmathgames.com", "crazygames.com", "miniclip.com", "kongregate.com",
+    "poki.com", "coolmathgames.com", "miniclip.com", "kongregate.com",
     "armorgames.com", "y8.com", "friv.com", "addictinggames.com", "newgrounds.com",
     "itch.io", "gamejolt.com", "silvergames.com", "agame.com", "kizi.com", "lagged.com",
     "games.com", "pogo.com", "primarygames.com",
