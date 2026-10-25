@@ -12,6 +12,8 @@ a = Analysis(
     [str(ROOT / "packaging" / "launch.py")],
     pathex=[str(ROOT / "src")],
     binaries=collect_dynamic_libs("uiautomation") if WINDOWS else [],
+    # everest background for the dashboard
+    datas=[(str(ROOT / "src" / "focusguard" / "ui" / "assets"), "focusguard/ui/assets")],
     excludes=["tkinter"],
 )
 pyz = PYZ(a.pure)
