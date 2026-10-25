@@ -196,17 +196,21 @@ class BossFight(QWidget):
         self.addText(winsText + " Win " + str(WINS_NEEDED - wins) + " more to beat the boss.", "Hint")
         self.setButtons("Next game", self.startNextGame)
         self.placeBox()
+        self.fadeInPage()
 
     def showResult(self, won):
         if won:
             self.addText("You beat " + bossName(self.bossNumber) + "!", "GameTitle")
             self.addText("The trail is open again. Keep focusing to keep climbing.", "Hint")
             self.setButtons("Keep climbing", lambda: self.finishFight(True))
+            QTimer.singleShot(150, lambda: animations.confetti(self.box))
         else:
             self.addText(bossName(self.bossNumber) + " won this time.", "GameTitle")
             self.addText("No worries, you can fight it again after your next focus session.", "Hint")
             self.setButtons("OK", lambda: self.finishFight(False))
+            QTimer.singleShot(150, lambda: animations.shake(self.box))
         self.placeBox()
+        self.fadeInPage()
 
     def leaveFight(self):
         self.finishFight(None)
@@ -222,6 +226,9 @@ class BossFight(QWidget):
             self.currentGame.stop()
         self.hide()
         self.whenDone(won)
+
+    def fadeInPage(self):
+        animations.fadeIn(self.page, 220)
 
     def placeBox(self):
         self.pageLayout.activate()

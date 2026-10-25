@@ -22,6 +22,7 @@ from arete.core import climbing, enforcement, mountains, setting_changes
 from arete.core.debug_mode import isDebugMode
 from arete.core.setting_changes import frozenSecondsLeft, markChanged
 from arete.storage import memory, parent_pin, time_tracking
+from arete.ui import animations
 from arete.ui.theme import applyTheme, getColors
 
 # Settings page -- app config dropdowns, AI key, parental controls
@@ -412,6 +413,10 @@ class SettingsPage(QWidget):
         layout.addStretch()
 
         self.updateParentSection()
+        sectionCards = [configCard, parentCard]
+        if isDebugMode():
+            sectionCards.append(debugCard)
+        animations.staggerIn(sectionCards, 70, 320)
         self.countdownTimer = QTimer(self, interval=1000, timeout=self.updateCountdowns)
         self.countdownTimer.start()
 

@@ -114,6 +114,7 @@ class MountainMap(QWidget):
         self.state = climbing.climbState()
         self.bottomPad = 80
         self.showLabels = True
+        self.shownPercent = None
         self.picture = None
         self.pictureKey = None
         self.bottomColor = QColor("#2A1F4A")
@@ -127,11 +128,22 @@ class MountainMap(QWidget):
     def showMountain(self, mountainNumber):
         self.mountainNumber = mountainNumber
         self.state = climbing.climbState()
+        self.shownPercent = self.realPercent()
         self.sky = mountain_art.Sky()
         self.update()
 
     def refresh(self):
+        oldPercent = self.percentHere()
         self.state = climbing.climbState()
+        newPercent = self.realPercent()
+        if self.shownPercent is not None and abs(newPercent - oldPercent) > 0.001:
+            animations.animateValue(oldPercent, newPercent, self.setShownPercent, 1200)
+        else:
+            self.shownPercent = newPercent
+        self.update()
+
+    def setShownPercent(self, percent):
+        self.shownPercent = percent
         self.update()
 
     def scale(self):
@@ -175,6 +187,11 @@ class MountainMap(QWidget):
         self.update(self.visibleRegion().boundingRect())
 
     def percentHere(self):
+        if self.shownPercent is not None and self.mountainNumber == self.state["mountainNumber"]:
+            return self.shownPercent
+        return self.realPercent()
+
+    def realPercent(self):
         if self.mountainNumber < self.state["mountainNumber"]:
             return 100
         if self.mountainNumber > self.state["mountainNumber"]:
@@ -247,7 +264,8 @@ class MountainMap(QWidget):
             stageText = mountain["stages"][checkpointNumber][0]
             if checkpointNumber in mountains.BOSS_CHECKPOINTS:
                 bossNumber = bossesBefore + mountains.BOSS_CHECKPOINTS.index(checkpointNumber)
-                self.drawBoss(painter, nodePoint, bossNumber < self.state["bossesBeaten"], colors)
+                isNextBoss = bossNumber == self.state["bossesBeaten"]
+                self.drawBoss(painter, nodePoint, bossNumber < self.state["bossesBeaten"], colors, seconds, isNextBoss)
                 self.drawLabel(painter, stageText + "  ·  " + bossName(bossNumber), nodePoint, BOSS_RADIUS + 10)
             else:
                 if reached:
@@ -269,20 +287,29 @@ class MountainMap(QWidget):
         painter.drawEllipse(point, NODE_RADIUS, NODE_RADIUS)
         drawCheck(painter, point, NODE_RADIUS * 0.9, QColor("white"))
 
-    def drawBoss(self, painter, point, beaten, colors):
+    def drawBoss(self, painter, point, beaten, colors, seconds, isNextBoss):
         shieldColor = QColor(colors["boss"])
         if beaten:
             shieldColor = QColor(colors["trail"])
+        shieldSize = BOSS_RADIUS
+        if isNextBoss and not beaten:
+            beat = (math.sin(seconds * 4) + 1) / 2
+            shieldSize = BOSS_RADIUS * (1 + 0.1 * beat)
+            glowColor = QColor(shieldColor)
+            glowColor.setAlpha(int(40 + 70 * beat))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(glowColor)
+            painter.drawEllipse(point, BOSS_RADIUS + 10 + 6 * beat, BOSS_RADIUS + 10 + 6 * beat)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(shieldColor.darker(135))
-        painter.drawPath(shieldPath(QPointF(point.x(), point.y() + 3), BOSS_RADIUS))
+        painter.drawPath(shieldPath(QPointF(point.x(), point.y() + 3), shieldSize))
         painter.setPen(QPen(QColor("white"), 2.5))
         painter.setBrush(shieldColor)
-        painter.drawPath(shieldPath(point, BOSS_RADIUS))
+        painter.drawPath(shieldPath(point, shieldSize))
         if beaten:
-            drawCheck(painter, point, BOSS_RADIUS * 0.8, QColor("white"))
+            drawCheck(painter, point, shieldSize * 0.8, QColor("white"))
         else:
-            drawBolt(painter, point, BOSS_RADIUS * 0.8)
+            drawBolt(painter, point, shieldSize * 0.8)
 
     def drawLabel(self, painter, text, point, gap):
         if not self.showLabels:
@@ -313,6 +340,7 @@ class MountainMap(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(glowColor)
         painter.drawEllipse(point, glowSize, glowSize)
+        point = QPointF(point.x(), point.y() - abs(math.sin(seconds * 3)) * 5)
         painter.setPen(QPen(QColor("white"), 4))
         painter.setBrush(accentColor)
         painter.drawEllipse(point, 14, 14)
@@ -365,7 +393,11 @@ class MiniMap(QScrollArea):
         event.ignore()
 
     def refresh(self):
-        self.mountainMap.showMountain(climbing.climbState()["mountainNumber"])
+        mountainNumber = climbing.climbState()["mountainNumber"]
+        if mountainNumber == self.mountainMap.mountainNumber and self.mountainMap.shownPercent is not None:
+            self.mountainMap.refresh()
+        else:
+            self.mountainMap.showMountain(mountainNumber)
         QTimer.singleShot(0, self.centerOnClimber)
 
     def resizeEvent(self, event):
@@ -389,6 +421,8 @@ class ClimbCard(QFrame):
         bottomRow = QHBoxLayout()
         bottomRow.setContentsMargins(6, 0, 0, 0)
         self.summaryLabel = QLabel("", objectName="ClimbLine")
+        self.shownPercent = None
+        self.shownMountain = None
         bottomRow.addWidget(self.summaryLabel)
         bottomRow.addStretch()
         openButton = QPushButton("Open map", objectName="OpenMap", cursor=Qt.CursorShape.PointingHandCursor)
@@ -398,7 +432,13 @@ class ClimbCard(QFrame):
 
     def refresh(self):
         state = climbing.climbState()
-        self.summaryLabel.setText(climbSummary(state))
+        mountainName = mountains.MOUNTAINS[state["mountainNumber"]]["name"]
+        if self.shownPercent is None or self.shownMountain != mountainName:
+            self.summaryLabel.setText(climbSummary(state))
+        else:
+            animations.animateValue(self.shownPercent, state["percent"], lambda value: self.summaryLabel.setText(percentText(value) + "% up " + mountainName), 1200)
+        self.shownPercent = state["percent"]
+        self.shownMountain = mountainName
         self.miniMap.refresh()
 
 
@@ -502,7 +542,7 @@ class MapHome(QWidget):
         self.stageLabel.setText(stageText)
         self.percentLabel.setText(percentText(percent) + "%")
         self.metersLabel.setText(heightText + "  ·  " + bossText)
-        self.progressBar.setValue(int(percent * 10))
+        animations.animateValue(self.progressBar.value(), int(percent * 10), lambda value: self.progressBar.setValue(int(value)), 700)
         if self.viewedMountain > state["mountainNumber"]:
             self.percentLabel.setText("Locked")
             self.goalLabel.setText("Reach the top of " + mountains.MOUNTAINS[self.viewedMountain - 1]["name"] + " and beat its boss to start this mountain.")

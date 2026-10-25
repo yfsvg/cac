@@ -8,6 +8,7 @@
 # BEFORE MAKING EDITS READ GDOC SECTION "Dashboard priorities"
 
 
+import math
 import os
 import threading
 import time
@@ -198,6 +199,7 @@ class StatCard(QFrame):
 
         self.iconName = ""
         self.iconColor = onContainerColor
+        self.hoverAmount = 0
 
         self.statusChip = QLabel(status, objectName="Chip")
         self.chipStyle = f"color: {statusColor};"
@@ -213,9 +215,29 @@ class StatCard(QFrame):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         iconColor = QColor(applyTheme(self.iconColor))
-        iconColor.setAlpha(150)
+        if self.hoverAmount > 0:
+            glowColor = QColor(iconColor)
+            glowColor.setAlpha(int(90 * self.hoverAmount))
+            painter.setPen(QPen(glowColor, 2))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(QRectF(self.rect()).adjusted(1.5, 1.5, -1.5, -1.5), 23, 23)
+        iconColor.setAlpha(int(150 + 100 * self.hoverAmount))
         painter.translate(24, 24)
+        painter.rotate(-15 * self.hoverAmount)
+        painter.scale(1 + 0.2 * self.hoverAmount, 1 + 0.2 * self.hoverAmount)
         drawStatIcon(painter, self.iconName, iconColor)
+
+    def enterEvent(self, event) -> None:
+        animations.animateValue(self.hoverAmount, 1, self.setHover, 220)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        animations.animateValue(self.hoverAmount, 0, self.setHover, 260)
+        super().leaveEvent(event)
+
+    def setHover(self, amount) -> None:
+        self.hoverAmount = amount
+        self.update()
 
 
     def setValues(self, number: str, status: str, statusColor: str) -> None:
@@ -236,6 +258,16 @@ class StatCard(QFrame):
 class HeroCard(QFrame):
     def __init__(self) -> None:
         super().__init__(objectName="Hero")
+        self.startTime = time.time()
+        self.bobTimer = QTimer(self, interval=50, timeout=self.update)
+
+    def showEvent(self, event) -> None:
+        self.bobTimer.start()
+        super().showEvent(event)
+
+    def hideEvent(self, event) -> None:
+        self.bobTimer.stop()
+        super().hideEvent(event)
 
     def paintEvent(self, event: QPaintEvent) -> None:
         super().paintEvent(event)
@@ -249,7 +281,19 @@ class HeroCard(QFrame):
         sunColor.setAlpha(200)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(sunColor)
-        painter.drawEllipse(QPointF(self.width() - 70, 34), 16, 16)
+        seconds = time.time() - self.startTime
+        sunBob = math.sin(seconds * 1.6) * 3
+        painter.drawEllipse(QPointF(self.width() - 70, 34 + sunBob), 16, 16)
+        cloudColor = QColor("white")
+        cloudColor.setAlpha(170)
+        painter.setBrush(cloudColor)
+        for cloudSpeed, cloudY, cloudSize, cloudStart in ((9, 22, 9, 0), (6, 52, 7, 170)):
+            cloudX = (cloudStart + seconds * cloudSpeed) % (self.width() + 120) - 60
+            cloudShape = QPainterPath()
+            cloudShape.addRoundedRect(QRectF(cloudX, cloudY, cloudSize * 3.4, cloudSize), cloudSize / 2, cloudSize / 2)
+            cloudPuff = QPainterPath()
+            cloudPuff.addEllipse(QPointF(cloudX + cloudSize * 1.3, cloudY + cloudSize * 0.1), cloudSize * 0.75, cloudSize * 0.75)
+            painter.drawPath(cloudShape.united(cloudPuff))
         backColor = QColor(colors["primary"])
         backColor.setAlpha(60)
         frontColor = QColor(colors["primary"])
@@ -496,19 +540,24 @@ class DropdownHeader(QPushButton):
     def __init__(self) -> None:
         super().__init__(objectName="DropdownHeader", cursor=Qt.CursorShape.PointingHandCursor)
         self.isOpen = False
+        self.angle = 0
 
     def setOpen(self, isOpen: bool) -> None:
         if isOpen != self.isOpen:
             self.isOpen = isOpen
-            self.update()
+            endAngle = 90 if isOpen else 0
+            animations.animateValue(self.angle, endAngle, self.setAngle, 220)
+
+    def setAngle(self, angle) -> None:
+        self.angle = angle
+        self.update()
 
     def paintEvent(self, event: QPaintEvent) -> None:
         super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.translate(24, self.height() / 2)
-        if self.isOpen:
-            painter.rotate(90)
+        painter.rotate(self.angle)
         chevronPen = QPen(QColor(getColors()["onSurface"]), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
         painter.setPen(chevronPen)
         painter.drawLine(QPointF(-2, -4), QPointF(2, 0))
@@ -537,6 +586,9 @@ class Dropdown(QWidget):
     def toggle(self) -> None:
         if self.body.isHidden():
             animations.expand(self.body)
+            if isinstance(self.body, TimeList):
+                shownRows = [timeRow for timeRow in self.body.timeRows if not timeRow.isHidden()]
+                animations.staggerIn(shownRows, 35, 260)
         else:
             animations.collapse(self.body)
         self.header.setOpen(self.body.isHidden())
@@ -597,12 +649,22 @@ class SettingsButton(QPushButton):
     def __init__(self) -> None:
         super().__init__(objectName="ThemeButton", cursor=Qt.CursorShape.PointingHandCursor)
         self.setFixedSize(32, 32)
+        self.angle = 0
+        self.clicked.connect(self.spin)
+
+    def spin(self) -> None:
+        animations.animateValue(0, 180, self.setAngle, 600)
+
+    def setAngle(self, angle) -> None:
+        self.angle = angle
+        self.update()
 
     def paintEvent(self, event: QPaintEvent) -> None:
         super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.translate(self.width() / 2, self.height() / 2)
+        painter.rotate(self.angle)
         drawCog(painter, QColor(getColors()["onSurface"]))
 
 
@@ -1234,6 +1296,8 @@ class Dashboard(QWidget):
             detailText = detailText + " A boss is blocking the trail, time to fight it!"
         self.sessionToast = SessionDoneToast(climbText, detailText, self.sessionToastDone)
         self.sessionToast.popUp()
+        if earned > 0:
+            animations.confetti(self.sessionToast)
 
     def sessionToastDone(self, choice):
         self.sessionToast.deleteLater()
