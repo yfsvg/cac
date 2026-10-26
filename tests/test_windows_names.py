@@ -7,7 +7,7 @@ import pytest
 if sys.platform != "win32":
     pytest.skip("Windows backend", allow_module_level=True)
 
-from arete.platform.windows import _tidy_description
+from arete.platform.windows import tidyDescription
 
 
 @pytest.mark.parametrize(
@@ -24,4 +24,4 @@ from arete.platform.windows import _tidy_description
     ],
 )
 def test_tidy_description(desc, expected):
-    assert _tidy_description(desc) == expected
+    assert tidyDescription(desc) == expected
