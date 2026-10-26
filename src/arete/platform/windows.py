@@ -14,7 +14,7 @@ from pathlib import Path
 import psutil
 
 from arete.core.models import ActiveWindow, PermissionState, RunningApp
-from arete.platform.base import PlatformBackend, grab_region
+from arete.platform.base import PlatformBackend, grabRegion
 
 log = logging.getLogger(__name__)
 
@@ -50,12 +50,12 @@ BROWSERS = {
 }
 
 # Accessible names of the address bar in English builds. Other locales fall back to the
-# "first edit box inside a toolbar" search in _find_address_bar.
-_ADDRESS_BAR_NAMES = ("Address and search bar", "Search or enter address", "Address bar")
-_UIA_SEARCH_DEPTH = 12
+# "first edit box inside a toolbar" search in findAddressBar.
+ADDRESS_BAR_NAMES = ("Address and search bar", "Search or enter address", "Address bar")
+UIA_SEARCH_DEPTH = 12
 
-_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-_RUN_VALUE = "Arete"
+RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+RUN_VALUE = "Arete"
 
 # Win32 constants
 GW_OWNER = 4
@@ -116,12 +116,12 @@ shell32.ShellExecuteW.argtypes = [
 shell32.ShellExecuteW.restype = ctypes.c_ssize_t
 
 # The *LongPtr variants only exist in 64-bit user32.
-_GetWindowLong = getattr(user32, "GetWindowLongPtrW", user32.GetWindowLongW)
-_SetWindowLong = getattr(user32, "SetWindowLongPtrW", user32.SetWindowLongW)
-_GetWindowLong.argtypes = [wintypes.HWND, ctypes.c_int]
-_GetWindowLong.restype = ctypes.c_ssize_t
-_SetWindowLong.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
-_SetWindowLong.restype = ctypes.c_ssize_t
+getWindowLong = getattr(user32, "GetWindowLongPtrW", user32.GetWindowLongW)
+setWindowLong = getattr(user32, "SetWindowLongPtrW", user32.SetWindowLongW)
+getWindowLong.argtypes = [wintypes.HWND, ctypes.c_int]
+getWindowLong.restype = ctypes.c_ssize_t
+setWindowLong.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
+setWindowLong.restype = ctypes.c_ssize_t
 
 
 class WindowsBackend(PlatformBackend):
@@ -133,21 +133,21 @@ class WindowsBackend(PlatformBackend):
         hwnd = user32.GetForegroundWindow()
         if not hwnd:
             return None
-        pid = _window_pid(hwnd)
-        proc = _process(pid)
+        pid = windowPid(hwnd)
+        proc = getProcess(pid)
         if proc is None:
             return None
         # Store apps are hosted by ApplicationFrameHost; the real app owns a child window.
-        if _proc_name(proc) == "applicationframehost.exe":
-            child_pid = _uwp_child_pid(hwnd, pid)
-            if child_pid and (child := _process(child_pid)):
-                pid, proc = child_pid, child
-        exe = _proc_exe(proc)
+        if processName(proc) == "applicationframehost.exe":
+            childPid = uwpChildPid(hwnd, pid)
+            if childPid and (child := getProcess(childPid)):
+                pid, proc = childPid, child
+        exe = processExe(proc)
         return ActiveWindow(
-            app_name=_friendly_name(proc, exe),
-            app_id=_proc_name(proc),
+            app_name=friendlyName(proc, exe),
+            app_id=processName(proc),
             pid=pid,
-            title=_window_text(hwnd),
+            title=windowText(hwnd),
             exe_path=exe,
             window_handle=int(hwnd),
         )
@@ -163,7 +163,7 @@ class WindowsBackend(PlatformBackend):
         try:
             with auto.UIAutomationInitializerInThread(debug=False):
                 root = auto.ControlFromHandle(window.window_handle)
-                edit = _find_address_bar(root) if root else None
+                edit = findAddressBar(root) if root else None
                 if edit is None:
                     return None
                 if edit.HasKeyboardFocus:
@@ -175,18 +175,18 @@ class WindowsBackend(PlatformBackend):
 
     def list_running_apps(self) -> list[RunningApp]:
         apps: dict[int, RunningApp] = {}
-        for hwnd in _top_level_windows():
-            pid = _window_pid(hwnd)
-            if pid in apps or not (proc := _process(pid)):
+        for hwnd in topLevelWindows():
+            pid = windowPid(hwnd)
+            if pid in apps or not (proc := getProcess(pid)):
                 continue
-            if _proc_name(proc) == "applicationframehost.exe":
-                child_pid = _uwp_child_pid(hwnd, pid)
-                if not child_pid or child_pid in apps or not (proc := _process(child_pid)):
+            if processName(proc) == "applicationframehost.exe":
+                childPid = uwpChildPid(hwnd, pid)
+                if not childPid or childPid in apps or not (proc := getProcess(childPid)):
                     continue
-                pid = child_pid
-            exe = _proc_exe(proc)
+                pid = childPid
+            exe = processExe(proc)
             apps[pid] = RunningApp(
-                app_name=_friendly_name(proc, exe), app_id=_proc_name(proc), pid=pid, exe_path=exe
+                app_name=friendlyName(proc, exe), app_id=processName(proc), pid=pid, exe_path=exe
             )
         return list(apps.values())
 
@@ -195,18 +195,18 @@ class WindowsBackend(PlatformBackend):
         if not user32.GetLastInputInfo(ctypes.byref(info)):
             return 0.0
         # Both counters are 32-bit milliseconds and wrap every ~49.7 days.
-        elapsed_ms = (kernel32.GetTickCount() - info.dwTime) & 0xFFFFFFFF
-        return elapsed_ms / 1000.0
+        elapsedMs = (kernel32.GetTickCount() - info.dwTime) & 0xFFFFFFFF
+        return elapsedMs / 1000.0
 
     # ---- enforcement -----------------------------------------------------------------------
 
     def close_app(self, pid: int, force: bool = False) -> bool:
-        proc = _process(pid)
+        proc = getProcess(pid)
         if proc is None:
             return False
         if not force:
             # WM_CLOSE lets the app prompt to save, same as clicking the X.
-            windows = [h for h in _top_level_windows() if _window_pid(h) == pid]
+            windows = [h for h in topLevelWindows() if windowPid(h) == pid]
             for hwnd in windows:
                 user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
             if windows:
@@ -251,7 +251,7 @@ class WindowsBackend(PlatformBackend):
         rect = wintypes.RECT()
         if not user32.GetWindowRect(wintypes.HWND(window.window_handle), ctypes.byref(rect)):
             return None
-        return grab_region((rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top))
+        return grabRegion((rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top))
 
     def hide_from_taskbar(self) -> None:
         # Nothing app-wide on Windows: WS_EX_TOOLWINDOW (set per window above) keeps windows
@@ -262,20 +262,20 @@ class WindowsBackend(PlatformBackend):
 
     def install_autostart(self) -> None:
         command = subprocess.list2cmdline(self.daemon_command())
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, _RUN_KEY) as key:
-            winreg.SetValueEx(key, _RUN_VALUE, 0, winreg.REG_SZ, command)
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
+            winreg.SetValueEx(key, RUN_VALUE, 0, winreg.REG_SZ, command)
 
     def uninstall_autostart(self) -> None:
         try:
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
-                winreg.DeleteValue(key, _RUN_VALUE)
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
+                winreg.DeleteValue(key, RUN_VALUE)
         except FileNotFoundError:
             pass
 
     def is_autostart_installed(self) -> bool:
         try:
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY) as key:
-                winreg.QueryValueEx(key, _RUN_VALUE)
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
+                winreg.QueryValueEx(key, RUN_VALUE)
             return True
         except FileNotFoundError:
             return False
@@ -313,13 +313,13 @@ class WindowsBackend(PlatformBackend):
 # ---- helpers ---------------------------------------------------------------------------------
 
 
-def _window_pid(hwnd) -> int:
+def windowPid(hwnd) -> int:
     pid = wintypes.DWORD()
     user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
     return pid.value
 
 
-def _window_text(hwnd) -> str:
+def windowText(hwnd) -> str:
     length = user32.GetWindowTextLengthW(hwnd)
     if length <= 0:
         return ""
@@ -328,7 +328,7 @@ def _window_text(hwnd) -> str:
     return buf.value
 
 
-def _top_level_windows() -> list[int]:
+def topLevelWindows() -> list[int]:
     """Visible, titled, unowned top-level windows, i.e. the ones that show in Alt+Tab."""
     found: list[int] = []
 
@@ -336,7 +336,7 @@ def _top_level_windows() -> list[int]:
         if (
             user32.IsWindowVisible(hwnd)
             and not user32.GetWindow(hwnd, GW_OWNER)
-            and not _GetWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW
+            and not getWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW
             and user32.GetWindowTextLengthW(hwnd) > 0
         ):
             found.append(hwnd)
@@ -346,12 +346,12 @@ def _top_level_windows() -> list[int]:
     return found
 
 
-def _uwp_child_pid(hwnd, host_pid: int) -> int | None:
+def uwpChildPid(hwnd, hostPid: int) -> int | None:
     result: list[int] = []
 
     def callback(child, _lparam):
-        pid = _window_pid(child)
-        if pid != host_pid:
+        pid = windowPid(child)
+        if pid != hostPid:
             result.append(pid)
             return False
         return True
@@ -360,38 +360,38 @@ def _uwp_child_pid(hwnd, host_pid: int) -> int | None:
     return result[0] if result else None
 
 
-def _process(pid: int) -> psutil.Process | None:
+def getProcess(pid: int) -> psutil.Process | None:
     try:
         return psutil.Process(pid)
     except psutil.Error:
         return None
 
 
-def _proc_name(proc: psutil.Process) -> str:
+def processName(proc: psutil.Process) -> str:
     try:
         return proc.name().lower()
     except psutil.Error:
         return ""
 
 
-def _proc_exe(proc: psutil.Process) -> str | None:
+def processExe(proc: psutil.Process) -> str | None:
     try:
         return proc.exe() or None
     except psutil.Error:  # AccessDenied for elevated processes when we aren't admin
         return None
 
 
-def _friendly_name(proc: psutil.Process, exe: str | None) -> str:
-    name = _proc_name(proc)
-    aumid = _app_user_model_id(proc.pid)
+def friendlyName(proc: psutil.Process, exe: str | None) -> str:
+    name = processName(proc)
+    aumid = appUserModelId(proc.pid)
     if aumid:
-        display = _packaged_app_name(aumid)
+        display = packagedAppName(aumid)
         if display:
             return display
     if exe:
-        desc = _file_description(exe)
+        desc = fileDescription(exe)
         if desc:
-            return _tidy_description(desc)
+            return tidyDescription(desc)
     if name in BROWSERS:
         return BROWSERS[name]
     if exe:
@@ -401,7 +401,7 @@ def _friendly_name(proc: psutil.Process, exe: str | None) -> str:
     return "Unknown"
 
 
-def _file_description(exe: str) -> str | None:
+def fileDescription(exe: str) -> str | None:
     try:
         import win32api
 
@@ -418,7 +418,7 @@ def _file_description(exe: str) -> str | None:
         return None
 
 
-def _tidy_description(desc: str) -> str:
+def tidyDescription(desc: str) -> str:
     parts = desc.split(".")
     if len(parts) < 2:
         return desc
@@ -428,7 +428,7 @@ def _tidy_description(desc: str) -> str:
     return desc.replace(".", " ")
 
 
-def _app_user_model_id(pid: int) -> str | None:
+def appUserModelId(pid: int) -> str | None:
     handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
     if not handle:
         return None
@@ -444,12 +444,12 @@ def _app_user_model_id(pid: int) -> str | None:
         kernel32.CloseHandle(handle)
 
 
-_packaged_names: dict[str, str | None] = {}
+packagedNames: dict[str, str | None] = {}
 
 
-def _packaged_app_name(aumid: str) -> str | None:
-    if aumid in _packaged_names:
-        return _packaged_names[aumid]
+def packagedAppName(aumid: str) -> str | None:
+    if aumid in packagedNames:
+        return packagedNames[aumid]
     try:
         import pythoncom
         from win32com.shell import shell, shellcon
@@ -469,16 +469,16 @@ def _packaged_app_name(aumid: str) -> str | None:
     finally:
         if initialized:
             pythoncom.CoUninitialize()
-    _packaged_names[aumid] = display
+    packagedNames[aumid] = display
     return display
 
 
-def _find_address_bar(root):
-    for name in _ADDRESS_BAR_NAMES:
-        edit = root.EditControl(Name=name, searchDepth=_UIA_SEARCH_DEPTH)
+def findAddressBar(root):
+    for name in ADDRESS_BAR_NAMES:
+        edit = root.EditControl(Name=name, searchDepth=UIA_SEARCH_DEPTH)
         if edit.Exists(0, 0):
             return edit
-    toolbar = root.ToolBarControl(searchDepth=_UIA_SEARCH_DEPTH)
+    toolbar = root.ToolBarControl(searchDepth=UIA_SEARCH_DEPTH)
     if toolbar.Exists(0, 0):
         edit = toolbar.EditControl(searchDepth=4)
         if edit.Exists(0, 0):

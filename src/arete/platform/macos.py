@@ -76,14 +76,14 @@ BROWSERS = {
 }
 
 # All three are Chromium-based and share Chrome's AppleScript dictionary.
-_URL_SCRIPT = """
-tell application id "{bundle_id}"
+URL_SCRIPT = """
+tell application id "{bundleId}"
     if (count of windows) is 0 then return ""
     return URL of active tab of front window
 end tell
 """
 
-_SAFARI_URL_SCRIPT = """
+SAFARI_URL_SCRIPT = """
 tell application id "com.apple.safari"
     if (count of windows) is 0 then return ""
     return URL of current tab of front window
@@ -98,8 +98,8 @@ CHROME_FAMILY = (
     "org.chromium.chromium",
 )
 
-_OSASCRIPT_TIMEOUT = 2.0
-_ANY_INPUT_EVENT = getattr(Quartz, "kCGAnyInputEventType", 0xFFFFFFFF)
+OSASCRIPT_TIMEOUT = 2.0
+ANY_INPUT_EVENT = getattr(Quartz, "kCGAnyInputEventType", 0xFFFFFFFF)
 
 
 class MacOSBackend(PlatformBackend):
@@ -108,20 +108,20 @@ class MacOSBackend(PlatformBackend):
     #what is the user doing
 
     def get_active_window(self) -> ActiveWindow | None:
-        app = self._frontmost_app()
+        app = self.frontmostApp()
         if app is None:
             return None
         pid = int(app.processIdentifier())
-        window_id, cg_title = self._front_cg_window(pid)
-        title = self._ax_focused_window_title(pid) or cg_title or ""
-        exe_url = app.executableURL()
+        windowId, cgTitle = self.frontCgWindow(pid)
+        title = self.axFocusedWindowTitle(pid) or cgTitle or ""
+        exeUrl = app.executableURL()
         return ActiveWindow(
             app_name=str(app.localizedName() or ""),
-            app_id=str(app.bundleIdentifier() or "").lower() or _exe_name(exe_url),
+            app_id=str(app.bundleIdentifier() or "").lower() or exeName(exeUrl),
             pid=pid,
             title=title,
-            exe_path=str(exe_url.path()) if exe_url else None,
-            window_handle=window_id,
+            exe_path=str(exeUrl.path()) if exeUrl else None,
+            window_handle=windowId,
         )
 
 
@@ -135,15 +135,15 @@ class MacOSBackend(PlatformBackend):
             return None
         # Bundle ids are case-insensitive to AppleScript, so the lowercased app_id is fine.
 
-        script = _URL_SCRIPT.format(bundle_id=window.app_id)
+        script = URL_SCRIPT.format(bundleId=window.app_id)
         if window.app_id == "com.apple.safari":
-            script = _SAFARI_URL_SCRIPT
+            script = SAFARI_URL_SCRIPT
         try:
             result = subprocess.run(
                 ["osascript", "-e", script],
                 capture_output=True,
                 text=True,
-                timeout=_OSASCRIPT_TIMEOUT,
+                timeout=OSASCRIPT_TIMEOUT,
             )
         except subprocess.TimeoutExpired:
             log.warning("Timed out reading URL from %s", window.app_name)
@@ -159,13 +159,13 @@ class MacOSBackend(PlatformBackend):
         for app in NSWorkspace.sharedWorkspace().runningApplications():
             if app.activationPolicy() != NSApplicationActivationPolicyRegular:
                 continue
-            exe_url = app.executableURL()
+            exeUrl = app.executableURL()
             apps.append(
                 RunningApp(
                     app_name=str(app.localizedName() or ""),
-                    app_id=str(app.bundleIdentifier() or "").lower() or _exe_name(exe_url),
+                    app_id=str(app.bundleIdentifier() or "").lower() or exeName(exeUrl),
                     pid=int(app.processIdentifier()),
-                    exe_path=str(exe_url.path()) if exe_url else None,
+                    exe_path=str(exeUrl.path()) if exeUrl else None,
                 )
             )
         return apps
@@ -173,7 +173,7 @@ class MacOSBackend(PlatformBackend):
     def get_idle_seconds(self) -> float:
         return float(
             Quartz.CGEventSourceSecondsSinceLastEventType(
-                Quartz.kCGEventSourceStateCombinedSessionState, _ANY_INPUT_EVENT
+                Quartz.kCGEventSourceStateCombinedSessionState, ANY_INPUT_EVENT
             )
         )
 
@@ -206,7 +206,7 @@ class MacOSBackend(PlatformBackend):
                 ["osascript", "-e", script],
                 capture_output=True,
                 text=True,
-                timeout=_OSASCRIPT_TIMEOUT,
+                timeout=OSASCRIPT_TIMEOUT,
             )
         except subprocess.TimeoutExpired:
             return False
@@ -214,7 +214,7 @@ class MacOSBackend(PlatformBackend):
 
     def hide_from_taskbar(self) -> None:
         NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
-        self._no_app_nap = NSProcessInfo.processInfo().beginActivityWithOptions_reason_(
+        self.noAppNap = NSProcessInfo.processInfo().beginActivityWithOptions_reason_(
             NSActivityUserInitiatedAllowingIdleSystemSleep, "Arete tracks the active app"
         )
 
@@ -239,9 +239,9 @@ class MacOSBackend(PlatformBackend):
 
     def blur_behind(self, win_id: int, corner_radius: float = 0) -> bool:
         # qts winId on mac is the NSView it draws into, draw blur beneath
-        qt_view = objc.objc_object(c_void_p=win_id)
-        frame_view = qt_view.superview()
-        blur = NSVisualEffectView.alloc().initWithFrame_(frame_view.bounds())
+        qtView = objc.objc_object(c_void_p=win_id)
+        frameView = qtView.superview()
+        blur = NSVisualEffectView.alloc().initWithFrame_(frameView.bounds())
 
         blur.setBlendingMode_(NSVisualEffectBlendingModeBehindWindow)
         blur.setMaterial_(NSVisualEffectMaterialHUDWindow)
@@ -253,15 +253,15 @@ class MacOSBackend(PlatformBackend):
         blur.layer().setMasksToBounds_(True)
         # unfortunately native app le doesnt have a blur strength parameter. Its just ugly blur for now haha
 
-        frame_view.addSubview_positioned_relativeTo_(blur, NSWindowBelow, qt_view)
+        frameView.addSubview_positioned_relativeTo_(blur, NSWindowBelow, qtView)
         return True
 
     @property
-    def _launch_agent_path(self) -> Path:
+    def launchAgentPath(self) -> Path:
         return Path.home() / "Library" / "LaunchAgents" / f"{AUTOSTART_LABEL}.plist"
 
     def install_autostart(self) -> None:
-        log_path = Path.home() / "Library" / "Logs" / "Arete.log"
+        logPath = Path.home() / "Library" / "Logs" / "Arete.log"
         plist = {
             "Label": AUTOSTART_LABEL,
             "ProgramArguments": self.daemon_command(),
@@ -269,32 +269,32 @@ class MacOSBackend(PlatformBackend):
             # Relaunch if the daemon is killed, so quitting it isn't an easy escape.
             "KeepAlive": True,
             "ProcessType": "Interactive",
-            "StandardOutPath": str(log_path),
-            "StandardErrorPath": str(log_path),
+            "StandardOutPath": str(logPath),
+            "StandardErrorPath": str(logPath),
         }
-        path = self._launch_agent_path
+        path = self.launchAgentPath
         path.parent.mkdir(parents=True, exist_ok=True)
         if self.is_autostart_installed():
             self.uninstall_autostart()
         with path.open("wb") as f:
             plistlib.dump(plist, f)
-        subprocess.run(["launchctl", "bootstrap", _gui_domain(), str(path)], check=True)
+        subprocess.run(["launchctl", "bootstrap", guiDomain(), str(path)], check=True)
 
     def uninstall_autostart(self) -> None:
         # bootout fails harmlessly if the agent isn't loaded.
         subprocess.run(
-            ["launchctl", "bootout", f"{_gui_domain()}/{AUTOSTART_LABEL}"],
+            ["launchctl", "bootout", f"{guiDomain()}/{AUTOSTART_LABEL}"],
             capture_output=True,
         )
-        self._launch_agent_path.unlink(missing_ok=True)
+        self.launchAgentPath.unlink(missing_ok=True)
 
     def is_autostart_installed(self) -> bool:
-        return self._launch_agent_path.exists()
+        return self.launchAgentPath.exists()
 
     def check_permissions(self) -> dict[str, PermissionState]:
         return {
-            "accessibility": _state(AXIsProcessTrusted()),
-            "screen_recording": _state(Quartz.CGPreflightScreenCaptureAccess()),
+            "accessibility": stateFor(AXIsProcessTrusted()),
+            "screen_recording": stateFor(Quartz.CGPreflightScreenCaptureAccess()),
             # macOS has no way to check Automation consent without possibly prompting.
             "automation": PermissionState.UNKNOWN,
         }
@@ -307,7 +307,7 @@ class MacOSBackend(PlatformBackend):
 
     # ---- internals -------------------------------------------------------------------------
 
-    def _frontmost_app(self) -> NSRunningApplication | None:
+    def frontmostApp(self) -> NSRunningApplication | None:
         # NSWorkspace only refreshes frontmostApplication while a run loop is spinning on the
         # main thread. The Accessibility API is always current, so prefer it when we're trusted.
         if AXIsProcessTrusted():
@@ -323,11 +323,11 @@ class MacOSBackend(PlatformBackend):
         return NSWorkspace.sharedWorkspace().frontmostApplication()
 
     @staticmethod
-    def _ax_focused_window_title(pid: int) -> str | None:
+    def axFocusedWindowTitle(pid: int) -> str | None:
         if not AXIsProcessTrusted():
             return None
-        app_el = AXUIElementCreateApplication(pid)
-        err, window = AXUIElementCopyAttributeValue(app_el, kAXFocusedWindowAttribute, None)
+        appElement = AXUIElementCreateApplication(pid)
+        err, window = AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute, None)
         if err != kAXErrorSuccess or window is None:
             return None
         err, title = AXUIElementCopyAttributeValue(window, kAXTitleAttribute, None)
@@ -336,7 +336,7 @@ class MacOSBackend(PlatformBackend):
         return str(title)
 
     @staticmethod
-    def _front_cg_window(pid: int) -> tuple[int | None, str | None]:
+    def frontCgWindow(pid: int) -> tuple[int | None, str | None]:
         """(CGWindowID, title) of `pid`'s frontmost normal window. Title needs Screen Recording."""
         windows = Quartz.CGWindowListCopyWindowInfo(
             Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements,
@@ -350,13 +350,13 @@ class MacOSBackend(PlatformBackend):
         return None, None
 
 
-def _exe_name(exe_url) -> str:
-    return exe_url.lastPathComponent().lower() if exe_url else ""
+def exeName(exeUrl) -> str:
+    return exeUrl.lastPathComponent().lower() if exeUrl else ""
 
 
-def _gui_domain() -> str:
+def guiDomain() -> str:
     return f"gui/{os.getuid()}"
 
 
-def _state(granted: bool) -> PermissionState:
+def stateFor(granted: bool) -> PermissionState:
     return PermissionState.GRANTED if granted else PermissionState.DENIED
