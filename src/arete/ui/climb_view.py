@@ -206,9 +206,6 @@ class MountainMap(QWidget):
     def pictureHeight(self):
         return int((mountain_art.PICTURE_HEIGHT - self.topCrop()) * self.scale())
 
-    def setBottomPad(self, bottomPad):
-        self.bottomPad = bottomPad
-        self.updateHeight()
 
     # map is as tall as the scaled picture, the scroll area does the rest
     def updateHeight(self):

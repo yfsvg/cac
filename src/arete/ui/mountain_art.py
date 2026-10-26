@@ -3,7 +3,7 @@ import random
 import re
 
 from PySide6.QtCore import QByteArray, QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QTransform
+from PySide6.QtGui import QColor, QPainterPath, QPen, QTransform
 from PySide6.QtSvg import QSvgRenderer
 
 PICTURE_WIDTH = 420

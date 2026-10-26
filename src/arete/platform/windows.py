@@ -7,14 +7,13 @@ import logging
 import os
 import subprocess
 import time
-import winreg
 from ctypes import wintypes
 from pathlib import Path
 
 import psutil
 
-from arete.core.models import ActiveWindow, PermissionState, RunningApp
-from arete.platform.base import PlatformBackend, grabRegion
+from arete.core.models import ActiveWindow, PermissionState
+from arete.platform.base import PlatformBackend
 
 log = logging.getLogger(__name__)
 
@@ -54,23 +53,12 @@ BROWSERS = {
 ADDRESS_BAR_NAMES = ("Address and search bar", "Search or enter address", "Address bar")
 UIA_SEARCH_DEPTH = 12
 
-RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-RUN_VALUE = "Arete"
 
 # Win32 constants
 GW_OWNER = 4
 GWL_EXSTYLE = -20
 WM_CLOSE = 0x0010
-WS_EX_TRANSPARENT = 0x00000020
 WS_EX_TOOLWINDOW = 0x00000080
-WS_EX_LAYERED = 0x00080000
-WS_EX_NOACTIVATE = 0x08000000
-HWND_TOPMOST = wintypes.HWND(-1)
-SWP_NOSIZE = 0x0001
-SWP_NOMOVE = 0x0002
-SWP_NOACTIVATE = 0x0010
-SWP_FRAMECHANGED = 0x0020
-LWA_ALPHA = 0x00000002
 VK_CONTROL = 0x11
 VK_W = 0x57
 KEYEVENTF_KEYUP = 0x0002
@@ -173,22 +161,6 @@ class WindowsBackend(PlatformBackend):
             log.debug("UI Automation lookup failed for %s", window.app_name, exc_info=True)
             return None
 
-    def list_running_apps(self) -> list[RunningApp]:
-        apps: dict[int, RunningApp] = {}
-        for hwnd in topLevelWindows():
-            pid = windowPid(hwnd)
-            if pid in apps or not (proc := getProcess(pid)):
-                continue
-            if processName(proc) == "applicationframehost.exe":
-                childPid = uwpChildPid(hwnd, pid)
-                if not childPid or childPid in apps or not (proc := getProcess(childPid)):
-                    continue
-                pid = childPid
-            exe = processExe(proc)
-            apps[pid] = RunningApp(
-                app_name=friendlyName(proc, exe), app_id=processName(proc), pid=pid, exe_path=exe
-            )
-        return list(apps.values())
 
     def get_idle_seconds(self) -> float:
         info = LASTINPUTINFO(cbSize=ctypes.sizeof(LASTINPUTINFO))
@@ -245,13 +217,6 @@ class WindowsBackend(PlatformBackend):
             int((rect.bottom - rect.top) / scale),
         )
 
-    def capture_window(self, window: ActiveWindow) -> bytes | None:
-        if not window.window_handle:
-            return None
-        rect = wintypes.RECT()
-        if not user32.GetWindowRect(wintypes.HWND(window.window_handle), ctypes.byref(rect)):
-            return None
-        return grabRegion((rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top))
 
     def hide_from_taskbar(self) -> None:
         # Nothing app-wide on Windows: WS_EX_TOOLWINDOW (set per window above) keeps windows
@@ -260,25 +225,6 @@ class WindowsBackend(PlatformBackend):
 
     # ---- installation ----------------------------------------------------------------------
 
-    def install_autostart(self) -> None:
-        command = subprocess.list2cmdline(self.daemon_command())
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
-            winreg.SetValueEx(key, RUN_VALUE, 0, winreg.REG_SZ, command)
-
-    def uninstall_autostart(self) -> None:
-        try:
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
-                winreg.DeleteValue(key, RUN_VALUE)
-        except FileNotFoundError:
-            pass
-
-    def is_autostart_installed(self) -> bool:
-        try:
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
-                winreg.QueryValueEx(key, RUN_VALUE)
-            return True
-        except FileNotFoundError:
-            return False
 
     def check_permissions(self) -> dict[str, PermissionState]:
         try:
@@ -294,10 +240,6 @@ class WindowsBackend(PlatformBackend):
             "screen_recording": PermissionState.NOT_REQUIRED,
         }
 
-    def request_permissions(self) -> None:
-        # Windows has no per-app consent prompts for anything we use. Admin rights come from
-        # run_as_admin at startup, since they can't be added to a process that's already running.
-        pass
 
     def is_admin(self) -> bool:
         return bool(shell32.IsUserAnAdmin())

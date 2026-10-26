@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import logging
-import os
-import plistlib
 import subprocess
-from pathlib import Path
 
 import objc
 import psutil
@@ -17,7 +14,6 @@ from AppKit import (
     NSAppearanceNameVibrantDark,
     NSApplication,
     NSApplicationActivationPolicyAccessory,
-    NSApplicationActivationPolicyRegular,
     NSBundle,
     NSRunningApplication,
     NSStatusWindowLevel,
@@ -30,13 +26,10 @@ from AppKit import (
     NSWindowBelow,
     NSWindowCollectionBehaviorCanJoinAllSpaces,
     NSWindowCollectionBehaviorFullScreenAuxiliary,
-    NSWindowCollectionBehaviorIgnoresCycle,
-    NSWindowCollectionBehaviorStationary,
     NSWorkspace,
 )
 from ApplicationServices import (
     AXIsProcessTrusted,
-    AXIsProcessTrustedWithOptions,
     AXUIElementCopyAttributeValue,
     AXUIElementCreateApplication,
     AXUIElementCreateSystemWide,
@@ -45,11 +38,10 @@ from ApplicationServices import (
     kAXFocusedApplicationAttribute,
     kAXFocusedWindowAttribute,
     kAXTitleAttribute,
-    kAXTrustedCheckOptionPrompt,
 )
 
-from arete.core.models import ActiveWindow, PermissionState, RunningApp
-from arete.platform.base import AUTOSTART_LABEL, PlatformBackend
+from arete.core.models import ActiveWindow, PermissionState
+from arete.platform.base import PlatformBackend
 
 log = logging.getLogger(__name__)
 
@@ -154,21 +146,6 @@ class MacOSBackend(PlatformBackend):
             return None
         return result.stdout.strip() or None
 
-    def list_running_apps(self) -> list[RunningApp]:
-        apps = []
-        for app in NSWorkspace.sharedWorkspace().runningApplications():
-            if app.activationPolicy() != NSApplicationActivationPolicyRegular:
-                continue
-            exeUrl = app.executableURL()
-            apps.append(
-                RunningApp(
-                    app_name=str(app.localizedName() or ""),
-                    app_id=str(app.bundleIdentifier() or "").lower() or exeName(exeUrl),
-                    pid=int(app.processIdentifier()),
-                    exe_path=str(exeUrl.path()) if exeUrl else None,
-                )
-            )
-        return apps
 
     def get_idle_seconds(self) -> float:
         return float(
@@ -256,40 +233,6 @@ class MacOSBackend(PlatformBackend):
         frameView.addSubview_positioned_relativeTo_(blur, NSWindowBelow, qtView)
         return True
 
-    @property
-    def launchAgentPath(self) -> Path:
-        return Path.home() / "Library" / "LaunchAgents" / f"{AUTOSTART_LABEL}.plist"
-
-    def install_autostart(self) -> None:
-        logPath = Path.home() / "Library" / "Logs" / "Arete.log"
-        plist = {
-            "Label": AUTOSTART_LABEL,
-            "ProgramArguments": self.daemon_command(),
-            "RunAtLoad": True,
-            # Relaunch if the daemon is killed, so quitting it isn't an easy escape.
-            "KeepAlive": True,
-            "ProcessType": "Interactive",
-            "StandardOutPath": str(logPath),
-            "StandardErrorPath": str(logPath),
-        }
-        path = self.launchAgentPath
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if self.is_autostart_installed():
-            self.uninstall_autostart()
-        with path.open("wb") as f:
-            plistlib.dump(plist, f)
-        subprocess.run(["launchctl", "bootstrap", guiDomain(), str(path)], check=True)
-
-    def uninstall_autostart(self) -> None:
-        # bootout fails harmlessly if the agent isn't loaded.
-        subprocess.run(
-            ["launchctl", "bootout", f"{guiDomain()}/{AUTOSTART_LABEL}"],
-            capture_output=True,
-        )
-        self.launchAgentPath.unlink(missing_ok=True)
-
-    def is_autostart_installed(self) -> bool:
-        return self.launchAgentPath.exists()
 
     def check_permissions(self) -> dict[str, PermissionState]:
         return {
@@ -299,11 +242,6 @@ class MacOSBackend(PlatformBackend):
             "automation": PermissionState.UNKNOWN,
         }
 
-    def request_permissions(self) -> None:
-        if not AXIsProcessTrusted():
-            AXIsProcessTrustedWithOptions({kAXTrustedCheckOptionPrompt: True})
-        if not Quartz.CGPreflightScreenCaptureAccess():
-            Quartz.CGRequestScreenCaptureAccess()
 
     # ---- internals -------------------------------------------------------------------------
 
@@ -353,9 +291,6 @@ class MacOSBackend(PlatformBackend):
 def exeName(exeUrl) -> str:
     return exeUrl.lastPathComponent().lower() if exeUrl else ""
 
-
-def guiDomain() -> str:
-    return f"gui/{os.getuid()}"
 
 
 def stateFor(granted: bool) -> PermissionState:

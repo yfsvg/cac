@@ -17,13 +17,6 @@ class ActiveWindow:
     window_handle: int | None = None  # HWND on windows, CGWindowID on mac, used to read browser urls
 
 
-@dataclass(frozen=True)
-class RunningApp:
-    app_name: str
-    app_id: str
-    pid: int
-    exe_path: str | None = None
-
 
 # what check_permissions gives back per permission
 class PermissionState(str, Enum):
