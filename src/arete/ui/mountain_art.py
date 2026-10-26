@@ -174,13 +174,7 @@ class Flyer:
         self.startTime = startTime
         self.goingRight = randomNumbers.random() < 0.5
         self.height = randomNumbers.uniform(top, bottom)
-        self.speed = randomNumbers.uniform(28, 42)
-        self.birdCount = randomNumbers.randint(3, 5)
-        self.offsets = []
-        for birdNumber in range(self.birdCount):
-            self.offsets.append((-birdNumber * randomNumbers.uniform(14, 20), randomNumbers.uniform(-10, 10), randomNumbers.uniform(0, 6)))
-        if kind == "plane":
-            self.speed = randomNumbers.uniform(55, 70)
+        self.speed = randomNumbers.uniform(55, 70)
 
     def x(self, seconds):
         travelled = (seconds - self.startTime) * self.speed - 60
@@ -194,50 +188,32 @@ class Flyer:
     def paint(self, painter, seconds):
         direction = 1 if self.goingRight else -1
         leadX = self.x(seconds)
-        if self.kind == "plane":
-            painter.setPen(QPen(QColor(255, 255, 255, 110), 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-            painter.drawLine(QPointF(leadX - direction * 8, self.height), QPointF(leadX - direction * 110, self.height + 2))
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(255, 255, 255, 235))
-            body = QPainterPath()
-            body.addRoundedRect(QRectF(leadX - 9, self.height - 1.6, 18, 3.2), 1.6, 1.6)
-            wing = QPainterPath(QPointF(leadX + direction * 1, self.height))
-            wing.lineTo(QPointF(leadX - direction * 4, self.height + 7))
-            wing.lineTo(QPointF(leadX - direction * 6, self.height + 7))
-            wing.lineTo(QPointF(leadX - direction * 3, self.height))
-            tail = QPainterPath(QPointF(leadX - direction * 7, self.height))
-            tail.lineTo(QPointF(leadX - direction * 10, self.height - 5))
-            tail.lineTo(QPointF(leadX - direction * 9, self.height))
-            painter.drawPath(body.united(wing).united(tail))
-            return
-        painter.setPen(QPen(QColor(255, 255, 255, 215), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        for behind, up, flapPhase in self.offsets:
-            birdX = leadX + direction * behind
-            birdY = self.height + up + math.sin(seconds * 1.3 + flapPhase) * 2
-            flap = math.sin(seconds * 9 + flapPhase) * 3.5
-            bird = QPainterPath(QPointF(birdX - 6, birdY - flap))
-            bird.quadTo(QPointF(birdX - 3, birdY - 2.5 - flap * 0.3), QPointF(birdX, birdY))
-            bird.quadTo(QPointF(birdX + 3, birdY - 2.5 - flap * 0.3), QPointF(birdX + 6, birdY - flap))
-            painter.drawPath(bird)
+        painter.setPen(QPen(QColor(255, 255, 255, 110), 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.drawLine(QPointF(leadX - direction * 8, self.height), QPointF(leadX - direction * 110, self.height + 2))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(255, 255, 255, 235))
+        body = QPainterPath()
+        body.addRoundedRect(QRectF(leadX - 9, self.height - 1.6, 18, 3.2), 1.6, 1.6)
+        wing = QPainterPath(QPointF(leadX + direction * 1, self.height))
+        wing.lineTo(QPointF(leadX - direction * 4, self.height + 7))
+        wing.lineTo(QPointF(leadX - direction * 6, self.height + 7))
+        wing.lineTo(QPointF(leadX - direction * 3, self.height))
+        tail = QPainterPath(QPointF(leadX - direction * 7, self.height))
+        tail.lineTo(QPointF(leadX - direction * 10, self.height - 5))
+        tail.lineTo(QPointF(leadX - direction * 9, self.height))
+        painter.drawPath(body.united(wing).united(tail))
 
 
 class Sky:
     def __init__(self):
         self.flyers = []
         self.randomNumbers = random.Random()
-        self.nextBirdTime = 2
         self.nextPlaneTime = 12
 
     def update(self, seconds, visibleTop, visibleBottom):
         self.flyers = [flyer for flyer in self.flyers if not flyer.finished(seconds)]
         if visibleBottom - visibleTop < 120:
             return
-        if seconds >= self.nextBirdTime:
-            top = visibleTop + 40
-            bottom = visibleTop + (visibleBottom - visibleTop) * 0.55
-            self.flyers.append(Flyer("birds", seconds, top, bottom, self.randomNumbers))
-            self.nextBirdTime = seconds + self.randomNumbers.uniform(8, 14)
         if seconds >= self.nextPlaneTime and visibleTop < 900:
             top = visibleTop + 30
             self.flyers.append(Flyer("plane", seconds, top, top + 140, self.randomNumbers))

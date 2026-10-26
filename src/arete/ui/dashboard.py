@@ -345,14 +345,6 @@ class HeroCard(QFrame):
             ridge.closeSubpath()
             painter.setBrush(mountainColor)
             painter.drawPath(ridge)
-        snowColor = QColor("white")
-        snowColor.setAlpha(150)
-        snowCap = QPainterPath(QPointF(self.width() - 60 - 11, 45 + 9))
-        snowCap.lineTo(QPointF(self.width() - 60, 45))
-        snowCap.lineTo(QPointF(self.width() - 60 + 12, 45 + 9))
-        snowCap.closeSubpath()
-        painter.setBrush(snowColor)
-        painter.drawPath(snowCap)
 
 
 def focusedStatus(percent):

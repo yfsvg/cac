@@ -331,7 +331,7 @@ class MountainMap(QWidget):
                 self.drawLabel(painter, stageText, nodePoint, NODE_RADIUS + 10)
 
         if self.mountainNumber == self.state["mountainNumber"]:
-            self.drawClimber(painter, self.markerPoint(), colors, seconds)
+            self.drawClimber(painter, self.markerPoint(), colors)
         if self.mountainNumber > self.state["mountainNumber"]:
             self.drawLocked(painter)
         painter.end()
@@ -407,16 +407,8 @@ class MountainMap(QWidget):
         painter.setPen(QColor("white"))
         painter.drawText(pillRect, Qt.AlignmentFlag.AlignCenter, text)
 
-    def drawClimber(self, painter, point, colors, seconds):
-        pulse = math.sin(seconds * 2.4)
+    def drawClimber(self, painter, point, colors):
         accentColor = QColor(colors["primary"])
-        glowColor = QColor(accentColor)
-        glowColor.setAlpha(int(70 + 50 * pulse))
-        glowSize = 26 + 5 * pulse
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(glowColor)
-        painter.drawEllipse(point, glowSize, glowSize)
-        point = QPointF(point.x(), point.y() - abs(math.sin(seconds * 3)) * 5)
         painter.setPen(QPen(QColor("white"), 4))
         painter.setBrush(accentColor)
         painter.drawEllipse(point, 14, 14)
