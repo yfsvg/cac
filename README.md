@@ -32,9 +32,8 @@ Click The Climb on the home screen to see your mountain: Mount Fuji, then Everes
 ### Windows admin rights
 Arete checks for admin rights when it starts. If it doesn't have them it shows the UAC prompt: Yes restarts it as admin, No closes it.
 
-### Settings and parental controls
+### Settings
 - A settings change starts 1 hour after you save it, so it's never made on impulse. You can cancel it during that hour. Once it starts, that setting stays locked for 3 days.
-- The parent PIN is never saved. Only a salted scrypt hash of it is, and a PIN saved by an older version is converted the next time Arete starts.
 
 ### Gemini key
 Paste the key in Settings > AI Categorizations. It's saved only on that computer (`%APPDATA%\Arete`), never in the repo.

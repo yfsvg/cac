@@ -1,3 +1,8 @@
+# The climb, everything you see of the mountains:
+# - MountainMap draws one mountain (picture, trail, checkpoints, bosses, climber)
+# - ClimbCard is the little map on the home page, BossCard shows the boss ur fighting
+# - MapHome is the full map page with arrows to flip between mountains
+
 import math
 import time
 
@@ -7,10 +12,10 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QProgressBar, QPushBu
 
 from arete.core import climbing, mountains
 from arete.ui import animations, mountain_art
-from arete.ui.boss_art import BossPortrait, drawBossCharacter
-from arete.ui.boss_fight import bossName
+from arete.ui.boss_fight import BossPortrait, bossName, drawBossCharacter
 from arete.ui.theme import getColors
 
+# stylesheet for the climb card, boss card and map page, @names are theme colours
 CLIMB_STYLE = """
     QPushButton#MountainTab {
         color: @onSurfaceVariant;
@@ -80,20 +85,27 @@ CLIMB_STYLE = """
     QPushButton#OpenMap:pressed { border-bottom: 1px solid @primaryShadow; padding-top: 8px; }
 """
 
+# sizes of the checkpoint circles + boss badges on the map, in pixels
 NODE_RADIUS = 13
+# map page shows the mountain a bit smaller so more of it fits, the sides get filled in
 MAP_ZOOM = 0.8
 BOSS_RADIUS = 19
 
 
+# "42.5% up Mount Fuji"
 def climbSummary(state):
     mountain = mountains.MOUNTAINS[state["mountainNumber"]]
     return percentText(state["percent"]) + "% up " + mountain["name"]
 
 
+# 42.50 -> "42.5", 40.0 -> "40"
 def percentText(percent):
     return format(percent, ".1f").rstrip("0").rstrip(".")
 
 
+# Small icons drawn by hand so they scale + follow the colours
+
+# tick mark for reached checkpoints + beaten bosses
 def drawCheck(painter, center, size, color):
     painter.setPen(QPen(color, size * 0.28, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
     painter.setBrush(Qt.BrushStyle.NoBrush)
@@ -103,6 +115,7 @@ def drawCheck(painter, center, size, color):
     painter.drawPath(check)
 
 
+# shield outline, beaten bosses turn into one of these
 def shieldPath(center, size):
     shield = QPainterPath(QPointF(center.x() - size, center.y() - size * 0.75))
     shield.quadTo(QPointF(center.x(), center.y() - size * 1.1), QPointF(center.x() + size, center.y() - size * 0.75))
@@ -113,6 +126,7 @@ def shieldPath(center, size):
     return shield
 
 
+# padlock on the locked mountain banner
 def drawLock(painter, center, size, color):
     painter.setPen(QPen(color, size * 0.18))
     painter.setBrush(Qt.BrushStyle.NoBrush)
@@ -122,16 +136,24 @@ def drawLock(painter, center, size, color):
     painter.drawRoundedRect(QRectF(center.x() - size * 0.55, center.y() - size * 0.4, size * 1.1, size * 0.9), size * 0.15, size * 0.15)
 
 
+# One mountain. The svg picture is drawn once and saved, then every frame the
+# moving stuff goes on top: trees swaying, birds/planes, the walked trail,
+# checkpoints, bosses and the climber
 class MountainMap(QWidget):
     def __init__(self):
         super().__init__()
+        # which mountain this map is showing (0 fuji, 1 everest, 2 matterhorn) + the saved climb progress
         self.mountainNumber = 0
         self.state = climbing.climbState()
+        # extra ground under the picture so the bottom checkpoint isnt on the edge
         self.bottomPad = 80
         self.showLabels = True
         self.zoom = 1.0
+        # how much health the current boss has left, 0 to 1, for the ring round its badge
         self.bossLeftShare = 1.0
+        # % the climber is drawn at, slides towards the real % when it changes
         self.shownPercent = None
+        # saved picture of the mountain + what size it was made for
         self.picture = None
         self.pictureKey = None
         self.bottomColor = QColor("#2A1F4A")
@@ -139,9 +161,11 @@ class MountainMap(QWidget):
         self.sky = mountain_art.Sky()
         self.animationTimer = QTimer(self, interval=40, timeout=self.animate)
 
+    # trail points, checkpoint rings + trees read out of this mountains svg
     def scene(self):
         return mountain_art.sceneFor(mountains.MOUNTAINS[self.mountainNumber]["picture"])
 
+    # jump straight to a mountain, no sliding
     def showMountain(self, mountainNumber):
         self.mountainNumber = mountainNumber
         self.state = climbing.climbState()
@@ -150,6 +174,7 @@ class MountainMap(QWidget):
         self.sky = mountain_art.Sky()
         self.update()
 
+    # re-read the climb, climber slides to the new spot
     def refresh(self):
         oldPercent = self.percentHere()
         self.state = climbing.climbState()
@@ -165,12 +190,16 @@ class MountainMap(QWidget):
         self.shownPercent = percent
         self.update()
 
+    # Sizing, the svg is 420 wide so everything gets scaled to the widget width
+
     def scale(self):
         return self.width() * self.zoom / mountain_art.PICTURE_WIDTH
 
+    # gap on the left when zoomed out, keeps the mountain centred
     def offsetX(self):
         return (self.width() - mountain_art.PICTURE_WIDTH * self.scale()) / 2
 
+    # empty sky cut off the top of each picture
     def topCrop(self):
         return mountains.MOUNTAINS[self.mountainNumber]["topCrop"]
 
@@ -181,6 +210,7 @@ class MountainMap(QWidget):
         self.bottomPad = bottomPad
         self.updateHeight()
 
+    # map is as tall as the scaled picture, the scroll area does the rest
     def updateHeight(self):
         if self.width() > 0:
             self.setFixedHeight(self.pictureHeight() + self.bottomPad)
@@ -189,6 +219,7 @@ class MountainMap(QWidget):
         self.updateHeight()
         super().resizeEvent(event)
 
+    # only animate while you can see it
     def showEvent(self, event):
         self.animationTimer.start()
         super().showEvent(event)
@@ -200,10 +231,12 @@ class MountainMap(QWidget):
     def seconds(self):
         return time.time() - self.startTime
 
+    # which part of the picture is on screen, so we only animate + draw that bit
     def visiblePictureRange(self):
         visibleRect = self.visibleRegion().boundingRect()
         return visibleRect.top() / self.scale() + self.topCrop(), visibleRect.bottom() / self.scale() + self.topCrop()
 
+    # runs every 40ms, moves the birds/planes then repaints whats visible
     def animate(self):
         if self.width() == 0:
             return
@@ -211,11 +244,15 @@ class MountainMap(QWidget):
         self.sky.update(self.seconds(), visibleTop, visibleBottom)
         self.update(self.visibleRegion().boundingRect())
 
+    # Climb position
+
+    # % to draw the climber at, uses the sliding value on the mountain ur on
     def percentHere(self):
         if self.shownPercent is not None and self.mountainNumber == self.state["mountainNumber"]:
             return self.shownPercent
         return self.realPercent()
 
+    # finished mountains are 100%, ones you havent reached yet are 0%
     def realPercent(self):
         if self.mountainNumber < self.state["mountainNumber"]:
             return 100
@@ -223,9 +260,11 @@ class MountainMap(QWidget):
             return 0
         return self.state["percent"]
 
+    # svg coords -> widget coords
     def onScreen(self, picturePoint):
         return QPointF(self.offsetX() + picturePoint.x() * self.scale(), (picturePoint.y() - self.topCrop()) * self.scale())
 
+    # where the climber goes, stops a bit short of a boss thats blocking the trail
     def markerPoint(self):
         scene = self.scene()
         percent = self.percentHere()
@@ -233,6 +272,9 @@ class MountainMap(QWidget):
             percent = max(percent - 2.5, 0)
         return self.onScreen(scene.trail.pointAtPercent(scene.trailFraction(percent)))
 
+    # Drawing
+
+    # the still mountain picture, only redrawn when the size or mountain changes
     def basePicture(self):
         pixelRatio = self.devicePixelRatioF()
         key = (self.width(), self.height(), self.mountainNumber, pixelRatio)
@@ -244,6 +286,8 @@ class MountainMap(QWidget):
             picturePainter.setRenderHint(QPainter.RenderHint.Antialiasing)
             fullHeight = mountain_art.PICTURE_HEIGHT * self.scale()
             self.scene().renderer.render(picturePainter, QRectF(0, -self.topCrop() * self.scale(), self.width(), fullHeight))
+            # zoomed out: the full width picture is the background, then the real
+            # mountain goes in the middle with its edges faded so the sides blend in
             if self.zoom < 1:
                 picturePainter.save()
                 picturePainter.scale(self.width() / mountain_art.PICTURE_WIDTH, self.scale())
@@ -267,6 +311,7 @@ class MountainMap(QWidget):
                 middlePainter.end()
                 picturePainter.drawPixmap(int(self.offsetX()), 0, middle)
             picturePainter.end()
+            # fill the bottom padding with the colour at the bottom of the picture
             self.bottomColor = self.picture.toImage().pixelColor(int(4 * pixelRatio), int((self.pictureHeight() - 3) * pixelRatio))
             picturePainter = QPainter(self.picture)
             picturePainter.fillRect(QRectF(0, self.pictureHeight() - 1, self.width(), self.bottomPad + 2), self.bottomColor)
@@ -274,6 +319,7 @@ class MountainMap(QWidget):
             self.pictureKey = key
         return self.picture
 
+    # every frame: saved picture, then trees + sky, trail, checkpoints, climber
     def paintEvent(self, event):
         if self.width() == 0:
             return
@@ -286,6 +332,7 @@ class MountainMap(QWidget):
         visibleTop = event.rect().top() / self.scale() + self.topCrop()
         visibleBottom = event.rect().bottom() / self.scale() + self.topCrop()
 
+        # trees + birds are in svg coords so draw them scaled the same as the picture
         painter.save()
         painter.translate(self.offsetX(), 0)
         painter.scale(self.scale(), self.scale())
@@ -294,6 +341,7 @@ class MountainMap(QWidget):
         self.sky.paint(painter, seconds)
         painter.restore()
 
+        # trail you've walked so far, shadow first then the yellow line
         colors = getColors()
         percentHere = self.percentHere()
         if percentHere > 0:
@@ -305,6 +353,7 @@ class MountainMap(QWidget):
             painter.setPen(QPen(QColor(colors["trail"]), 7, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
             painter.drawPath(walked)
 
+        # checkpoints, every mountain has 8 and some of them are bosses
         labelFont = QFont(self.font())
         labelFont.setPixelSize(12)
         labelFont.setBold(True)
@@ -336,6 +385,7 @@ class MountainMap(QWidget):
             self.drawLocked(painter)
         painter.end()
 
+    # yellow tick circle on a checkpoint you've passed
     def drawDoneNode(self, painter, point, colors):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(colors["trailShadow"]))
@@ -345,6 +395,8 @@ class MountainMap(QWidget):
         painter.drawEllipse(point, NODE_RADIUS, NODE_RADIUS)
         drawCheck(painter, point, NODE_RADIUS * 0.9, QColor("white"))
 
+    # boss checkpoint: beaten ones are a tick shield, the rest show the boss in a badge.
+    # the next boss pulses, and once ur fighting it a ring shows how much health it has left
     def drawBoss(self, painter, point, beaten, colors, seconds, isNextBoss, bossNumber):
         shieldColor = QColor(colors["boss"])
         if beaten:
@@ -381,6 +433,7 @@ class MountainMap(QWidget):
         painter.drawPath(shieldPath(point, shieldSize))
         drawCheck(painter, point, shieldSize * 0.8, QColor("white"))
 
+    # dark pill with the checkpoint name, goes on whichever side has room
     def drawLabel(self, painter, text, point, gap):
         if not self.showLabels:
             return
@@ -407,6 +460,7 @@ class MountainMap(QWidget):
         painter.setPen(QColor("white"))
         painter.drawText(pillRect, Qt.AlignmentFlag.AlignCenter, text)
 
+    # you, a little person in a circle
     def drawClimber(self, painter, point, colors):
         accentColor = QColor(colors["primary"])
         painter.setPen(QPen(QColor("white"), 4))
@@ -420,10 +474,12 @@ class MountainMap(QWidget):
         body.closeSubpath()
         painter.drawPath(body)
 
+    # darkens a mountain you havent unlocked yet
     def drawLocked(self, painter):
         painter.fillRect(self.rect(), QColor(10, 8, 30, 140))
 
 
+# trophy on the completed mountain banner
 def drawTrophy(painter, center, size, color):
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(color)
@@ -440,6 +496,8 @@ def drawTrophy(painter, center, size, color):
     painter.drawArc(QRectF(center.x() + size * 0.35, center.y() - size * 0.5, size * 0.5, size * 0.5), 270 * 16, 180 * 16)
 
 
+# Banner card over the map, "Locked" for mountains you cant climb yet,
+# gold "completed" one for mountains you finished
 class MapBanner(QWidget):
     def __init__(self):
         super().__init__()
@@ -495,6 +553,7 @@ class MapBanner(QWidget):
         painter.drawText(QRectF(cardRect.left() + 12, cardRect.top() + 94, cardRect.width() - 24, 36), Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap, self.detail)
 
 
+# holds the map + arrows + banner, tells the page when it resizes so it can place them
 class MapFrame(QWidget):
     def __init__(self, whenResized):
         super().__init__()
@@ -505,6 +564,8 @@ class MapFrame(QWidget):
         super().resizeEvent(event)
 
 
+# Home page map, a short window onto the mountain that stays centred on the climber.
+# no labels and no mouse wheel so it doesnt steal the dashboard's scrolling
 class MiniMap(QScrollArea):
     def __init__(self):
         super().__init__(widgetResizable=True)
@@ -537,6 +598,7 @@ class MiniMap(QScrollArea):
         scrollBar.setValue(max(0, min(targetValue, scrollBar.maximum())))
 
 
+# Home page climb card, mini map + "x% up" + the last thing that moved you up or down
 class ClimbCard(QFrame):
     def __init__(self, openMap):
         super().__init__(objectName="ClimbCard")
@@ -562,6 +624,7 @@ class ClimbCard(QFrame):
         bottomRow.addWidget(openButton)
         cardLayout.addLayout(bottomRow)
 
+    # percent counts up/down to the new value, gain is green and loss is red
     def refresh(self):
         state = climbing.climbState()
         mountainName = mountains.MOUNTAINS[state["mountainNumber"]]["name"]
@@ -584,6 +647,8 @@ class ClimbCard(QFrame):
         self.miniMap.refresh()
 
 
+# Home page boss card, only shows while a boss is blocking the trail.
+# focus minutes in a session take away its health
 class BossCard(QFrame):
     def __init__(self):
         super().__init__(objectName="BossCard")
@@ -638,11 +703,13 @@ class BossCard(QFrame):
         self.healthLabel.setText(str(int(math.ceil(minutesLeft))) + " of " + str(health) + " focus minutes left")
         self.show()
 
+    # little hurt shake when a focus minute lands
     def hit(self):
         if self.portrait is not None:
             self.portrait.hurt()
 
 
+# round arrow buttons on the map page to flip between mountains, -1 left, 1 right
 class MapArrowButton(QPushButton):
     def __init__(self, direction):
         super().__init__(objectName="MapArrow", cursor=Qt.CursorShape.PointingHandCursor)
@@ -672,6 +739,7 @@ class MapArrowButton(QPushButton):
         super().leaveEvent(event)
 
 
+# Full map page, swaps in where the dashboard is. Info card on top, big scrollable map under it
 class MapHome(QWidget):
     def __init__(self, goBack):
         super().__init__()
@@ -695,6 +763,7 @@ class MapHome(QWidget):
         pageLayout.addLayout(topRow)
 
 
+        # info card, stage name + %, height climbed, progress bar, next goal + stage message
         infoCard = QFrame(objectName="ClimbCard")
         infoLayout = QVBoxLayout(infoCard)
         infoLayout.setContentsMargins(14, 10, 14, 10)
@@ -720,6 +789,7 @@ class MapHome(QWidget):
         infoLayout.addWidget(self.stageMessageLabel)
         pageLayout.addWidget(infoCard)
 
+        # the map, scrolls up and down only, arrows + banner float on top of it
         self.mapFrame = MapFrame(self.placeMap)
         pageLayout.addWidget(self.mapFrame, 1)
         self.scrollArea = QScrollArea(self.mapFrame, widgetResizable=True)
@@ -743,6 +813,7 @@ class MapHome(QWidget):
         self.needsFirstScroll = True
         self.switchMountain(self.viewedMountain, False)
 
+    # lays out the map, arrows + banner, rounds the corners, scrolls to you the first time
     def placeMap(self):
         mapWidth = self.mapFrame.width()
         self.scrollArea.setGeometry(0, 0, mapWidth, self.mapFrame.height())
@@ -765,6 +836,7 @@ class MapHome(QWidget):
         self.mountainMap.refresh()
         self.updateInfo()
 
+    # fills the info card + banner for whichever mountain ur looking at
     def updateInfo(self):
         state = climbing.climbState()
         mountain = mountains.MOUNTAINS[self.viewedMountain]
@@ -819,6 +891,7 @@ class MapHome(QWidget):
             bossDistance = percentText(state["nextBoss"] - state["totalPercent"])
             self.goalLabel.setText(bossDistance + "% to " + bossName(state["bossesBeaten"]))
 
+    # flip to another mountain, crossfades from a snapshot of the old one
     def switchMountain(self, mountainNumber, animate=True):
         if animate and self.mapFrame.width() > 0:
             fadeOverlay = QLabel(self.mapFrame)
@@ -838,6 +911,7 @@ class MapHome(QWidget):
         if animate:
             QTimer.singleShot(0, lambda: self.scrollToClimber(0))
 
+    # scroll so the climber sits just under the middle, duration 0 jumps there
     def scrollToClimber(self, duration=900):
         scrollBar = self.scrollArea.verticalScrollBar()
         targetValue = int(self.mountainMap.markerPoint().y() - self.scrollArea.viewport().height() * 0.55)

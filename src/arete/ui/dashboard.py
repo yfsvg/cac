@@ -361,7 +361,7 @@ def focusedStatus(percent):
 
 def hoursStatus(hours, goodHours):
     if hours == 0:
-        return "Just getting started", NO_DATA
+        return "No Data", NO_DATA
     if hours >= goodHours:
         return "Perfect!", PERFECT
     if hours >= goodHours / 3:
@@ -972,7 +972,7 @@ class Dashboard(QWidget):
 
     def tick(self) -> None:
         for settingName in setting_changes.applyDueChanges():
-            self.enforcer.sendNotification("Your " + settingName + " change is on now.")
+            self.enforcer.sendNotification("Your " + settingTitle(settingName) + " change is on now.")
         self.checkSchedule()
         self.checkIdle()
         self.sessionTick()

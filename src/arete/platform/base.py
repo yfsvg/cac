@@ -80,8 +80,9 @@ class PlatformBackend(ABC):
     def get_window_rect(self, window: ActiveWindow) -> tuple[int, int, int, int] | None:
         return None
 
-    def blur_behind(self, win_id: int, corner_radius: float = 0) -> None:
-        """blur function. Currently mac only, if we're windows then we just ignore."""
+    def blur_behind(self, win_id: int, corner_radius: float = 0) -> bool:
+        """blur function. Currently mac only, if we're windows then we just ignore. True if it blurred."""
+        return False
 
     # ---- installation ----------------------------------------------------------------------
 

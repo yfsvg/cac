@@ -1,8 +1,7 @@
 from PySide6.QtCore import QPointF, QSize, Qt, QTime, QTimer
-from PySide6.QtGui import QColor, QFontDatabase, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
-    QDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -20,16 +19,15 @@ from PySide6.QtWidgets import (
 
 from arete.ai import site_memory, vision
 from arete.core import climbing, enforcement, mountains, setting_changes
-from arete.core.debug_mode import isDebugMode
+from arete.core.debug_mode import isDebugMode, turnOffForSession
 from arete.core.setting_changes import frozenSecondsLeft, markChanged
-from arete.storage import memory, parent_pin, time_tracking
+from arete.storage import memory, time_tracking
 from arete.ui import animations
 from arete.ui.theme import applyTheme, getColors
 
-# Settings page -- app config dropdowns, AI key, parental controls
+# Settings page -- app config dropdowns, AI key
 
 SETTINGS_STYLE = """
-    QDialog#PinDialog { background-color: @surface; }
     QPushButton#PinButton {
         color: @onSecondaryContainer;
         font-size: 14px;
@@ -183,18 +181,6 @@ SETTING_NAMES = ["Absolute Time Limits", "Schedule Time Limits", "AI Categorizat
 
 
 
-# Parental controls - which settings need the pin
-
-def getLockedSettings():
-    return memory.load().get("lockedSettings", [])
-
-
-def saveLockedSettings(lockedSettings):
-    savedMemory = memory.load()
-    savedMemory["lockedSettings"] = lockedSettings
-    memory.save(savedMemory)
-
-
 # Swaps a dropdown's placeholder text for real controls
 
 def replaceBody(dropdown, newBody):
@@ -203,89 +189,6 @@ def replaceBody(dropdown, newBody):
     dropdown.body = newBody
     newBody.hide()
     dropdown.layout().addWidget(newBody)
-
-
-
-
-
-# PIN popup, for making a new pin or unlocking a locked setting
-
-class PinDialog(QDialog):
-    def __init__(self, parent, mainStyle, creating):
-        super().__init__(parent)
-        from arete.ui.dashboard import label
-
-        self.creating = creating
-        self.setObjectName("PinDialog")
-        self.setWindowTitle("Parental Controls")
-        self.setFixedWidth(360)
-        self.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont))
-        self.setStyleSheet(applyTheme(mainStyle + SETTINGS_STYLE))
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(12)
-
-        if creating:
-            layout.addWidget(label("Set up parental controls", "Section"))
-            layout.addWidget(label("Create a PIN. You'll need it to change locked settings.", "Streak"))
-        else:
-            layout.addWidget(label("Enter the parent PIN", "Section"))
-
-        self.pinBox = QLineEdit()
-        self.pinBox.setEchoMode(QLineEdit.EchoMode.Password)
-        self.pinBox.setPlaceholderText("PIN")
-        layout.addWidget(self.pinBox)
-
-        self.confirmBox = QLineEdit()
-        self.confirmBox.setEchoMode(QLineEdit.EchoMode.Password)
-        self.confirmBox.setPlaceholderText("Type the PIN again")
-        layout.addWidget(self.confirmBox)
-        if not creating:
-            self.confirmBox.hide()
-
-        self.errorText = QLabel("", objectName="ErrorText")
-        self.errorText.hide()
-        layout.addWidget(self.errorText)
-
-        buttonRow = QHBoxLayout()
-        buttonRow.addStretch()
-        cancelButton = QPushButton("Cancel", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
-        cancelButton.clicked.connect(self.reject)
-        okButton = QPushButton("Save PIN" if creating else "Unlock", objectName="MainButton", cursor=Qt.CursorShape.PointingHandCursor)
-        okButton.clicked.connect(self.checkPin)
-        buttonRow.addWidget(cancelButton)
-        buttonRow.addWidget(okButton)
-        layout.addLayout(buttonRow)
-
-        self.pinBox.returnPressed.connect(self.checkPin)
-        self.confirmBox.returnPressed.connect(self.checkPin)
-
-    def showError(self, text):
-        self.errorText.setText(text)
-        self.errorText.show()
-
-    def checkPin(self):
-        typedPin = self.pinBox.text()
-        if self.creating:
-            if typedPin == "":
-                self.showError("Type a PIN first")
-            elif typedPin != self.confirmBox.text():
-                self.showError("The PINs didn't match")
-            else:
-                parent_pin.savePin(typedPin)
-                self.accept()
-        elif parent_pin.pinMatches(typedPin):
-            self.accept()
-        else:
-            self.pinBox.clear()
-            self.showError("Wrong PIN")
-
-
-def askForPin(parent, mainStyle):
-    if not parent_pin.hasPin():
-        return True
-    return PinDialog(parent, mainStyle, False).exec() == QDialog.DialogCode.Accepted
 
 
 
@@ -303,6 +206,7 @@ class SettingsPage(QWidget):
         self.onForceQuit = onForceQuit
         self.onClimbChanged = onClimbChanged
         self.onFightBoss = onFightBoss
+        self.goBack = goBack
         self.pendingRows = {}
         self.setStyleSheet(applyTheme(SETTINGS_STYLE))
 
@@ -340,8 +244,6 @@ class SettingsPage(QWidget):
         cardLayout.addWidget(label("Changes start 1 hour after you save them, so they're never made on impulse.", "Streak"))
         for settingName in SETTING_NAMES:
             dropdown = Dropdown(settingName)
-            dropdown.header.clicked.disconnect()
-            dropdown.header.clicked.connect(lambda checked=False, d=dropdown: self.openSetting(d))
             if settingName == "Absolute Time Limits":
                 replaceBody(dropdown, self.makeBreakLimits())
             if settingName == "Schedule Time Limits":
@@ -352,38 +254,11 @@ class SettingsPage(QWidget):
         layout.addWidget(configCard)
         layout.addSpacing(8)
 
-        layout.addWidget(label("Parental Controls", "Section"))
-        parentCard, cardLayout = self.makeSectionCard()
-        self.parentText = label("", "Streak")
-        cardLayout.addWidget(self.parentText)
-
-        self.lockBoxes = {}
-        for settingName in SETTING_NAMES:
-            lockBox = QCheckBox("Lock " + settingName)
-            lockBox.clicked.connect(self.saveLocks)
-            self.lockBoxes[settingName] = lockBox
-            cardLayout.addWidget(lockBox)
-
-        parentRow = QHBoxLayout()
-        self.setupButton = QPushButton("Set up parental controls", objectName="MainButton", cursor=Qt.CursorShape.PointingHandCursor)
-        self.setupButton.clicked.connect(self.setUpParentalControls)
-        self.changePinButton = QPushButton("Change PIN", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
-        self.changePinButton.clicked.connect(self.changePin)
-        self.turnOffButton = QPushButton("Turn off", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
-        self.turnOffButton.clicked.connect(self.turnOffParentalControls)
-        parentRow.addWidget(self.setupButton)
-        parentRow.addWidget(self.changePinButton)
-        parentRow.addWidget(self.turnOffButton)
-        parentRow.addStretch()
-        cardLayout.addLayout(parentRow)
-        layout.addWidget(parentCard)
-        layout.addSpacing(8)
-
-        # Debug tools for testing, these skip parental controls so take them out before release
+        # Debug tools for testing, take them out before release
         if isDebugMode():
             layout.addWidget(label("Debug", "Section"))
             debugCard, cardLayout = self.makeSectionCard()
-            cardLayout.addWidget(label("Testing tools. These skip parental controls.", "Streak"))
+            cardLayout.addWidget(label("Testing tools.", "Streak"))
             debugRow = QHBoxLayout()
             forceQuitButton = QPushButton("Force quit", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
             forceQuitButton.clicked.connect(self.forceQuit)
@@ -396,6 +271,9 @@ class SettingsPage(QWidget):
             debugRow.addWidget(clearMemoryButton)
             debugRow.addStretch()
             cardLayout.addLayout(debugRow)
+            turnOffButton = QPushButton("Turn off debug until restart", objectName="PinButton", cursor=Qt.CursorShape.PointingHandCursor)
+            turnOffButton.clicked.connect(self.turnOffDebug)
+            cardLayout.addWidget(turnOffButton, alignment=Qt.AlignmentFlag.AlignLeft)
             blockingSwitch = QCheckBox("Blocking on", objectName="Switch", cursor=Qt.CursorShape.PointingHandCursor)
             blockingSwitch.setChecked(enforcement.blockingOn)
             blockingSwitch.toggled.connect(self.toggleBlocking)
@@ -415,8 +293,7 @@ class SettingsPage(QWidget):
             self.updateClimbBox()
         layout.addStretch()
 
-        self.updateParentSection()
-        sectionCards = [configCard, parentCard]
+        sectionCards = [configCard]
         if isDebugMode():
             sectionCards.append(debugCard)
         animations.staggerIn(sectionCards, 70, 320)
@@ -465,47 +342,11 @@ class SettingsPage(QWidget):
     def toggleBlocking(self, isOn):
         enforcement.blockingOn = isOn
 
-    def updateParentSection(self):
-        isSetUp = parent_pin.hasPin()
-        lockedSettings = getLockedSettings()
-        self.setupButton.setVisible(not isSetUp)
-        self.changePinButton.setVisible(isSetUp)
-        self.turnOffButton.setVisible(isSetUp)
-        for settingName in self.lockBoxes:
-            lockBox = self.lockBoxes[settingName]
-            lockBox.setVisible(isSetUp)
-            lockBox.setChecked(settingName in lockedSettings)
-            secondsLeft = frozenSecondsLeft("Lock " + settingName)
-            lockBox.setEnabled(secondsLeft == 0)
-            if secondsLeft == 0:
-                lockBox.setText("Lock " + settingName)
-            else:
-                lockBox.setText("Lock " + settingName + " (" + frozenText(secondsLeft) + ")")
-        if isSetUp:
-            self.parentText.setText("Parental controls are on. Locked settings need the PIN to open.")
-        else:
-            self.parentText.setText("Parental controls are off.")
-
-    def openSetting(self, dropdown):
-        if not dropdown.body.isVisible() and dropdown.title in getLockedSettings():
-            if not askForPin(self, self.mainStyle):
-                return
-        dropdown.toggle()
-
-    def saveLocks(self):
-        if not askForPin(self, self.mainStyle):
-            self.updateParentSection()
-            return
-        oldLocks = getLockedSettings()
-        lockedSettings = []
-        for settingName in self.lockBoxes:
-            if self.lockBoxes[settingName].isChecked():
-                lockedSettings.append(settingName)
-            if (settingName in oldLocks) != self.lockBoxes[settingName].isChecked():
-                markChanged("Lock " + settingName)
-        saveLockedSettings(lockedSettings)
-        self.updateParentSection()
-
+    # hides every debug tool until arete restarts, blocking goes back on since its switch goes away too
+    def turnOffDebug(self):
+        turnOffForSession()
+        enforcement.blockingOn = True
+        self.goBack()
 
     # pending changes, countdown till it kicks in + cancel button
     def canEdit(self, settingName):
@@ -884,7 +725,6 @@ class SettingsPage(QWidget):
         self.showBreakValues()
         self.updateKeySection()
         self.showScheduleValues()
-        self.updateParentSection()
 
     def resetLockTimers(self):
         savedMemory = memory.load()
@@ -896,7 +736,7 @@ class SettingsPage(QWidget):
         clearAnswer = QMessageBox.question(
             self,
             "Clear all memory",
-            "This deletes all saved settings, the parent PIN, streaks, break counts, tracked times and website verdicts. "
+            "This deletes all saved settings, streaks, break counts, tracked times and website verdicts. "
             "The Gemini API key is kept. This can't be undone.",
         )
         if clearAnswer != QMessageBox.StandardButton.Yes:
@@ -909,18 +749,3 @@ class SettingsPage(QWidget):
             self.onMemoryCleared()
         self.refreshEverything()
 
-
-    # parental control buttons, needs pin after setup
-    def setUpParentalControls(self):
-        PinDialog(self, self.mainStyle, True).exec()
-        self.updateParentSection()
-
-    def changePin(self):
-        if askForPin(self, self.mainStyle):
-            PinDialog(self, self.mainStyle, True).exec()
-
-    def turnOffParentalControls(self):
-        if askForPin(self, self.mainStyle):
-            parent_pin.removePin()
-            saveLockedSettings([])
-            self.updateParentSection()

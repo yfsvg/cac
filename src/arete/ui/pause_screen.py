@@ -33,6 +33,10 @@ REASONS = [
 # wiggle amounts when u click outside the box
 SHAKE = [12, -12, 9, -9, 5, -5, 0]
 
+# dark tint over the screen, lighter when theres a blur under it so it stays soft
+TINT = QColor(29, 27, 32, 140)
+BLURRED_TINT = QColor(29, 27, 32, 50)
+
 STYLE = """
 QFrame#Box {
     background-color: @surfaceContainerHigh;
@@ -101,6 +105,7 @@ class PauseScreen(QWidget):
         self.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont))
         self.setStyleSheet(applyTheme(STYLE))
         self.setGeometry(QApplication.primaryScreen().geometry())
+        self.tint = TINT
 
 
         self.title = QLabel("Taking a break with " + appName + "?")
@@ -190,7 +195,7 @@ class PauseScreen(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(29, 27, 32, 140))
+        painter.fillRect(self.rect(), self.tint)
 
     def mousePressEvent(self, event):
         if not self.box.geometry().contains(event.position().toPoint()):
@@ -209,6 +214,12 @@ class PauseScreen(QWidget):
         animations.slideWidgetIn(self.box)
         try:
             get_backend().float_above_everything(int(self.winId()))
+        except Exception:
+            pass
+        # soft blur over whatever's behind, needs the window shown first so it has a native view
+        try:
+            if get_backend().blur_behind(int(self.winId())):
+                self.tint = BLURRED_TINT
         except Exception:
             pass
         self.raise_()

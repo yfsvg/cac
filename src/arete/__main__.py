@@ -10,7 +10,6 @@ from PySide6.QtWidgets import QApplication
 from arete.core import keep_alive
 from arete.core.models import PermissionState
 from arete.platform import get_backend
-from arete.storage import parent_pin
 from arete.ui.tray import Tray
 
 log = logging.getLogger(__name__)
@@ -29,7 +28,6 @@ def main() -> None:
     keep_alive.runWithoutTerminal()
     if keep_alive.alreadyRunning():
         return
-    parent_pin.upgradeOldPin()
 
     # qt app, stays alive w/ no windows since tray icon is the way in
     app = QApplication(sys.argv)

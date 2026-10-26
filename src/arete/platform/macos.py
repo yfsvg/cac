@@ -237,7 +237,7 @@ class MacOSBackend(PlatformBackend):
         bounds = info[0][Quartz.kCGWindowBounds]
         return int(bounds["X"]), int(bounds["Y"]), int(bounds["Width"]), int(bounds["Height"])
 
-    def blur_behind(self, win_id: int, corner_radius: float = 0) -> None:
+    def blur_behind(self, win_id: int, corner_radius: float = 0) -> bool:
         # qts winId on mac is the NSView it draws into, draw blur beneath
         qt_view = objc.objc_object(c_void_p=win_id)
         frame_view = qt_view.superview()
@@ -254,6 +254,7 @@ class MacOSBackend(PlatformBackend):
         # unfortunately native app le doesnt have a blur strength parameter. Its just ugly blur for now haha
 
         frame_view.addSubview_positioned_relativeTo_(blur, NSWindowBelow, qt_view)
+        return True
 
     @property
     def _launch_agent_path(self) -> Path:
