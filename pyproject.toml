@@ -32,4 +32,4 @@ arete = "arete.__main__:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-arete = ["ui/assets/*.svg"]
+arete = ["ui/assets/*.svg", "ui/assets/*.png", "ui/assets/bosses/*.svg"]

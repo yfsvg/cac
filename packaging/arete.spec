@@ -28,6 +28,7 @@ if WINDOWS:
         console=False,
         uac_admin=True,
         upx=False,
+        icon=str(ROOT / "packaging" / "icon.ico"),
     )
 else:
     exe = EXE(pyz, a.scripts, exclude_binaries=True, name="Arete", console=False)
@@ -35,6 +36,7 @@ else:
     app = BUNDLE(
         coll,
         name="Arete.app",
+        icon=str(ROOT / "packaging" / "icon.icns"),
         bundle_identifier="com.arete.app",
         version=VERSION,
         info_plist={
