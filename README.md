@@ -1,149 +1,131 @@
-## Features
+## Hello Congressional App Judges! tdlr things to know:
+1. Arete is built on purpose to be really hard to close (that's kind of the whole point because its for students that have low impules control and high procrastination). So PLEASE run it in **debug mode** or you won't be able to get rid of it. Debug mode gives you a Force quit button and lets Ctrl+C work. How to turn it on is right below in "How to access". It's also usually possible to kill if you use task manager or activity monitor and kill all python processes at once (both app + helper)
+2. Arete doesn't open a normal window. It lives up in your **menu bar (Mac) or system tray (Windows)**, click the purple mountain stopwatch icon to open the dashboard. you can probably also check the video on mac to see where its at
+3. Sorting websites with AI needs a gemini ai api key. Paste it in Settings > AI Categorizations. Without one Arete still works, it just only knows the sites already on its hardcoded blacklist. We used one in private for our vieo and testing, although ofc if you email us we'd be more than happy to provide the key we used if youre guys interested in testing.
 
-Everything Arete does right now, grouped by part of the app.
 
-### Tracking
-- checks what app or window you're on every second
-- sorts apps into productive, neutral, browser or unproductive
-- skips background and system apps
-- reads what website you're on in the browser (Windows and Mac)
-- saves your time every 10 seconds and when the app closes
-- if you don't touch the mouse or keyboard for 5 min, your session pauses and it says welcome back when you return
-- a helper process reopens Arete if someone closes or kills it
-- only one copy can run at a time
 
-### Pause screen
-- opening something unproductive brings up a "Taking a break with ___?" screen
-- you pick a reason: short break, done with work, need it for school, other (you have to type it), or emergency
-- you have to wait 15 seconds before "Open anyway" works, emergency skips the wait
-- "Back to work" closes the app or tab for you
-- clicking outside the box makes it shake
-- once you get past it, that app won't ask again for 10 min
-- slipping costs 0.33% of your climb (max once a minute)
 
-### Breaks
-- you get a number of breaks a day (1 to 8, default 4), each 3 to 15 min (default 5)
-- a "Break time!" badge counts down in the corner, it fades when your mouse gets close and has an X to end early
-- when the break ends it checks in: "I'm ready, back to work" or "Still feeling down, continue break"
-- once you're out of breaks, unproductive apps stay closed until tomorrow
-- unproductive apps give a warning at 2.5 min and close at 3 min
 
-### AI website sorting
-- new sites get sorted by Gemini Flash Lite
-- it only reads the site's public homepage, not your screen
-- it remembers every site so it only checks once
-- max 100 checks a day
-- catches random game sites a blacklist would miss, without blocking useful sites like a whitelist
-- the AI tab in settings has the Gemini key and every site it has sorted
+***
 
-### Focus sessions
-- no timer, 30 min, 1 hr, 2 hr or 3 hr
-- live timer on the home screen, and a small one on other pages
-- ending a timed session early fails it, no-timer sessions end whenever you want
-- closing Arete during a session fails it
-- sessions under 10 min don't count
-- when it's done you see what you earned and can keep going 30 more min
-- study schedules start a session on their own when your study time starts
+# Arete
 
-### The climb
-- 3 mountains: Fuji, then Everest, then the Matterhorn
-- each one has 8 checkpoints with a name and a message
-- you go up 1% per focused hour in a session, based on how focused you were
-- bounce back bonus for getting back to work fast after a break (up to 0.25%, max 1% a day)
-- slips only cost 0.33%, so you always go up faster than you go down
-- you can't fall below a boss you already beat
-- the climb card on the home screen has a mini map, your %, and your last change (green or red)
-- the map page has your stage, meters, bosses beaten, next goal, arrows to switch mountains, trees that move in the wind, birds and planes, your climber hopping along, and completed / locked banners
+A productivity app for students that you control yourself, no parents or teachers locking you out. It watches what app or website you're on, and when you open something unproductive it doesn't just slam it shut, it pauses you and asks what's up. You get a few breaks a day, and once those run out the distractions stay closed until tomorrow.
 
-### Bosses
-- 9 bosses, 3 per mountain
-  - Fuji: Lantern Keeper, Ash Spirit, Fuji Guardian
-  - Everest: Icefall Yeti, Death Zone Wraith, Everest Guardian
-  - Matterhorn: Hornli Troll, Ridge Eagle, Matterhorn King
-- boss health is in focus minutes, the first has 45 and each one after has 25 more
-- every focused minute in a session hits it
-- opening a distraction heals it 5 min instead of dropping your climb
-- boss card on the home screen with a health bar
-- popup when a boss shows up (it laughs) and when you beat it (it spins away with confetti)
-- all hand drawn and animated, with glowing eyes, blinking, flames, rain and lightning, and X eyes when it gets hit
+To make it actually fun, every focused minute climbs you up a mountain: Mount Fuji, then Everest, then the Matterhorn. There are 9 bosses blocking the trail that you beat by staying focused. Stay on task = go up, slack off = slide down a tiny bit.
 
-### Home screen
-- says hello, what mountain you're on, and your streak
-- order: boss, climb, focus session, today's stats, today's time tracked, weekly stats
-- stats for today and the week: time focused, productive hours, rebound speed
-- "show more stats" dropdowns
-- productive vs unproductive bar plus apps and websites lists
+Everything is saved on your own computer, nothing goes anywhere except the website check (and even that only reads the site's public homepage, never your screen).
 
-### Settings
-- changes start 1 hour after you save them, then lock for 3 days
-- you can cancel a change before it starts
-- break count and length
-- study schedules, as many as you want
-- AI tab
-- parental controls with a PIN that locks the settings you pick
-- testing tools in debug mode (force quit, reset locks, clear memory, blocking switch, set climb %, beat boss)
+***
 
-### Look
-- light and dark mode with a sun / moon button
-- painted sky in the back, day has sun, clouds and hills, night has stars, moon and ridges
-- see through rounded cards and a rounded scrollbar
-- animations on pretty much everything
-- friendly wording, nothing guilt trippy
-- "A" mountain icon on the window, mountain icon in the tray
+# How to access
 
-### Other
-- Python desktop app with PySide6, runs on Windows and Mac
-- all data is saved on your own computer
-- old FocusGuard data moves over by itself
-- F5 in VS Code sets everything up
+Download it from the **Releases** page on the right side of the GitHub repo (v1.0.0), there's a Mac zip and a Windows zip.
 
-## Running
+- **Mac:** unzip and move Arete to Appilcations. It's not from the App Store so the first time you have to **right click > Open**. To run it in debug mode open Terminal and type `open /Applications/Arete.app --args --debug`
+- **Windows:** unzip and run Arete.exe, if Windows warns you click **More info > Run anyway**. To run it in debug mode open a terminal in that folder and type `Arete.exe --debug`
+
+You can also run it straight from the code, which is the better option if you want to poke around:
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e .
-.venv/bin/arete
+.venv/bin/arete --debug
 ```
 
-cd cac
-.venv/bin/arete
+or just open the folder in VS Code and press **F5**, it sets everything up by itself and runs in debug mode automatically.
 
-### Focus sessions
-When Arete opens it asks how long you want to be productive for. Until that time is up it can't be closed:
-Ctrl+C is ignored, it leaves the terminal, and a helper reopens it if it's killed. When the time is up you see how far
-you climbed, and you can stop or keep going for 30 more minutes.
+## Mac permissions
 
-### The Climb
-Click The Climb on the home screen to see your mountain: Mount Fuji, then Everest, then the Matterhorn.
-- A session moves you up 1% per hour (at least 0.5%), times how much of it you were focused.
-- Opening something unproductive drops you 0.33%, at most once a minute.
-- Each mountain has 3 bosses (9 in total), each with its own character. A boss stops your climb until you beat it.
-- Bosses have health measured in focus minutes (45 for the first, 25 more for each one after). Every minute you stay focused in a session hits the boss, and opening something unproductive heals it 5 minutes. Beaten bosses are never lost.
+The first time it runs, macOS asks for a few permissions. Arete can't see what you're doing without them:
+- **Accessibility** so it can see which app you're on
+- **Automation** so it can read the website in your browser (macOS asks once per browser)
+- **Screen Recording** so it can read window titles. It doesn't record or screenshot anything, macOS just puts window titles under that permission for some reason
 
-- Testing without the lock: run `.venv/bin/arete --debug` (setting `ARETE_DEBUG=1` or starting it from the VS Code debugger does the same). In debug mode:
-  - Ctrl+C closes it, it stays in the terminal, and nothing reopens it
-  - there's no Windows admin prompt
-  - settings show Force quit, Reset lock timers and Clear all memory, plus an Apply now button that skips the 1 hour wait
-  - settings also have a Blocking on switch, a box to set your climb % (0 to 300 across all 3 mountains) and a Beat boss now button
-  - the startup screen has a 15 sec (testing) option
-- Emergency stop on Windows: `taskkill /F /IM pythonw.exe` from an admin terminal (Arete runs as admin)
+If you run it from a terminal, macOS gives the permissions to the terminal app instead of Arete, that's normal.
 
-### Windows admin rights
-Arete checks for admin rights when it starts. If it doesn't have them it shows the UAC prompt: Yes restarts it as admin, No closes it.
+On Windows it asks for admin when it starts (it closes apps for you, so it needs it). Debug mode skips that.
 
-### Settings
-- A settings change starts 1 hour after you save it, so it's never made on impulse. You can cancel it during that hour. Once it starts, that setting stays locked for 3 days.
+***
 
-### Gemini key
-Paste the key in Settings > AI Categorizations. It's saved only on that computer (`%APPDATA%\Arete`), never in the repo.
+# How to use
 
-### macOS permissions
+## Focus sessions
 
-When running from a terminal, macOS grants permissions to the terminal app, not to Arete:
+On the home screen pick how long you want to focus: no timer, 30 min, 1 hour, 2 hours or 3 hours. A timer shows up and every minute you're on something productive counts. When it's done you see how far you climbed and you can keep going for 30 more minutes.
 
-### to build
-go to the actions tab and click the "Build" action on the left. click run action. wait a bit, and then you'll see the zipped executables :)
-these, to my knowledge, contain all of the binaries within so they can be shared with anybody without issue
+Timed sessions are a promise to yourself, so ending one early or closing Arete fails it and it doesn't count. No timer sessions end whenever you want. Sessions under 10 minutes don't count, and if you walk away from the computer for 5 minutes your session pauses and welcomes you back.
+
+You can also set study times in settings (as many as you want), and Arete starts a session for you when one begins.
+
+## The pause screen
+
+Open something unproductive and you get a "Taking a break with ___?" screen. Pick why: short break, done with work, need it for school, other (you have to type it out), or emergency. You have to wait 15 seconds before "Open anyway" works, emergency skips the wait. "Back to work" closes it for you.
+
+Once you get past it, that app won't ask again for 10 minutes.
+
+## Breaks
+
+You get breaks every day (4 by default, 1 to 8) and each one is 5 minutes by default (3 to 15). A little badge counts down in the corner, it fades when your mouse gets near so you can see under it. When the break ends it checks in with you: back to work, or keep the break going.
+
+If you stay on something unproductive outside a break, you get a heads up at 2.5 minutes and it closes at 3. Once you're out of breaks for the day, unproductive apps just stay closed until tomorrow.
+
+## The climb
+
+Click open map on the climb card to see your mountain. Each mountain has 8 checkpoints, all with their own name and message.
+
+- a fully focused hour in a session = **1%** up the mountain
+- getting back to work fast after a break = a little bonus (up to 0.25%, max 1% a day)
+- opening something unproductive = **0.33%** down (at most once a minuet)
+
+so you always go up way faster than you go down (part of our emotional design philosophy)
+
+
+## Bosses
+
+There are 9 bosses, 3 on each mountain, and each one blocks the trail until you beat it. This is in order of what way they are in the app:
+1. Fuji: The Lantern Keeper, The Ash Spirit, The Fuji Guardian
+2. everest: The Icefall Yeti, The Death Zone Wraith, Monsoon God
+3. matterhorn: The Hornli Troll, The Ridge Eagle, The Matterhorn King
+
+Their health is in focus minutes (45 for the first one, 25 more for every one after). Every minute you stay focused in a session hits the boss, and opening something distracting heals it 5 minutes. A popup shows up when a boss appears (it laughs at you) and when you beat it (it spins away with confetti).
+
+
+
+## AI website sorting
+
+Arete knows a lot of sites already. When you stay on one it doesn't know for 10 seconds, it asks Gemini if it's productive. It only reads the site's **public homepage**, first just the description and if that's not enough a little bit of its text, never your screen or the page you're actually on. Each site only gets checked once and there's a limit of 100 checks a day. You can see every site it sorted in Settings > AI Categorizations.
+
+## Other stuff
+- light and dark mode with the sun / moon button, with a painted day sky or night sky behind everything
+- today's and this week's stats: time focused, productive hours, and how fast you bounce back from breaks
+- time tracked for every app and website you used today
+- a streak for every day in a row you open it
+
+***
+
+# Debug mode
+
+Run with `--debug` (or set `ARETE_DEBUG=1`, or press F5 in VS Code). In debug mode:
+- Ctrl+C closes it and nothing reopens it
+- no Windows admin prompt
+- Settings has a Debug card with Force quit, Reset lock timers, Clear all memory, a Blocking on switch, a box to set your climb %, and a Beat boss now button
+- every waiting settings change gets an Apply now button
+- **Turn off debug until restart** hides all of that again, if you want to see what it's like for a normal user
+
+Emeegency stop on Windows if it's not in debug mode: `taskkill /F /IM Arete.exe` from an admin terminal (or `taskkill /F /IM pythonw.exe` if you ran it from the code)
+
+***
+
+# To build
+
+Go to the Actions tab and click the "Build" action on the left. Click run workflow, wait a bit, and then you'll see the zipped apps for Mac and Windows :) these have everything inside so they can be shared with anybody without needing python
+
 
 
 May parth bless suprathik
+
+# Contact
+my discord is @yefoi dm me for questions 🙀🙀🙀
+yifeichengmi@gmail.com
