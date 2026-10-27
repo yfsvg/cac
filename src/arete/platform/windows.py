@@ -1,4 +1,4 @@
-"""Windows backend: Win32 via ctypes, process info via psutil, browser URLs via UI Automation."""
+# windows side: win32 through ctypes, processes through psutil, browser urls through UI Automation
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ user32 = ctypes.WinDLL("user32", use_last_error=True)
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 shell32 = ctypes.WinDLL("shell32", use_last_error=True)
 
-# Hard-coded for now; will come from the user's app config later.
+# hardcoded for now, should come from the app config later
 BROWSERS = {
     "chrome.exe": "Google Chrome",
     "msedge.exe": "Microsoft Edge",
@@ -48,13 +48,13 @@ BROWSERS = {
     "helium.exe": "Helium"
 }
 
-# Accessible names of the address bar in English builds. Other locales fall back to the
-# "first edit box inside a toolbar" search in findAddressBar.
+# what the address bar is called in english builds. other languages fall back to the
+# first edit box in a toolbar (see findAddressBar)
 ADDRESS_BAR_NAMES = ("Address and search bar", "Search or enter address", "Address bar")
 UIA_SEARCH_DEPTH = 12
 
 
-# Win32 constants
+# win32 constants
 GW_OWNER = 4
 GWL_EXSTYLE = -20
 WM_CLOSE = 0x0010
@@ -103,7 +103,7 @@ shell32.ShellExecuteW.argtypes = [
 ]
 shell32.ShellExecuteW.restype = ctypes.c_ssize_t
 
-# The *LongPtr variants only exist in 64-bit user32.
+# the LongPtr versions only exist in 64 bit user32
 getWindowLong = getattr(user32, "GetWindowLongPtrW", user32.GetWindowLongW)
 setWindowLong = getattr(user32, "SetWindowLongPtrW", user32.SetWindowLongW)
 getWindowLong.argtypes = [wintypes.HWND, ctypes.c_int]
@@ -115,7 +115,7 @@ setWindowLong.restype = ctypes.c_ssize_t
 class WindowsBackend(PlatformBackend):
     BROWSER_IDS = frozenset(BROWSERS)
 
-    # ---- what is the user doing ------------------------------------------------------------
+    # what is the user doing
 
     def get_active_window(self) -> ActiveWindow | None:
         hwnd = user32.GetForegroundWindow()
@@ -125,7 +125,7 @@ class WindowsBackend(PlatformBackend):
         proc = getProcess(pid)
         if proc is None:
             return None
-        # Store apps are hosted by ApplicationFrameHost; the real app owns a child window.
+        # store apps live inside ApplicationFrameHost, the real app is one of its child windows
         if processName(proc) == "applicationframehost.exe":
             childPid = uwpChildPid(hwnd, pid)
             if childPid and (child := getProcess(childPid)):
@@ -146,7 +146,7 @@ class WindowsBackend(PlatformBackend):
         try:
             import uiautomation as auto
         except ImportError:
-            log.warning("uiautomation isn't installed; can't read browser URLs")
+            log.warning("uiautomation isn't installed, can't read browser URLs")
             return None
         try:
             with auto.UIAutomationInitializerInThread(debug=False):
@@ -157,7 +157,7 @@ class WindowsBackend(PlatformBackend):
                 if edit.HasKeyboardFocus:
                     return None
                 return edit.GetValuePattern().Value.strip() or None
-        except Exception:  # UIA throws COM errors when windows vanish mid-query
+        except Exception:  # UIA throws COM errors if the window closes mid lookup
             log.debug("UI Automation lookup failed for %s", window.app_name, exc_info=True)
             return None
 
@@ -166,18 +166,18 @@ class WindowsBackend(PlatformBackend):
         info = LASTINPUTINFO(cbSize=ctypes.sizeof(LASTINPUTINFO))
         if not user32.GetLastInputInfo(ctypes.byref(info)):
             return 0.0
-        # Both counters are 32-bit milliseconds and wrap every ~49.7 days.
+        # tick counts wrap every ~49 days, the & 0xFFFFFFFF handles it
         elapsedMs = (kernel32.GetTickCount() - info.dwTime) & 0xFFFFFFFF
         return elapsedMs / 1000.0
 
-    # ---- enforcement -----------------------------------------------------------------------
+    # closing stuff
 
     def close_app(self, pid: int, force: bool = False) -> bool:
         proc = getProcess(pid)
         if proc is None:
             return False
         if not force:
-            # WM_CLOSE lets the app prompt to save, same as clicking the X.
+            # WM_CLOSE is the same as clicking the X, so the app can still ask to save
             windows = [h for h in topLevelWindows() if windowPid(h) == pid]
             for hwnd in windows:
                 user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
@@ -219,11 +219,10 @@ class WindowsBackend(PlatformBackend):
 
 
     def hide_from_taskbar(self) -> None:
-        # Nothing app-wide on Windows: WS_EX_TOOLWINDOW (set per window above) keeps windows
-        # off the taskbar, and the tray icon is the only other presence.
+        # nothing to do on windows, there's no app wide dock icon like on mac
         pass
 
-    # ---- installation ----------------------------------------------------------------------
+    # startup + permissions
 
 
     def check_permissions(self) -> dict[str, PermissionState]:
@@ -245,14 +244,14 @@ class WindowsBackend(PlatformBackend):
         return bool(shell32.IsUserAnAdmin())
 
     def run_as_admin(self, command: list[str]) -> bool:
-        # The "runas" verb shows the UAC prompt. 32 or below means it failed or the user said no.
+        # "runas" shows the UAC prompt, getting 32 or less back means it failed or they said no
         result = shell32.ShellExecuteW(
             None, "runas", command[0], subprocess.list2cmdline(command[1:]), os.getcwd(), SW_SHOWNORMAL
         )
         return result > 32
 
 
-# ---- helpers ---------------------------------------------------------------------------------
+# helpers
 
 
 def windowPid(hwnd) -> int:
@@ -270,8 +269,8 @@ def windowText(hwnd) -> str:
     return buf.value
 
 
+# the windows that show up in alt+tab: visible, has a title, not owned by another window
 def topLevelWindows() -> list[int]:
-    """Visible, titled, unowned top-level windows, i.e. the ones that show in Alt+Tab."""
     found: list[int] = []
 
     def callback(hwnd, _lparam):
@@ -319,7 +318,7 @@ def processName(proc: psutil.Process) -> str:
 def processExe(proc: psutil.Process) -> str | None:
     try:
         return proc.exe() or None
-    except psutil.Error:  # AccessDenied for elevated processes when we aren't admin
+    except psutil.Error:  # access denied for admin processes when we aren't admin
         return None
 
 

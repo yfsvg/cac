@@ -4,8 +4,9 @@
 from pathlib import Path
 
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QSystemTrayIcon
+from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 from arete.ui import animations
+from arete.ui.close_screen import CloseScreen
 from arete.ui.dashboard import Dashboard
 
 
@@ -26,9 +27,23 @@ class Tray(QSystemTrayIcon):
         self.dashboard = Dashboard()
         # enforcer warnings show up as tray notifs
         self.dashboard.enforcer.notify = self.showMessage
-        self.activated.connect(self.openDashboard)
+        self.closeScreen = None
+
+        # right click menu. mac opens it on any click so open arete has to be in here too
+        self.menu = QMenu()
+        self.menu.addAction("Open Arete").triggered.connect(self.openDashboard)
+        self.menu.addSeparator()
+        self.menu.addAction("Close Arete").triggered.connect(self.askToClose)
+        self.setContextMenu(self.menu)
+
+        self.activated.connect(self.iconClicked)
         self.show()
 
+
+    def iconClicked(self, reason) -> None:
+        # right click already shows the menu
+        if reason != QSystemTrayIcon.ActivationReason.Context:
+            self.openDashboard()
 
     def openDashboard(self) -> None:
         if not self.dashboard.isVisible():
@@ -39,3 +54,16 @@ class Tray(QSystemTrayIcon):
         self.dashboard.show()
         self.dashboard.raise_()
         self.dashboard.activateWindow()
+
+
+    # closing, 1 min countdown first so u cant just quit on impulse
+
+    def askToClose(self) -> None:
+        if self.closeScreen is not None:
+            self.closeScreen.bringBack()
+            return
+        self.closeScreen = CloseScreen(lambda: self.dashboard.inSession, self.closeCancelled, self.dashboard.quitArete)
+        self.closeScreen.popUp()
+
+    def closeCancelled(self) -> None:
+        self.closeScreen = None
