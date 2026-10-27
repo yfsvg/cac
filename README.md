@@ -5,7 +5,7 @@
 
 
 
-
+Also forgot to say this in the demo video but we used AI to help solve difficult merges
 
 ***
 
