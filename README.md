@@ -1,3 +1,5 @@
+**Judges:** see [FEATURES.md](FEATURES.md) for a full list of everything Arete does.
+
 ## Running
 
 ```bash
