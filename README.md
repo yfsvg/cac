@@ -26,7 +26,7 @@ Download it from the **Releases** page on the right side of the GitHub repo (v1.
 - **Mac:** unzip and move Arete to Appilcations. It's not from the App Store so the first time you have to **right click > Open**. To run it in debug mode open Terminal and type `open /Applications/Arete.app --args --debug`
 - **Windows:** unzip and run Arete.exe, if Windows warns you click **More info > Run anyway**. To run it in debug mode open a terminal in that folder and type `Arete.exe --debug`
 
-You can also run it straight from the code, which is the better option if you want to poke around:
+You can also run it straight from the code, which is the better option if you want to check on it:
 
 ```bash
 python3 -m venv .venv
@@ -103,7 +103,18 @@ Arete knows a lot of sites already. When you stay on one it doesn't know for 10 
 - time tracked for every app and website you used today
 - a streak for every day in a row you open it
 
+
+
+
 ***
+
+
+
+
+
+
+
+
 
 # Debug mode
 
