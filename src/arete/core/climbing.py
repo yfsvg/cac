@@ -1,203 +1,242 @@
+# The climb, split into five segments:
+# 1. How much everything is worth
+# 2. Loading + reading where you are
+# 3. Moving up and down the mountain
+# 4. Earning + losing climb
+# 5. Bosses
+#
+# Climb % runs 0 - 300 across all three mountains (100 each). Bosses block the trail,
+# you cant climb past one until its beaten
+
+
 import time
 
 from arete.core import mountains
 from arete.storage import memory
 
-PERCENT_PER_HOUR = 1.0
+
+# How much everything is worth
+
+PERCENT_CLIMBED_PER_FOCUSED_HOUR = 1.0
 SHORTEST_SESSION_MINUTES = 10
+
 BOUNCE_BACK_PERCENT = 0.25
-BOUNCE_BACK_DAILY_CAP = 1.0
-BOSS_BASE_MINUTES = 45
-BOSS_STEP_MINUTES = 25
-BOSS_HEAL_MINUTES = 5
-PENALTY_PERCENT = PERCENT_PER_HOUR / 3
-PENALTY_GAP_SECONDS = 60
+BOUNCE_BACK_DAILY_CAP_PERCENT = 1.0
+
+BOSS_STARTING_HEALTH_MINUTES = 45
+BOSS_EXTRA_HEALTH_MINUTES_EACH = 25
+BOSS_HEAL_MINUTES_PER_DISTRACTION = 5
+
+DISTRACTION_PENALTY_PERCENT = PERCENT_CLIMBED_PER_FOCUSED_HOUR / 3
+SECONDS_BETWEEN_DISTRACTION_PENALTIES = 60
+
+# old versions saved meters instead of %, this turns them into %
 OLD_METERS_PER_PERCENT = 80
 
 
-def loadClimb():
+
+
+
+
+# Loading the climb, upgrades old meter saves the first time
+
+def loadClimbMemory():
     savedMemory = memory.load()
     if "climbPercent" not in savedMemory:
-        oldPercent = savedMemory.get("climbMeters", 0) / OLD_METERS_PER_PERCENT
-        firstBoss = mountains.bossPercents()[0]
-        if oldPercent > firstBoss:
-            oldPercent = firstBoss
-        savedMemory["climbPercent"] = oldPercent
+        # never let an old save skip past the first boss
+        savedMemory["climbPercent"] = min(savedMemory.get("climbMeters", 0) / OLD_METERS_PER_PERCENT, mountains.bossPercents()[0])
         savedMemory["bossesBeaten"] = 0
         memory.save(savedMemory)
     return savedMemory
 
 
+# Reading the climb, everything the rest of the app wants to know in one dict
+
 def climbState():
-    savedMemory = loadClimb()
+    savedMemory = loadClimbMemory()
     totalPercent = float(savedMemory.get("climbPercent", 0))
     bossesBeaten = int(savedMemory.get("bossesBeaten", 0))
-    allBosses = mountains.bossPercents()
-    mountainNumber = bossesBeaten // len(mountains.BOSS_CHECKPOINTS)
-    if mountainNumber > len(mountains.MOUNTAINS) - 1:
-        mountainNumber = len(mountains.MOUNTAINS) - 1
-    percent = totalPercent - mountainNumber * 100
-    nextBoss = None
-    if bossesBeaten < len(allBosses):
-        nextBoss = allBosses[bossesBeaten]
+    everyBossPercent = mountains.bossPercents()
+
+    # 3 bosses per mountain, so bosses beaten says which mountain ur on (stays on the last one at the end)
+    mountainNumber = min(bossesBeaten // len(mountains.BOSS_CHECKPOINTS), len(mountains.MOUNTAINS) - 1)
+    percentUpThisMountain = totalPercent - mountainNumber * 100
+
+    nextBossPercent = None
+    if bossesBeaten < len(everyBossPercent):
+        nextBossPercent = everyBossPercent[bossesBeaten]
+
     return {
         "totalPercent": totalPercent,
         "mountainNumber": mountainNumber,
-        "percent": percent,
-        "stageNumber": mountains.stageNumber(percent),
+        "percent": percentUpThisMountain,
+        "stageNumber": mountains.stageNumber(percentUpThisMountain),
         "bossesBeaten": bossesBeaten,
-        "nextBoss": nextBoss,
-        "atBoss": nextBoss is not None and totalPercent >= nextBoss - 0.001,
-        "finished": bossesBeaten >= len(allBosses),
+        "nextBoss": nextBossPercent,
+        "atBoss": nextBossPercent is not None and totalPercent >= nextBossPercent - 0.001,
+        "finished": bossesBeaten >= len(everyBossPercent),
         "lastChange": savedMemory.get("lastClimbChange"),
     }
 
 
-def lowestPercent(bossesBeaten):
+
+
+
+
+# Moving up and down, never below the last boss you beat or above the next one
+
+def lowestAllowedPercent(bossesBeaten):
     if bossesBeaten == 0:
         return 0
     return mountains.bossPercents()[bossesBeaten - 1]
 
 
-def highestPercent(bossesBeaten):
-    allBosses = mountains.bossPercents()
-    if bossesBeaten >= len(allBosses):
+def highestAllowedPercent(bossesBeaten):
+    if bossesBeaten >= len(mountains.bossPercents()):
         return len(mountains.MOUNTAINS) * 100
-    return allBosses[bossesBeaten]
+    return mountains.bossPercents()[bossesBeaten]
 
 
-def changeClimb(amount, reason):
-    savedMemory = loadClimb()
+# moves the climb by percentChange, gives back how much it actually moved after the limits
+def changeClimbBy(percentChange, reasonText):
+    savedMemory = loadClimbMemory()
     bossesBeaten = int(savedMemory.get("bossesBeaten", 0))
     oldPercent = float(savedMemory.get("climbPercent", 0))
-    newPercent = oldPercent + amount
-    if newPercent > highestPercent(bossesBeaten):
-        newPercent = highestPercent(bossesBeaten)
-    if newPercent < lowestPercent(bossesBeaten):
-        newPercent = lowestPercent(bossesBeaten)
-    changedBy = round(newPercent - oldPercent, 2)
+    newPercent = min(max(oldPercent + percentChange, lowestAllowedPercent(bossesBeaten)), highestAllowedPercent(bossesBeaten))
+    actuallyChangedBy = round(newPercent - oldPercent, 2)
+
     savedMemory["climbPercent"] = newPercent
-    if changedBy != 0:
-        savedMemory["lastClimbChange"] = {"amount": changedBy, "reason": reason, "time": time.time()}
+    if actuallyChangedBy != 0:
+        savedMemory["lastClimbChange"] = {"amount": actuallyChangedBy, "reason": reasonText, "time": time.time()}
     memory.save(savedMemory)
-    return changedBy
+    return actuallyChangedBy
 
 
-def sessionAmount(minutes, productiveFraction):
-    if minutes < SHORTEST_SESSION_MINUTES:
+# debug only, puts u straight at a spot on the climb
+def setClimbPercent(totalPercent, bossesBeaten):
+    savedMemory = loadClimbMemory()
+    savedMemory["bossesBeaten"] = bossesBeaten
+    savedMemory["climbPercent"] = min(max(totalPercent, lowestAllowedPercent(bossesBeaten)), highestAllowedPercent(bossesBeaten))
+    savedMemory["bossDamage"] = 0
+    memory.save(savedMemory)
+
+
+
+
+
+
+# Earning, focus sessions + bouncing back from breaks
+
+# % a session is worth, sessions under 10 min dont count
+def sessionPercentWorth(sessionMinutes, focusedFraction):
+    if sessionMinutes < SHORTEST_SESSION_MINUTES:
         return 0
-    hours = minutes / 60
-    if productiveFraction < 0:
-        productiveFraction = 0
-    if productiveFraction > 1:
-        productiveFraction = 1
-    return round(PERCENT_PER_HOUR * hours * productiveFraction, 2)
+    return round(PERCENT_CLIMBED_PER_FOCUSED_HOUR * (sessionMinutes / 60) * min(max(focusedFraction, 0), 1), 2)
 
 
-def sessionEarned(minutes, productiveFraction):
-    reason = "your " + str(int(round(minutes))) + " min session"
-    return changeClimb(sessionAmount(minutes, productiveFraction), reason)
+def sessionEarned(sessionMinutes, focusedFraction):
+    return changeClimbBy(sessionPercentWorth(sessionMinutes, focusedFraction), "your " + str(int(round(sessionMinutes))) + " min session")
 
 
+# quicker bounce back = more %, capped each day so breaks cant be farmed
+def bounceBackEarned(breakPeriods):
+    savedMemory = loadClimbMemory()
+    today = time.strftime("%Y-%m-%d")
+    bounceBacksToday = savedMemory.get("bounceToday", {})
+    if bounceBacksToday.get("day") != today:
+        bounceBacksToday = {"day": today, "percent": 0}
+
+    percentEarned = BOUNCE_BACK_PERCENT / max(breakPeriods, 1)
+    if bounceBacksToday["percent"] + percentEarned > BOUNCE_BACK_DAILY_CAP_PERCENT:
+        percentEarned = BOUNCE_BACK_DAILY_CAP_PERCENT - bounceBacksToday["percent"]
+    if percentEarned <= 0:
+        return 0
+
+    bounceBacksToday["percent"] = bounceBacksToday["percent"] + percentEarned
+    savedMemory["bounceToday"] = bounceBacksToday
+    memory.save(savedMemory)
+    return changeClimbBy(percentEarned, "bouncing back")
+
+
+
+
+
+
+# Losing, opening something unproductive
+
+# slides u back down, or heals the boss instead if ur fighting one. once a minute at most
 def unproductivePenalty(appName):
-    savedMemory = loadClimb()
-    if time.time() - savedMemory.get("lastPenaltyAt", 0) < PENALTY_GAP_SECONDS:
+    savedMemory = loadClimbMemory()
+    if time.time() - savedMemory.get("lastPenaltyAt", 0) < SECONDS_BETWEEN_DISTRACTION_PENALTIES:
         return 0
     savedMemory["lastPenaltyAt"] = time.time()
     memory.save(savedMemory)
+
     if climbState()["atBoss"]:
-        healBoss(BOSS_HEAL_MINUTES)
+        healBoss(BOSS_HEAL_MINUTES_PER_DISTRACTION)
         return 0
-    return changeClimb(-PENALTY_PERCENT, "opening " + appName)
+    return changeClimbBy(-DISTRACTION_PENALTY_PERCENT, "opening " + appName)
 
 
-def bounceBackEarned(breakPeriods):
-    if breakPeriods < 1:
-        breakPeriods = 1
-    savedMemory = loadClimb()
-    today = time.strftime("%Y-%m-%d")
-    bounceToday = savedMemory.get("bounceToday", {})
-    if bounceToday.get("day") != today:
-        bounceToday = {"day": today, "percent": 0}
-    amount = BOUNCE_BACK_PERCENT / breakPeriods
-    if bounceToday["percent"] + amount > BOUNCE_BACK_DAILY_CAP:
-        amount = BOUNCE_BACK_DAILY_CAP - bounceToday["percent"]
-    if amount <= 0:
-        return 0
-    bounceToday["percent"] = bounceToday["percent"] + amount
-    savedMemory["bounceToday"] = bounceToday
-    memory.save(savedMemory)
-    return changeClimb(amount, "bouncing back")
 
+
+
+
+# Bosses, health is in focus minutes. Every focused minute in a session hits it
 
 def bossHealth(bossNumber):
-    return BOSS_BASE_MINUTES + BOSS_STEP_MINUTES * bossNumber
-
-
-def bossDamage():
-    return float(loadClimb().get("bossDamage", 0))
+    return BOSS_STARTING_HEALTH_MINUTES + BOSS_EXTRA_HEALTH_MINUTES_EACH * bossNumber
 
 
 def bossMinutesLeft():
-    bossNumber = climbState()["bossesBeaten"]
-    minutesLeft = bossHealth(bossNumber) - bossDamage()
-    if minutesLeft < 0:
-        return 0
-    return minutesLeft
+    return max(bossHealth(climbState()["bossesBeaten"]) - float(loadClimbMemory().get("bossDamage", 0)), 0)
 
 
-def damageBoss(minutes):
+# True if that hit beat the boss
+def damageBoss(focusMinutes):
     state = climbState()
     if not state["atBoss"] or state["finished"]:
         return False
-    savedMemory = loadClimb()
-    damage = float(savedMemory.get("bossDamage", 0)) + minutes
-    savedMemory["bossDamage"] = damage
+
+    savedMemory = loadClimbMemory()
+    savedMemory["bossDamage"] = float(savedMemory.get("bossDamage", 0)) + focusMinutes
     memory.save(savedMemory)
-    if damage >= bossHealth(state["bossesBeaten"]):
+    if savedMemory["bossDamage"] >= bossHealth(state["bossesBeaten"]):
         beatBoss()
         return True
     return False
 
 
-def healBoss(minutes):
-    savedMemory = loadClimb()
-    damage = float(savedMemory.get("bossDamage", 0)) - minutes
-    if damage < 0:
-        damage = 0
-    savedMemory["bossDamage"] = damage
+def healBoss(healMinutes):
+    savedMemory = loadClimbMemory()
+    savedMemory["bossDamage"] = max(float(savedMemory.get("bossDamage", 0)) - healMinutes, 0)
     savedMemory["lastClimbChange"] = {"amount": 0, "reason": "the boss healed", "time": time.time()}
     memory.save(savedMemory)
 
 
+# opens the trail again, damage resets for the next boss
 def beatBoss():
-    savedMemory = loadClimb()
-    bossesBeaten = int(savedMemory.get("bossesBeaten", 0)) + 1
-    savedMemory["bossesBeaten"] = bossesBeaten
+    savedMemory = loadClimbMemory()
+    savedMemory["bossesBeaten"] = int(savedMemory.get("bossesBeaten", 0)) + 1
     savedMemory["bossDamage"] = 0
-    if savedMemory.get("climbPercent", 0) < lowestPercent(bossesBeaten):
-        savedMemory["climbPercent"] = lowestPercent(bossesBeaten)
+    if savedMemory.get("climbPercent", 0) < lowestAllowedPercent(savedMemory["bossesBeaten"]):
+        savedMemory["climbPercent"] = lowestAllowedPercent(savedMemory["bossesBeaten"])
     memory.save(savedMemory)
 
 
-def setClimbPercent(totalPercent, bossesBeaten):
-    savedMemory = loadClimb()
-    if totalPercent > highestPercent(bossesBeaten):
-        totalPercent = highestPercent(bossesBeaten)
-    if totalPercent < lowestPercent(bossesBeaten):
-        totalPercent = lowestPercent(bossesBeaten)
-    savedMemory["bossesBeaten"] = bossesBeaten
-    savedMemory["climbPercent"] = totalPercent
-    savedMemory["bossDamage"] = 0
-    memory.save(savedMemory)
 
 
-def changeText(change):
-    if change is None:
+
+
+# Text, "+0.5% from your 30 min session" / "-0.33% for opening Steam" / "The boss healed"
+
+def changeText(climbChange):
+    if climbChange is None:
         return ""
-    if change["amount"] == 0:
-        return change["reason"][0].upper() + change["reason"][1:]
-    amountText = format(abs(change["amount"]), ".2f").rstrip("0").rstrip(".")
-    if change["amount"] >= 0:
-        return "+" + amountText + "% from " + change["reason"]
-    return "-" + amountText + "% for " + change["reason"]
+    if climbChange["amount"] == 0:
+        return climbChange["reason"][0].upper() + climbChange["reason"][1:]
+
+    amountText = format(abs(climbChange["amount"]), ".2f").rstrip("0").rstrip(".")
+    if climbChange["amount"] >= 0:
+        return "+" + amountText + "% from " + climbChange["reason"]
+    return "-" + amountText + "% for " + climbChange["reason"]
