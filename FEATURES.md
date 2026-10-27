@@ -1,124 +1,98 @@
-# Arete Features
+## Features
 
-Arete is a desktop productivity app for students. It stops impulsive decisions without guilt, and turns focus into a climb up three mountains.
+Everything Arete does right now, grouped by part of the app.
 
-## Tracking
-- Checks which app or window you're using every second
-- Sorts every app as productive, neutral, browser or unproductive, using built-in lists of unproductive apps and sites
-- Ignores background and system apps
-- Reads which website is open in the browser, on Windows and macOS
-- Saves your time every 10 seconds and when the app closes
-- Away detection: after 5 minutes with no mouse or keyboard input, the focus session pauses, and "Welcome back!" shows when you return
-- Keep-alive helper reopens Arete if it's closed or killed
-- Runs with admin rights, hidden from the terminal, and only one copy can run at a time
+### Tracking
+- checks what app or window you're on every second
+- sorts apps into productive, neutral, browser or unproductive
+- skips background and system apps
+- reads what website you're on in the browser (Windows and Mac)
+- saves your time every 10 seconds and when the app closes
+- if you don't touch the mouse or keyboard for 5 min, your session pauses and it says welcome back when you return
+- a helper process reopens Arete if someone closes or kills it
+- only one copy can run at a time
 
-## Pause Screen
-- Opening something unproductive brings up a full-screen "Taking a break with ___?" prompt
-- Warm wording: "That's okay! Just let us know what's up."
-- You pick a reason:
-  - Taking a short break
-  - Done with my work for now
-  - Need it for school
-  - Other (you type why)
-  - Emergency
-- **"Open anyway" unlocks after a 15 second wait.** Choosing Emergency skips the wait.
-- "Back to work" closes the app or tab
-- The box wiggles if you click outside it
-- After you get through, the same app won't ask again for 10 minutes
-- If you're not at a boss, a slip costs 0.33% of the climb, at most once a minute
+### Pause screen
+- opening something unproductive brings up a "Taking a break with ___?" screen
+- you pick a reason: short break, done with work, need it for school, other (you have to type it), or emergency
+- you have to wait 15 seconds before "Open anyway" works, emergency skips the wait
+- "Back to work" closes the app or tab for you
+- clicking outside the box makes it shake
+- once you get past it, that app won't ask again for 10 min
+- slipping costs 0.33% of your climb (max once a minute)
 
-## Breaks
-- A set number of breaks per day (1 to 8, default 4), each 3 to 15 minutes long (default 5)
-- A "Break time!" badge counts down in the corner. It fades when your cursor is near and can end the break early.
-- A check-in when the break ends: "I'm ready, back to work" or "Still feeling down, continue break"
-- When the breaks run out, unproductive apps stay closed until tomorrow, with a kind notification
-- Unproductive apps get a warning at 2.5 minutes and close at 3 minutes with "Take a breath, you've got this."
+### Breaks
+- you get a number of breaks a day (1 to 8, default 4), each 3 to 15 min (default 5)
+- a "Break time!" badge counts down in the corner, it fades when your mouse gets close and has an X to end early
+- when the break ends it checks in: "I'm ready, back to work" or "Still feeling down, continue break"
+- once you're out of breaks, unproductive apps stay closed until tomorrow
+- unproductive apps give a warning at 2.5 min and close at 3 min
 
-## AI Website Sorting
-- New websites are sorted by Google Gemini Flash Lite
-- Only the site's public homepage is read, never your screen or the page you're on
-- Each answer is remembered, so a site is only checked once
-- Up to 100 AI checks per day
-- Catches niche web-game sites that blacklists miss, without blocking useful sites like a whitelist would
-- The settings tab holds the Gemini key and lists every site checked and how it was sorted
+### AI website sorting
+- new sites get sorted by Gemini Flash Lite
+- it only reads the site's public homepage, not your screen
+- it remembers every site so it only checks once
+- max 100 checks a day
+- catches random game sites a blacklist would miss, without blocking useful sites like a whitelist
+- the AI tab in settings has the Gemini key and every site it has sorted
 
-## Focus Sessions
-- Choose no timer, 30 minutes, 1 hour, 2 hours or 3 hours
-- A live countdown, or count-up for no timer, shows on the home panel. A small timer shows on other pages.
-- Ending a timed session early fails it. A no-timer session ends whenever you choose.
-- Closing Arete during a session fails it
-- Sessions under 10 minutes don't count toward the climb
-- A "Session done!" popup shows what you earned and offers "Keep going 30 min"
-- Study schedules: Arete starts a focus session on its own when a scheduled study block begins
+### Focus sessions
+- no timer, 30 min, 1 hr, 2 hr or 3 hr
+- live timer on the home screen, and a small one on other pages
+- ending a timed session early fails it, no-timer sessions end whenever you want
+- closing Arete during a session fails it
+- sessions under 10 min don't count
+- when it's done you see what you earned and can keep going 30 more min
+- study schedules start a session on their own when your study time starts
 
-## The Climb
-- Three hand-made mountains: Mount Fuji, then Mount Everest, then the Matterhorn
-- Each mountain has 8 named checkpoints, each with its own short message
-- You climb 1% per focused hour in a session, scaled by how focused you stayed
-- Bounce-back bonus: getting back to work quickly after a break earns up to 0.25%, capped at 1% a day
-- Slips cost only 0.33%, so the climb always goes up faster than it goes down
-- You never fall below a boss you've already beaten
-- The home screen climb card shows a mini map, your %, and your last change (green for a gain, red for a loss)
-- The full map page shows:
-  - the stage name and message, meters climbed, bosses beaten and the next goal
-  - arrows to switch between mountains
-  - trees moving in the wind, birds and planes
-  - your climber hopping along the trail
-  - "Completed" and "Locked" banners
+### The climb
+- 3 mountains: Fuji, then Everest, then the Matterhorn
+- each one has 8 checkpoints with a name and a message
+- you go up 1% per focused hour in a session, based on how focused you were
+- bounce back bonus for getting back to work fast after a break (up to 0.25%, max 1% a day)
+- slips only cost 0.33%, so you always go up faster than you go down
+- you can't fall below a boss you already beat
+- the climb card on the home screen has a mini map, your %, and your last change (green or red)
+- the map page has your stage, meters, bosses beaten, next goal, arrows to switch mountains, trees that move in the wind, birds and planes, your climber hopping along, and completed / locked banners
 
-## Bosses
-- 9 bosses, 3 per mountain:
-  - **Fuji:** The Lantern Keeper, The Ash Spirit, The Fuji Guardian
-  - **Everest:** The Icefall Yeti, The Death Zone Wraith, The Everest Guardian
-  - **Matterhorn:** The Hornli Troll, The Ridge Eagle, The Matterhorn King
-- Each boss blocks the trail. Its health is measured in focus minutes, starting at 45 and growing 25 per boss.
-- Every focused minute in a session hits the boss
-- Opening a distraction heals the boss 5 minutes, instead of costing climb
-- The home screen boss card shows its health bar
-- Popups show when a boss appears (it laughs) and when it's defeated (it spins away with confetti)
-- Hand-drawn animated characters:
-  - glowing eyes that blink
-  - flickering flames, drifting embers, rain and lightning, sparkling crown jewels
-  - X eyes when hurt
+### Bosses
+- 9 bosses, 3 per mountain
+  - Fuji: Lantern Keeper, Ash Spirit, Fuji Guardian
+  - Everest: Icefall Yeti, Death Zone Wraith, Everest Guardian
+  - Matterhorn: Hornli Troll, Ridge Eagle, Matterhorn King
+- boss health is in focus minutes, the first has 45 and each one after has 25 more
+- every focused minute in a session hits it
+- opening a distraction heals it 5 min instead of dropping your climb
+- boss card on the home screen with a health bar
+- popup when a boss shows up (it laughs) and when you beat it (it spins away with confetti)
+- all hand drawn and animated, with glowing eyes, blinking, flames, rain and lightning, and X eyes when it gets hit
 
-## Home Screen
-- "Hello!", the mountain you're currently climbing and a daily streak, with a drifting sun and clouds
-- Order: boss card, climb card, focus session, today's stats, today's time tracked, weekly stats
-- Stats for today and this week:
-  - time focused %, productive hours and rebound speed
-  - numbers count up, icons wiggle on hover and status chips show below
-- "Show more stats" dropdowns
-- Time tracked: a productive vs unproductive bar, plus apps and websites lists
+### Home screen
+- says hello, what mountain you're on, and your streak
+- order: boss, climb, focus session, today's stats, today's time tracked, weekly stats
+- stats for today and the week: time focused, productive hours, rebound speed
+- "show more stats" dropdowns
+- productive vs unproductive bar plus apps and websites lists
 
-## Settings
-- **Changes start 1 hour after saving, then lock for 3 days**, so plans can't be undone on impulse
-- Pending changes can be canceled before they start
-- Break settings: how many breaks and how long each lasts
-- Study schedules: pick the days and times, as many as you want
-- AI tab: the Gemini key and the list of sorted sites
-- Parental controls:
-  - a PIN locks chosen settings
-  - the PIN can be changed or turned off
-- Testing tools (debug mode only):
-  - force quit, reset lock timers, clear memory
-  - turn blocking on or off
-  - set climb % and beat the current boss
+### Settings
+- changes start 1 hour after you save them, then lock for 3 days
+- you can cancel a change before it starts
+- break count and length
+- study schedules, as many as you want
+- AI tab
+- parental controls with a PIN that locks the settings you pick
+- testing tools in debug mode (force quit, reset locks, clear memory, blocking switch, set climb %, beat boss)
 
-## Look and Feel
-- Light and dark themes with an animated sun/moon toggle
-- A painted sky behind everything: a sun, clouds and hills by day, stars, a moon and ridges by night
-- Rounded see-through cards and a custom rounded scrollbar
-- Animations everywhere:
-  - page fades and staggered entrances
-  - count-ups and expanding dropdowns
-  - sliding popups and confetti
-- Kind, encouraging wording throughout
-- An "A" mountain icon on the window and a snow-capped mountain in the system tray
-- Tray notifications
+### Look
+- light and dark mode with a sun / moon button
+- painted sky in the back, day has sun, clouds and hills, night has stars, moon and ridges
+- see through rounded cards and a rounded scrollbar
+- animations on pretty much everything
+- friendly wording, nothing guilt trippy
+- "A" mountain icon on the window, mountain icon in the tray
 
-## Behind the Scenes
-- Python desktop app for Windows and macOS, built with PySide6 (Qt)
-- All data is stored locally on your computer
-- Older FocusGuard data is moved over automatically
-- One-click setup for developers: pressing F5 in VS Code sets everything up
-- A release version would use a local AI model, so no data leaves the computer
+### Other
+- Python desktop app with PySide6, runs on Windows and Mac
+- all data is saved on your own computer
+- old FocusGuard data moves over by itself
+- F5 in VS Code sets everything up
