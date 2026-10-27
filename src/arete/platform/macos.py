@@ -1,4 +1,4 @@
-"""macOS backend: AppKit / Accessibility / Quartz via pyobjc, browsers via AppleScript."""
+# mac side: AppKit / Accessibility / Quartz through pyobjc, browser urls through AppleScript
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ from arete.platform.base import AUTOSTART_LABEL, PlatformBackend
 
 log = logging.getLogger(__name__)
 
-# Hard-coded for now; will come from the user's app config later.
+# hardcoded for now, should come from the app config later
 BROWSERS = {
     "com.google.Chrome": "Google Chrome",
     "com.microsoft.edgemac": "Microsoft Edge",
@@ -75,7 +75,7 @@ BROWSERS = {
     "net.imput.helium": "Helium"
 }
 
-# All three are Chromium-based and share Chrome's AppleScript dictionary.
+# chrome style browsers understand this one, safari needs its own (below)
 URL_SCRIPT = """
 tell application id "{bundleId}"
     if (count of windows) is 0 then return ""
@@ -133,7 +133,7 @@ class MacOSBackend(PlatformBackend):
     def get_browser_url(self, window: ActiveWindow) -> str | None:
         if not self.is_browser(window):
             return None
-        # Bundle ids are case-insensitive to AppleScript, so the lowercased app_id is fine.
+        # applescript doesn't care about case in bundle ids, so the lowercase app_id works
 
         script = URL_SCRIPT.format(bundleId=window.app_id)
         if window.app_id == "com.apple.safari":
@@ -149,7 +149,7 @@ class MacOSBackend(PlatformBackend):
             log.warning("Timed out reading URL from %s", window.app_name)
             return None
         if result.returncode != 0:
-            # -1743 means the user hasn't allowed Automation for this browser.
+            # -1743 = automation permission isn't given for this browser
             log.debug("osascript failed for %s: %s", window.app_name, result.stderr.strip())
             return None
         return result.stdout.strip() or None
@@ -177,7 +177,7 @@ class MacOSBackend(PlatformBackend):
             )
         )
 
-    # ---- enforcement -----------------------------------------------------------------------
+    # closing stuff
 
     def close_app(self, pid: int, force: bool = False) -> bool:
         app = NSRunningApplication.runningApplicationWithProcessIdentifier_(pid)
@@ -266,7 +266,7 @@ class MacOSBackend(PlatformBackend):
             "Label": AUTOSTART_LABEL,
             "ProgramArguments": self.daemon_command(),
             "RunAtLoad": True,
-            # Relaunch if the daemon is killed, so quitting it isn't an easy escape.
+            # launchd reopens the daemon if it gets killed, so quitting isn't an easy way out
             "KeepAlive": True,
             "ProcessType": "Interactive",
             "StandardOutPath": str(logPath),
@@ -281,7 +281,7 @@ class MacOSBackend(PlatformBackend):
         subprocess.run(["launchctl", "bootstrap", guiDomain(), str(path)], check=True)
 
     def uninstall_autostart(self) -> None:
-        # bootout fails harmlessly if the agent isn't loaded.
+        # bootout just fails if it isn't loaded, that's fine
         subprocess.run(
             ["launchctl", "bootout", f"{guiDomain()}/{AUTOSTART_LABEL}"],
             capture_output=True,
@@ -295,7 +295,7 @@ class MacOSBackend(PlatformBackend):
         return {
             "accessibility": stateFor(AXIsProcessTrusted()),
             "screen_recording": stateFor(Quartz.CGPreflightScreenCaptureAccess()),
-            # macOS has no way to check Automation consent without possibly prompting.
+            # no way to check automation without maybe popping up the prompt
             "automation": PermissionState.UNKNOWN,
         }
 
@@ -305,11 +305,11 @@ class MacOSBackend(PlatformBackend):
         if not Quartz.CGPreflightScreenCaptureAccess():
             Quartz.CGRequestScreenCaptureAccess()
 
-    # ---- internals -------------------------------------------------------------------------
+    # helpers
 
     def frontmostApp(self) -> NSRunningApplication | None:
-        # NSWorkspace only refreshes frontmostApplication while a run loop is spinning on the
-        # main thread. The Accessibility API is always current, so prefer it when we're trusted.
+        # NSWorkspace only updates frontmostApplication while the main run loop is spinning,
+        # accessibility is always up to date so use that when we have permission
         if AXIsProcessTrusted():
             err, focused = AXUIElementCopyAttributeValue(
                 AXUIElementCreateSystemWide(), kAXFocusedApplicationAttribute, None
@@ -335,14 +335,14 @@ class MacOSBackend(PlatformBackend):
             return None
         return str(title)
 
+    # (window id, title) of pid's front window, the title needs screen recording permission
     @staticmethod
     def frontCgWindow(pid: int) -> tuple[int | None, str | None]:
-        """(CGWindowID, title) of `pid`'s frontmost normal window. Title needs Screen Recording."""
         windows = Quartz.CGWindowListCopyWindowInfo(
             Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements,
             Quartz.kCGNullWindowID,
         ) or []
-        # The list is in front-to-back order; layer 0 is ordinary app windows.
+        # list goes front to back, layer 0 is normal app windows
         for info in windows:
             if info.get(Quartz.kCGWindowOwnerPID) == pid and info.get(Quartz.kCGWindowLayer) == 0:
                 title = info.get(Quartz.kCGWindowName)
