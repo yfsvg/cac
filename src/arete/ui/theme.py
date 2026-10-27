@@ -1,4 +1,4 @@
-# massive list of material you themes. Palette generated with claude
+# massive list of material you themes. Palette generated with some online tools
 # FOR THIS PROJECT we're probably not going to edit this for dark mode but its a nice way to keep coding simple with the new material you design
 
 from PySide6.QtCore import Qt
