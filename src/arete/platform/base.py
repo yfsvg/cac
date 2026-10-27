@@ -2,14 +2,9 @@
 
 from __future__ import annotations
 
-import sys
 from abc import ABC, abstractmethod
-from pathlib import Path
 
-from arete.core.models import ActiveWindow, PermissionState, RunningApp
-
-AUTOSTART_LABEL = "com.arete.daemon"
-DAEMON_MODULE = "arete.daemon.main"
+from arete.core.models import ActiveWindow, PermissionState
 
 
 # everything arete needs from the OS, windows.py and macos.py fill this in
@@ -37,28 +32,11 @@ class PlatformBackend(ABC):
     def is_browser(self, window: ActiveWindow) -> bool:
         return window.app_id.lower() in self.BROWSER_IDS
 
-    # apps that have a window / dock icon, one entry per app
-    @abstractmethod
-    def list_running_apps(self) -> list[RunningApp]: ...
 
     # seconds since the last key press or mouse move
     @abstractmethod
     def get_idle_seconds(self) -> float: ...
 
-    # png of every monitor together, mac needs screen recording permission for this
-    def capture_screen(self) -> bytes:
-        import mss
-        import mss.tools
-
-        with mss.mss() as sct:
-            shot = sct.grab(sct.monitors[0])
-            return mss.tools.to_png(shot.rgb, shot.size)
-
-    def capture_window(self, window: ActiveWindow) -> bytes | None:
-        rect = self.get_window_rect(window)
-        if rect is None:
-            return None
-        return grabRegion(rect)
 
     # closing stuff
 
@@ -85,23 +63,11 @@ class PlatformBackend(ABC):
 
     # startup + permissions
 
-    # start the daemon at login
-    @abstractmethod
-    def install_autostart(self) -> None: ...
-
-    @abstractmethod
-    def uninstall_autostart(self) -> None: ...
-
-    @abstractmethod
-    def is_autostart_installed(self) -> bool: ...
 
     # where each permission is at right now, without popping up any prompts
     @abstractmethod
     def check_permissions(self) -> dict[str, PermissionState]: ...
 
-    # pops up the OS prompts for whatever permissions are missing
-    @abstractmethod
-    def request_permissions(self) -> None: ...
 
     # only windows needs admin
     def is_admin(self) -> bool:
@@ -111,29 +77,3 @@ class PlatformBackend(ABC):
     def run_as_admin(self, command: list[str]) -> bool:
         return False
 
-    # command that starts the daemon with whatever python we're running on
-    @staticmethod
-    def daemon_command() -> list[str]:
-        python = Path(sys.executable)
-        # pythonw.exe runs without a console window on Windows
-        pythonw = python.with_name("pythonw.exe")
-        if sys.platform == "win32" and pythonw.exists():
-            python = pythonw
-        return [str(python), "-m", DAEMON_MODULE]
-
-
-def grabRegion(rect: tuple[int, int, int, int]) -> bytes | None:
-    import mss
-    import mss.tools
-
-    left, top, width, height = rect
-    with mss.mss() as sct:
-        screen = sct.monitors[0]
-        right = min(left + width, screen["left"] + screen["width"])
-        bottom = min(top + height, screen["top"] + screen["height"])
-        left = max(left, screen["left"])
-        top = max(top, screen["top"])
-        if right - left < 10 or bottom - top < 10:
-            return None
-        shot = sct.grab({"left": left, "top": top, "width": right - left, "height": bottom - top})
-        return mss.tools.to_png(shot.rgb, shot.size)

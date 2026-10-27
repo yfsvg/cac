@@ -1,5 +1,3 @@
-"""Entry point. For now this just launches the tray icon."""
-
 from __future__ import annotations
 
 import logging

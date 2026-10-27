@@ -91,18 +91,6 @@ LENGTHS = [("No timer", None), ("30 min", 30), ("1 hour", 60), ("2 hours", 120),
 TOAST_SECONDS = 12
 
 
-def minutesText(minutes):
-    if minutes < 60:
-        return str(minutes) + " minutes"
-    hours = minutes // 60
-    extraMinutes = minutes % 60
-    hoursText = str(hours) + " hour"
-    if hours > 1:
-        hoursText = hoursText + "s"
-    if extraMinutes == 0:
-        return hoursText
-    return hoursText + " " + str(extraMinutes) + " min"
-
 
 class SessionPanel(QFrame):
     def __init__(self, whenStarted, whenEnded):

@@ -1042,7 +1042,7 @@ class Dashboard(QWidget):
         if siteCategory(site) is not None or site in self.askedSites:
             return
         self.unknownSeconds[site] = self.unknownSeconds.get(site, 0) + 1
-        if self.unknownSeconds[site] < 60:
+        if self.unknownSeconds[site] < 10:
             return
 
         self.askedSites.append(site)

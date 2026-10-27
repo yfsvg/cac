@@ -11,7 +11,6 @@ requires-python = ">=3.10"
 dependencies = [
     "PySide6>=6.7",
     "psutil>=5.9",
-    "mss>=9.0",
     # macOS backend
     "pyobjc-core>=10.0; sys_platform == 'darwin'",
     "pyobjc-framework-Cocoa>=10.0; sys_platform == 'darwin'",

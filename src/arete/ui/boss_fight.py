@@ -1,3 +1,9 @@
+# Bosses, split into three segments:
+# 1. Names + pictures (one svg per boss in assets/bosses)
+# 2. The animated portrait (bobs, shakes when hit, laughs, spins away when beaten)
+# 3. The popup in the corner when a boss shows up or goes down
+
+
 import math
 import time
 from pathlib import Path
@@ -11,6 +17,9 @@ from arete.ui import animations
 from arete.ui.pause_screen import BADGE_MARGIN, BADGE_STYLE
 from arete.ui.theme import applyTheme
 
+
+# Names, 3 per mountain in climb order (fuji, everest, matterhorn)
+
 BOSS_NAMES = [
     "The Lantern Keeper",
     "The Ash Spirit",
@@ -23,27 +32,46 @@ BOSS_NAMES = [
     "The Matterhorn King",
 ]
 
-# Boss pictures, each one is an svg in assets/bosses
 
-BOSS_PICTURES = Path(__file__).parent / "assets" / "bosses"
-# same order as BOSS_NAMES
-BOSS_FILES = ["Fuji1", "Fuji2", "Fuji3", "Everest1", "Everest2", "Everest3", "Matterhorn1", "Matterhorn2", "Matterhorn3"]
-
-loadedBosses = {}
+def bossName(bossNumber):
+    if bossNumber < len(BOSS_NAMES):
+        return BOSS_NAMES[bossNumber]
+    return "The Final Boss"
 
 
-def drawBossCharacter(painter, bossNumber, rect):
-    fileName = BOSS_FILES[bossNumber % len(BOSS_FILES)]
-    if fileName not in loadedBosses:
-        loadedBosses[fileName] = QSvgRenderer(str(BOSS_PICTURES / (fileName + ".svg")))
-    renderer = loadedBosses[fileName]
-    # every picture is a different size, so fit it inside the square and keep its shape
-    pictureSize = renderer.defaultSize()
-    fitScale = min(rect.width() / pictureSize.width(), rect.height() / pictureSize.height())
-    fitWidth = pictureSize.width() * fitScale
-    fitHeight = pictureSize.height() * fitScale
-    renderer.render(painter, QRectF(rect.center().x() - fitWidth / 2, rect.center().y() - fitHeight / 2, fitWidth, fitHeight))
 
+
+
+
+# Pictures, each boss is an svg. Same order as BOSS_NAMES
+
+BOSS_PICTURE_FOLDER = Path(__file__).parent / "assets" / "bosses"
+BOSS_PICTURE_FILES = ["Fuji1", "Fuji2", "Fuji3", "Everest1", "Everest2", "Everest3", "Matterhorn1", "Matterhorn2", "Matterhorn3"]
+
+# svgs only get read once, then reused
+loadedBossPictures = {}
+
+
+def drawBossCharacter(painter, bossNumber, pictureBox):
+    bossFileName = BOSS_PICTURE_FILES[bossNumber % len(BOSS_PICTURE_FILES)]
+    if bossFileName not in loadedBossPictures:
+        loadedBossPictures[bossFileName] = QSvgRenderer(str(BOSS_PICTURE_FOLDER / (bossFileName + ".svg")))
+    bossPicture = loadedBossPictures[bossFileName]
+
+    # every picture is a different size, so fit it inside the box and keep its shape
+    pictureSize = bossPicture.defaultSize()
+    fitScale = min(pictureBox.width() / pictureSize.width(), pictureBox.height() / pictureSize.height())
+    fittedWidth = pictureSize.width() * fitScale
+    fittedHeight = pictureSize.height() * fitScale
+    bossPicture.render(painter, QRectF(pictureBox.center().x() - fittedWidth / 2, pictureBox.center().y() - fittedHeight / 2, fittedWidth, fittedHeight))
+
+
+
+
+
+
+# Portrait, the boss on its own little square that moves around depending on its mood
+# moods: idle (gentle bob), hurt (shake + red flash), laugh (bouncing), defeat (spins away)
 
 class BossPortrait(QWidget):
     def __init__(self, bossNumber, size):
@@ -52,20 +80,21 @@ class BossPortrait(QWidget):
         self.setFixedSize(size, size)
         self.startTime = time.time()
         self.mood = "idle"
-        self.moodStart = 0
-        self.timer = QTimer(self, interval=33, timeout=self.update)
+        self.moodStartTime = 0
+        self.redrawTimer = QTimer(self, interval=33, timeout=self.update)
 
+    # only animate while you can see it
     def showEvent(self, event):
-        self.timer.start()
+        self.redrawTimer.start()
         super().showEvent(event)
 
     def hideEvent(self, event):
-        self.timer.stop()
+        self.redrawTimer.stop()
         super().hideEvent(event)
 
     def setMood(self, mood):
         self.mood = mood
-        self.moodStart = time.time()
+        self.moodStartTime = time.time()
 
     def hurt(self):
         self.setMood("hurt")
@@ -79,36 +108,53 @@ class BossPortrait(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        seconds = time.time() - self.startTime
-        moodSeconds = time.time() - self.moodStart
+        secondsSinceMade = time.time() - self.startTime
+        secondsIntoMood = time.time() - self.moodStartTime
         size = self.width()
-        bob = math.sin(seconds * 2.2) * size * 0.03
-        angle = 0
-        scale = 1.0
-        offsetX = 0
-        opacity = 1.0
-        if self.mood == "hurt" and moodSeconds < 0.6:
-            offsetX = math.sin(moodSeconds * 60) * size * 0.06 * (1 - moodSeconds / 0.6)
+
+        # idle bob up and down, everything else starts from still
+        bobAmount = math.sin(secondsSinceMade * 2.2) * size * 0.03
+        spinAngle = 0
+        shrinkScale = 1.0
+        shakeAmount = 0
+        fadeOpacity = 1.0
+
+        # hurt, side to side shake that dies down over 0.6s
+        if self.mood == "hurt" and secondsIntoMood < 0.6:
+            shakeAmount = math.sin(secondsIntoMood * 60) * size * 0.06 * (1 - secondsIntoMood / 0.6)
+
+        # laugh, quick little hops
         if self.mood == "laugh":
-            bob = -abs(math.sin(seconds * 9)) * size * 0.06
+            bobAmount = -abs(math.sin(secondsSinceMade * 9)) * size * 0.06
+
+        # defeat, spins + shrinks + fades out over 1.1s then stays gone
         if self.mood == "defeat":
-            progress = min(moodSeconds / 1.1, 1.0)
-            angle = progress * 540
-            scale = 1 - progress * 0.85
-            opacity = 1 - progress
-            if progress >= 1:
+            defeatProgress = min(secondsIntoMood / 1.1, 1.0)
+            spinAngle = defeatProgress * 540
+            shrinkScale = 1 - defeatProgress * 0.85
+            fadeOpacity = 1 - defeatProgress
+            if defeatProgress >= 1:
                 return
-        painter.setOpacity(opacity)
-        painter.translate(size / 2 + offsetX, size / 2 + bob)
-        painter.rotate(angle)
-        painter.scale(scale, scale)
+
+        painter.setOpacity(fadeOpacity)
+        painter.translate(size / 2 + shakeAmount, size / 2 + bobAmount)
+        painter.rotate(spinAngle)
+        painter.scale(shrinkScale, shrinkScale)
         drawBossCharacter(painter, self.bossNumber, QRectF(-size * 0.45, -size * 0.45, size * 0.9, size * 0.9))
-        if self.mood == "hurt" and moodSeconds < 0.35:
-            flash = QColor(255, 80, 80, int(140 * (1 - moodSeconds / 0.35)))
+
+        # red flash right when it gets hit
+        if self.mood == "hurt" and secondsIntoMood < 0.35:
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(flash)
+            painter.setBrush(QColor(255, 80, 80, int(140 * (1 - secondsIntoMood / 0.35))))
             painter.drawEllipse(QPointF(0, 0), size * 0.42, size * 0.42)
 
+
+
+
+
+
+# Popup, slides in top right when a boss shows up ("appear") or gets beaten ("defeat")
+# closes itself after 10 seconds, the bar along the bottom fills up as it counts down
 
 BOSS_TOAST_STYLE = """
 QLabel#BossHeading { color: @onSurfaceVariant; font-size: 12px; font-weight: 700; }
@@ -131,17 +177,13 @@ QPushButton#BossOk:pressed { border-bottom: 1px solid @primaryShadow; padding-to
 TOAST_SECONDS = 10
 
 
-def bossName(bossNumber):
-    if bossNumber < len(BOSS_NAMES):
-        return BOSS_NAMES[bossNumber]
-    return "The Final Boss"
-
-
 class BossToast(QWidget):
     def __init__(self, bossNumber, kind, detailText, whenDone):
         super().__init__()
         self.whenDone = whenDone
         self.kind = kind
+
+        # floats on top without stealing focus from whatever ur doing
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
@@ -153,50 +195,60 @@ class BossToast(QWidget):
         self.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont))
         self.setStyleSheet(applyTheme(BADGE_STYLE + BOSS_TOAST_STYLE))
 
-        card = QFrame(self, objectName="Badge")
-        cardLayout = QHBoxLayout(card)
-        cardLayout.setContentsMargins(10, 10, 14, 12)
-        cardLayout.setSpacing(10)
-        self.portrait = BossPortrait(bossNumber, 84)
-        cardLayout.addWidget(self.portrait, alignment=Qt.AlignmentFlag.AlignTop)
 
-        textLayout = QVBoxLayout()
-        textLayout.setSpacing(4)
-        headingText = "A boss blocks the trail!"
-        if kind == "defeat":
-            headingText = "Boss defeated!"
-        textLayout.addWidget(QLabel(headingText, objectName="BossHeading"))
-        textLayout.addWidget(QLabel(bossName(bossNumber), objectName="BossTitle"))
-        detail = QLabel(detailText, objectName="BossDetail")
-        detail.setWordWrap(True)
-        textLayout.addWidget(detail)
+
+        # card, portrait on the left + words on the right
+        toastCard = QFrame(self, objectName="Badge")
+        toastCardLayout = QHBoxLayout(toastCard)
+        toastCardLayout.setContentsMargins(10, 10, 14, 12)
+        toastCardLayout.setSpacing(10)
+        self.portrait = BossPortrait(bossNumber, 84)
+        toastCardLayout.addWidget(self.portrait, alignment=Qt.AlignmentFlag.AlignTop)
+
+
+
+        # words, heading + boss name + whatever the dashboard wants to say
+        wordsLayout = QVBoxLayout()
+        wordsLayout.setSpacing(4)
+        wordsLayout.addWidget(QLabel("Boss defeated!" if kind == "defeat" else "A boss blocks the trail!", objectName="BossHeading"))
+        wordsLayout.addWidget(QLabel(bossName(bossNumber), objectName="BossTitle"))
+        detailLabel = QLabel(detailText, objectName="BossDetail")
+        detailLabel.setWordWrap(True)
+        wordsLayout.addWidget(detailLabel)
+
         buttonRow = QHBoxLayout()
         buttonRow.addStretch()
         okButton = QPushButton("Let's go" if kind == "appear" else "Keep climbing", objectName="BossOk", cursor=Qt.CursorShape.PointingHandCursor)
         okButton.clicked.connect(self.finish)
         buttonRow.addWidget(okButton)
-        textLayout.addLayout(buttonRow)
-        self.progressBar = QProgressBar()
-        self.progressBar.setTextVisible(False)
-        self.progressBar.setFixedHeight(5)
-        self.progressBar.setRange(0, TOAST_SECONDS * 10)
-        textLayout.addWidget(self.progressBar)
-        cardLayout.addLayout(textLayout, 1)
+        wordsLayout.addLayout(buttonRow)
+
+        # countdown bar, fills in tenths of a second
+        self.countdownBar = QProgressBar()
+        self.countdownBar.setTextVisible(False)
+        self.countdownBar.setFixedHeight(5)
+        self.countdownBar.setRange(0, TOAST_SECONDS * 10)
+        wordsLayout.addWidget(self.countdownBar)
+        toastCardLayout.addLayout(wordsLayout, 1)
+
+
 
         outerLayout = QVBoxLayout(self)
         outerLayout.setContentsMargins(0, 0, 0, 0)
-        outerLayout.addWidget(card)
+        outerLayout.addWidget(toastCard)
         self.setFixedWidth(330)
-        self.fillStep = 0
-        self.fillTimer = QTimer(self, interval=100, timeout=self.fillBar)
+        self.countdownStep = 0
+        self.countdownTimer = QTimer(self, interval=100, timeout=self.fillCountdownBar)
 
+
+    # slides in top right, a beaten boss gets hit, spins away, then confetti
     def popUp(self):
         self.adjustSize()
-        screen = QApplication.primaryScreen().availableGeometry()
-        self.move(screen.right() - self.width() - BADGE_MARGIN, screen.top() + BADGE_MARGIN)
+        screenArea = QApplication.primaryScreen().availableGeometry()
+        self.move(screenArea.right() - self.width() - BADGE_MARGIN, screenArea.top() + BADGE_MARGIN)
         animations.slideWindowIn(self, 40, 320)
         self.show()
-        self.fillTimer.start()
+        self.countdownTimer.start()
         if self.kind == "defeat":
             QTimer.singleShot(400, self.portrait.hurt)
             QTimer.singleShot(1000, self.portrait.defeat)
@@ -204,13 +256,13 @@ class BossToast(QWidget):
         else:
             self.portrait.laugh()
 
-    def fillBar(self):
-        self.fillStep = self.fillStep + 1
-        self.progressBar.setValue(self.fillStep)
-        if self.fillStep >= TOAST_SECONDS * 10:
+    def fillCountdownBar(self):
+        self.countdownStep = self.countdownStep + 1
+        self.countdownBar.setValue(self.countdownStep)
+        if self.countdownStep >= TOAST_SECONDS * 10:
             self.finish()
 
     def finish(self):
-        self.fillTimer.stop()
+        self.countdownTimer.stop()
         self.hide()
         self.whenDone()

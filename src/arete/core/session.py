@@ -43,9 +43,6 @@ def saveProgress(seconds, productiveSeconds):
     memory.save(savedMemory)
 
 
-def isTimed(savedSession):
-    return savedSession is not None and savedSession["endsAt"] is not None
-
 
 def failLastSession():
     savedMemory = memory.load()

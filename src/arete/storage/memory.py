@@ -68,13 +68,6 @@ def startupOpened() -> bool:
     return bool(load()["startupOpened"])
 
 
-def markOpened() -> None:
-    memory = load()
-    memory["startupOpened"] = False
-    save(memory)
-
-
-
 
 # Streak, counts days in a row that Arete was opened
 
